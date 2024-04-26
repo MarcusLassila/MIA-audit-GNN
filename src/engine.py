@@ -36,9 +36,9 @@ def train(model, data_loader, loss_fn, optimizer, criterion, epochs, device):
     res = defaultdict(list)
     for _ in tqdm(range(epochs), desc=f"Training on {device}."):
         train_loss, train_score = train_step(model, data_loader, loss_fn, optimizer, criterion, device)
+        valid_loss, valid_score = valid_step(model, data_loader, loss_fn, criterion, device)
         res['train_loss'].append(train_loss)
         res['train_score'].append(train_score)
-        valid_loss, valid_score = valid_step(model, data_loader, loss_fn, criterion, device)
         res['valid_loss'].append(valid_loss)
         res['valid_score'].append(valid_score)
     return res
