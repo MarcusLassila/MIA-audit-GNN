@@ -5,6 +5,7 @@ import models
 import utils
 
 import argparse
+from pathlib import Path
 
 import torch
 import torch.nn.functional as F
@@ -50,22 +51,37 @@ def get_dataset():
         raise ValueError("Unsupported dataset!")
     return dataset
 
-def main():
+def train_model(name):
     dataset = get_dataset()
     model = models.GCN(
         dataset.num_features,
         Config.hidden_dim,
         dataset.num_classes
     ).to(Config.device)
-
     data_loader = DataLoader(dataset, batch_size=Config.batch_size, shuffle=True)
     optimizer = torch.optim.Adam(model.parameters(), lr=Config.lr)
     criterion = Accuracy(task='multiclass', num_classes=dataset.num_classes)
     loss_fn = F.nll_loss
     res = engine.train(model, data_loader, loss_fn, optimizer, criterion, Config.epochs, Config.device)
     utils.plot_training_results(res)
-    test_score = infer.test(model, data_loader, criterion, Config.device)
-    print(f"Test score: {test_score:.4f}")
+    Path('models').mkdir(parents=True, exist_ok=True)
+    torch.save(model.state_dict(), f"models/{name}_{model.__class__.__name__}.pth")
+
+def main():
+    train_model('target')
+    train_model('shadow')
+    dataset = get_dataset()
+    model = models.GCN(
+        dataset.num_features,
+        Config.hidden_dim,
+        dataset.num_classes
+    ).to(Config.device)
+    criterion = Accuracy(task='multiclass', num_classes=dataset.num_classes)
+    for name in 'target', 'shadow':
+        model.load_state_dict(torch.load(f"models/{name}_{model.__class__.__name__}.pth"))
+        test_score = infer.test(model, dataset, criterion)
+        print(f"{name} test score: {test_score:.4f}")
+        model.reset_parameters()
 
 if __name__ == '__main__':
     Config.print()
