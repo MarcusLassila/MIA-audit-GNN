@@ -2,7 +2,23 @@ import numpy as np
 import matplotlib.pyplot as plt
 from pathlib import Path
 
-def plot_training_results(res):
+from torch.utils.data import Dataset
+
+class AttackDataset(Dataset):
+    
+    def __init__(self, features, labels):
+        self.features = features
+        self.labels = labels
+        
+    def __len__(self):
+        return len(self.labels)
+    
+    def __getitem__(self, idx):
+        feature = self.features[idx]
+        label = self.labels[idx]
+        return feature, label
+
+def plot_training_results(res, name):
     epochs = np.array([*range(len(res['train_loss']))])
     plt.figure(figsize=(15, 15))
     plt.subplot(2, 2, 1)
@@ -26,4 +42,4 @@ def plot_training_results(res):
     plt.ylabel("Accuracy")
     plt.grid(True)
     Path("plots").mkdir(parents=True, exist_ok=True)
-    plt.savefig("plots/training_results_latest.png")
+    plt.savefig(f"plots/training_results_{name}.png")
