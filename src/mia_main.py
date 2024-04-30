@@ -76,8 +76,8 @@ def create_attack_dataset(shadow_dataset, shadow_model):
     features = shadow_model(shadow_dataset.x, shadow_dataset.edge_index).cpu()
     labels = shadow_dataset.train_mask.long().cpu()
     train_X, test_X, train_y, test_y = train_test_split(features, labels, test_size=50, stratify=labels, random_state=777)
-    train_dataset = utils.AttackDataset(train_X, train_y)
-    test_dataset = utils.AttackDataset(test_X, test_y)
+    train_dataset = utils.AttackDataset(train_X.to(Config.device), train_y.to(Config.device))
+    test_dataset = utils.AttackDataset(test_X.to(Config.device), test_y.to(Config.device))
     return train_dataset, test_dataset
 
 def train_graph_model(dataset, model, name):
