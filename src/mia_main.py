@@ -1,3 +1,4 @@
+import torch_geometric.data
 import torch_geometric.datasets
 import infer
 import models
@@ -54,6 +55,9 @@ def get_dataset():
         dataset = torch_geometric.datasets.Planetoid(root=Config.root, name="CiteSeer", split="random", num_train_per_class=100)
     elif Config.dataset == "pubmed":
         dataset = torch_geometric.datasets.Planetoid(root=Config.root, name="PubMed", split="random", num_train_per_class=1500)
+    elif Config.dataset == "flickr":
+        dataset = torch_geometric.datasets.Flickr(root=Config.root)
+        dataset.name = 'Flickr'
     else:
         raise ValueError("Unsupported dataset!")
     return dataset
@@ -75,9 +79,9 @@ def get_criterion(dataset):
 def create_attack_dataset(shadow_dataset, shadow_model):
     features = shadow_model(shadow_dataset.x, shadow_dataset.edge_index).cpu()
     labels = shadow_dataset.train_mask.long().cpu()
-    train_X, test_X, train_y, test_y = train_test_split(features, labels, test_size=50, stratify=labels, random_state=777)
-    train_dataset = utils.AttackDataset(train_X.to(Config.device), train_y.to(Config.device))
-    test_dataset = utils.AttackDataset(test_X.to(Config.device), test_y.to(Config.device))
+    train_X, test_X, train_y, test_y = train_test_split(features, labels, test_size=0.2, stratify=labels, random_state=777)
+    train_dataset = utils.AttackDataset(train_X, train_y)
+    test_dataset = utils.AttackDataset(test_X, test_y)
     return train_dataset, test_dataset
 
 def train_graph_model(dataset, model, name):
