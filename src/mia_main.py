@@ -97,7 +97,7 @@ def train_attack(model, train_dataset, test_dataset):
     train_loader = DataLoader(train_dataset, batch_size=32, shuffle=True)
     test_loader = DataLoader(test_dataset, batch_size=32, shuffle=False)
     optimizer = torch.optim.Adam(model.parameters(), lr=1e-2)
-    criterion = F1Score(task="multiclass", num_classes=2)
+    criterion = F1Score(task="multiclass", num_classes=2).to(Config.device)
     loss_fn = nn.CrossEntropyLoss()
     res = trainer.train_mlp(model, train_loader, test_loader, loss_fn, optimizer, criterion, epochs=100, device=Config.device)
     utils.plot_training_results(res, name='Attack')
