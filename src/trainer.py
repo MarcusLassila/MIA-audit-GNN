@@ -38,8 +38,7 @@ def train_step(model, data_loader, loss_fn, optimizer, criterion, device):
     accumulated_loss, score = 0, 0
     for X, y in data_loader:
         optimizer.zero_grad()
-        X.to(device)
-        y.to(device)
+        X, y = X.to(device), y.to(device)
         pred = model(X)
         loss = loss_fn(pred, y)
         accumulated_loss += loss.item()
@@ -54,8 +53,7 @@ def valid_step(model, data_loader, loss_fn, criterion, device):
     accumulated_loss, score = 0, 0
     with torch.inference_mode():
         for X, y in data_loader:
-            X.to(device)
-            y.to(device)
+            X, y = X.to(device), y.to(device)
             pred = model(X)
             accumulated_loss += loss_fn(pred, y).item()
             score += criterion(pred, y).item()
