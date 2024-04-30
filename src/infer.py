@@ -10,6 +10,7 @@ def test(model, dataset, criterion):
     return score
 
 def evaluate_attack_model(model, dataset):
+    model.cpu()
     model.eval()
     auroc = AUROC(task='multiclass', num_classes=2)
     f1_score = F1Score(task='multiclass', num_classes=2)

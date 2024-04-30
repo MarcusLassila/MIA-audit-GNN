@@ -114,8 +114,8 @@ def main():
     attack_model = models.MLP(in_dim=shadow_dataset.num_classes)
     train_attack(attack_model, train_dataset, test_dataset)
 
-    features = target_model(target_dataset.x, target_dataset.edge_index)
-    ground_truth = target_dataset.train_mask.long()
+    features = target_model(target_dataset.x, target_dataset.edge_index).cpu()
+    ground_truth = target_dataset.train_mask.long().cpu()
     attack_dataset = utils.AttackDataset(features, ground_truth)
     infer.evaluate_attack_model(attack_model, attack_dataset)
 
