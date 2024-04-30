@@ -1,3 +1,4 @@
+import torch_geometric.datasets
 import infer
 import models
 import utils
@@ -51,6 +52,8 @@ def get_dataset():
         dataset = torch_geometric.datasets.Planetoid(root=Config.root, name="Cora", split="random", num_train_per_class=90)
     elif Config.dataset == "citeseer":
         dataset = torch_geometric.datasets.Planetoid(root=Config.root, name="CiteSeer", split="random", num_train_per_class=100)
+    elif Config.dataset == "pubmed":
+        dataset = torch_geometric.datasets.Planetoid(root=Config.root, name="PubMed", split="random", num_train_per_class=1500)
     else:
         raise ValueError("Unsupported dataset!")
     return dataset
@@ -72,7 +75,7 @@ def get_criterion(dataset):
 def create_attack_dataset(shadow_dataset, shadow_model):
     features = shadow_model(shadow_dataset.x, shadow_dataset.edge_index)
     labels = shadow_dataset.train_mask.long()
-    train_X, test_X, train_y, test_y = train_test_split(features, labels, test_size=0.2, stratify=labels, random_state=777)
+    train_X, test_X, train_y, test_y = train_test_split(features, labels, test_size=50, stratify=labels, random_state=777)
     train_dataset = utils.AttackDataset(train_X, train_y)
     test_dataset = utils.AttackDataset(test_X, test_y)
     return train_dataset, test_dataset
@@ -80,7 +83,7 @@ def create_attack_dataset(shadow_dataset, shadow_model):
 def train_graph_model(dataset, model, name):
     ''' Train target or shadow model. '''
     optimizer = torch.optim.Adam(model.parameters(), lr=Config.lr)
-    criterion = get_criterion(dataset)
+    criterion = get_criterion(dataset).to(Config.device)
     loss_fn = F.nll_loss
     res = trainer.train_gnn(model, dataset, loss_fn, optimizer, criterion, Config.epochs, Config.device)
     utils.plot_training_results(res, name)
