@@ -73,8 +73,8 @@ def get_criterion(dataset):
     return Accuracy(task='multiclass', num_classes=dataset.num_classes)
 
 def create_attack_dataset(shadow_dataset, shadow_model):
-    features = shadow_model(shadow_dataset.x, shadow_dataset.edge_index)
-    labels = shadow_dataset.train_mask.long()
+    features = shadow_model(shadow_dataset.x, shadow_dataset.edge_index).cpu()
+    labels = shadow_dataset.train_mask.long().cpu()
     train_X, test_X, train_y, test_y = train_test_split(features, labels, test_size=50, stratify=labels, random_state=777)
     train_dataset = utils.AttackDataset(train_X, train_y)
     test_dataset = utils.AttackDataset(test_X, test_y)
