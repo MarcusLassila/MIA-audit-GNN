@@ -20,8 +20,6 @@ class AttackDataset(Dataset):
 
 def plot_training_results(res, name):
     epochs = np.array([*range(len(res['train_loss']))])
-    for key in res.keys():
-        res[key].to('cpu')
     plt.figure(figsize=(15, 15))
     plt.subplot(2, 2, 1)
     plt.plot(epochs, res['train_loss'], label='train loss')
