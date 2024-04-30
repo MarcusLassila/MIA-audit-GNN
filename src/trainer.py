@@ -10,7 +10,7 @@ def train_step_gnn(model, dataset, loss_fn, optimizer, criterion):
     score = criterion(out[dataset.train_mask].argmax(dim=1), dataset.y[dataset.train_mask])
     loss.backward()
     optimizer.step()
-    return loss.item().cpu(), score.cpu()
+    return loss.item(), score.item()
 
 def valid_step_gnn(model, dataset, loss_fn, criterion):
     model.eval()
@@ -18,7 +18,7 @@ def valid_step_gnn(model, dataset, loss_fn, criterion):
         out = model(dataset.x, dataset.edge_index)
         loss = loss_fn(out[dataset.val_mask], dataset.y[dataset.val_mask])
         score = criterion(out[dataset.val_mask].argmax(dim=1), dataset.y[dataset.val_mask])
-    return loss.item().cpu(), score.cpu()
+    return loss.item(), score.item()
 
 def train_gnn(model, dataset, loss_fn, optimizer, criterion, epochs, device):
     model.to(device)
@@ -43,11 +43,11 @@ def train_step(model, data_loader, loss_fn, optimizer, criterion, device):
         pred = model(X)
         loss = loss_fn(pred, y)
         accumulated_loss += loss.item()
-        score += criterion(pred, y)
+        score += criterion(pred, y).item()
         loss.backward(retain_graph=True)
         optimizer.step()
     score /= len(data_loader)
-    return accumulated_loss.cpu(), score.cpu()
+    return accumulated_loss, score
 
 def valid_step(model, data_loader, loss_fn, criterion, device):
     model.eval()
@@ -58,9 +58,9 @@ def valid_step(model, data_loader, loss_fn, criterion, device):
             y.to(device)
             pred = model(X)
             accumulated_loss += loss_fn(pred, y).item()
-            score += criterion(pred, y)
+            score += criterion(pred, y).item()
         score /= len(data_loader)
-    return accumulated_loss.cpu(), score.cpu()
+    return accumulated_loss, score
 
 def train_mlp(model, train_loader, valid_loader, loss_fn, optimizer, criterion, epochs, device):
     model.to(device)
