@@ -86,7 +86,7 @@ def get_criterion(dataset):
 
 def create_attack_dataset(shadow_dataset, shadow_model):
     features = shadow_model(shadow_dataset.x, shadow_dataset.edge_index).cpu()
-    labels = shadow_dataset.train_mask.long()
+    labels = shadow_dataset.train_mask.long().cpu()
     train_X, test_X, train_y, test_y = train_test_split(features, labels, test_size=0.2, stratify=labels, random_state=777)
     train_dataset = utils.AttackDataset(train_X, train_y)
     test_dataset = utils.AttackDataset(test_X, test_y)
@@ -127,7 +127,7 @@ def main():
     train_attack(attack_model, train_dataset, test_dataset)
 
     features = target_model(target_dataset.x, target_dataset.edge_index).cpu()
-    ground_truth = target_dataset.train_mask.long()
+    ground_truth = target_dataset.train_mask.long().cpu()
     attack_dataset = utils.AttackDataset(features, ground_truth)
     attack_score = infer.evaluate_attack_model(attack_model, attack_dataset)
     for key, val in attack_score.items():
