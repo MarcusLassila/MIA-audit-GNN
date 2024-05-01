@@ -9,15 +9,15 @@ def test(model, dataset, criterion):
         score = criterion(out[dataset.test_mask].argmax(dim=1), dataset.y[dataset.test_mask])
     return score
 
-def evaluate_attack_model(model, dataset):
+def evaluate_attack_model(model, dataset, device):
     model.eval()
-    auroc_fn = AUROC(task='multiclass', num_classes=2)
-    f1_fn = F1Score(task='multiclass', num_classes=2)
-    precision_fn = Precision(task='multiclass', num_classes=2)
-    recall_fn = Recall(task='multiclass', num_classes=2)
-    roc_fn = ROC(task='multiclass', num_classes=2)
+    auroc_fn = AUROC(task='multiclass', num_classes=2).to(device)
+    f1_fn = F1Score(task='multiclass', num_classes=2).to(device)
+    precision_fn = Precision(task='multiclass', num_classes=2).to(device)
+    recall_fn = Recall(task='multiclass', num_classes=2).to(device)
+    roc_fn = ROC(task='multiclass', num_classes=2).to(device)
     with torch.inference_mode():
-        preds = model(dataset.features).cpu()
+        preds = model(dataset.features)
         truth = dataset.labels
         auroc = auroc_fn(preds, truth).item()
         f1 = f1_fn(preds, truth).item()
