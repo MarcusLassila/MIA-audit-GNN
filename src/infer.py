@@ -1,6 +1,6 @@
 import torch
-from torch.utils.data import DataLoader
 from torchmetrics import AUROC, F1Score, Precision, Recall, ROC
+from pathlib import Path
 
 def test(model, dataset, criterion):
     model.eval()
@@ -9,7 +9,7 @@ def test(model, dataset, criterion):
         score = criterion(out[dataset.test_mask].argmax(dim=1), dataset.y[dataset.test_mask])
     return score
 
-def evaluate_attack_model(model, dataset, device):
+def evaluate_attack_model(model, dataset, device, savedir):
     model.eval()
     auroc_fn = AUROC(task='multiclass', num_classes=2).to(device)
     f1_fn = F1Score(task='multiclass', num_classes=2).to(device)
@@ -26,7 +26,8 @@ def evaluate_attack_model(model, dataset, device):
         roc = roc_fn(preds, truth)
         roc_fn.update(preds, truth)
         fig, ax = roc_fn.plot(score=True)
-        fig.savefig("plots/ROC.png")
+        Path(savedir).mkdir(parents=True, exist_ok=True)
+        fig.savefig(f"{savedir}/ROC.png")
     return {
         'auroc': auroc,
         'f1_score': f1,

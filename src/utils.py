@@ -18,7 +18,7 @@ class AttackDataset(Dataset):
         label = self.labels[idx]
         return feature, label
 
-def plot_training_results(res, name):
+def plot_training_results(res, name, savedir):
     epochs = np.array([*range(len(res['train_loss']))])
     plt.figure(figsize=(15, 15))
     plt.subplot(2, 2, 1)
@@ -41,5 +41,5 @@ def plot_training_results(res, name):
     plt.xlabel("Epochs")
     plt.ylabel("Accuracy")
     plt.grid(True)
-    Path("plots").mkdir(parents=True, exist_ok=True)
-    plt.savefig(f"plots/training_results_{name}.png")
+    Path(savedir).mkdir(parents=True, exist_ok=True)
+    plt.savefig(f"{savedir}/training_results_{name}.png")

@@ -25,6 +25,7 @@ parser.add_argument("--epochs", default=50, type=int)
 parser.add_argument("--epochs-attack", default=100, type=int)
 parser.add_argument("--lr", default=1e-3, type=float)
 parser.add_argument("--model", default="GCN", type=str)
+parser.add_argument("--savedir", default="plots", type=str)
 args = parser.parse_args()
 
 class Config:
@@ -37,6 +38,7 @@ class Config:
     hidden_dim    = 256
     lr            = args.lr
     model         = args.model
+    savedir       = args.savedir
     
     @staticmethod
     def print():
@@ -98,7 +100,7 @@ def train_graph_model(dataset, model, name):
     criterion = get_criterion(dataset).to(Config.device)
     loss_fn = F.nll_loss
     res = trainer.train_gnn(model, dataset, loss_fn, optimizer, criterion, Config.epochs, Config.device)
-    utils.plot_training_results(res, name)
+    utils.plot_training_results(res, name, Config.savedir)
     Path('models').mkdir(parents=True, exist_ok=True)
     torch.save(model.state_dict(), f"models/{name}_{model.__class__.__name__}_{dataset.name}.pth")
     test_score = infer.test(model, dataset, criterion)
@@ -112,7 +114,7 @@ def train_attack(model, train_dataset, test_dataset):
     criterion = Recall(task="multiclass", num_classes=2).to(Config.device)
     loss_fn = nn.CrossEntropyLoss()
     res = trainer.train_mlp(model, train_loader, test_loader, loss_fn, optimizer, criterion, epochs=Config.epochs_attack, device=Config.device)
-    utils.plot_training_results(res, name='Attack')
+    utils.plot_training_results(res, name='Attack', savedir=Config.savedir)
 
 def main():
     target_dataset = get_dataset()
@@ -129,7 +131,7 @@ def main():
     features = target_model(target_dataset.x, target_dataset.edge_index)
     ground_truth = target_dataset.train_mask.long()
     attack_dataset = utils.AttackDataset(features, ground_truth)
-    attack_score = infer.evaluate_attack_model(attack_model, attack_dataset, Config.device)
+    attack_score = infer.evaluate_attack_model(attack_model, attack_dataset, Config.device, Config.savedir)
     for key, val in attack_score.items():
         print(f"{key.replace('_', ' ').capitalize()}: {val:.4f}")
 
