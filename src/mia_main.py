@@ -13,7 +13,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.utils.data import DataLoader
 import torch_geometric
-from torchmetrics import Accuracy, AUROC, F1Score
+from torchmetrics import Accuracy, Recall
 from sklearn.model_selection import train_test_split
 
 torch.random.manual_seed(666)
@@ -22,19 +22,21 @@ parser = argparse.ArgumentParser()
 parser.add_argument("--ds", default='cora', type=str)
 parser.add_argument("--batch-size", default=32, type=int)
 parser.add_argument("--epochs", default=50, type=int)
+parser.add_argument("--epochs-attack", default=100, type=int)
 parser.add_argument("--lr", default=1e-3, type=float)
 parser.add_argument("--model", default="GCN", type=str)
 args = parser.parse_args()
 
 class Config:
-    batch_size = args.batch_size
-    epochs     = args.epochs
-    dataset    = args.ds
-    device     = "cuda" if torch.cuda.is_available() else "cpu"
-    root       = "./data"
-    hidden_dim = 256
-    lr         = args.lr
-    model      = args.model
+    batch_size    = args.batch_size
+    epochs        = args.epochs
+    epochs_attack = args.epochs_attack
+    dataset       = args.ds
+    device        = "cuda" if torch.cuda.is_available() else "cpu"
+    root          = "./data"
+    hidden_dim    = 256
+    lr            = args.lr
+    model         = args.model
     
     @staticmethod
     def print():
@@ -69,6 +71,12 @@ def get_model(dataset):
             Config.hidden_dim,
             dataset.num_classes,
         )
+    elif Config.model == 'GAT':
+        model = models.GAT(
+            dataset.num_features,
+            Config.hidden_dim,
+            dataset.num_classes,
+        )
     else:
         raise ValueError("Unsupported model!")
     return model
@@ -78,7 +86,7 @@ def get_criterion(dataset):
 
 def create_attack_dataset(shadow_dataset, shadow_model):
     features = shadow_model(shadow_dataset.x, shadow_dataset.edge_index).cpu()
-    labels = shadow_dataset.train_mask.long().cpu()
+    labels = shadow_dataset.train_mask.long()
     train_X, test_X, train_y, test_y = train_test_split(features, labels, test_size=0.2, stratify=labels, random_state=777)
     train_dataset = utils.AttackDataset(train_X, train_y)
     test_dataset = utils.AttackDataset(test_X, test_y)
@@ -101,9 +109,9 @@ def train_attack(model, train_dataset, test_dataset):
     train_loader = DataLoader(train_dataset, batch_size=32, shuffle=True)
     test_loader = DataLoader(test_dataset, batch_size=32, shuffle=False)
     optimizer = torch.optim.Adam(model.parameters(), lr=1e-2)
-    criterion = F1Score(task="multiclass", num_classes=2).to(Config.device)
+    criterion = Recall(task="multiclass", num_classes=2).to(Config.device)
     loss_fn = nn.CrossEntropyLoss()
-    res = trainer.train_mlp(model, train_loader, test_loader, loss_fn, optimizer, criterion, epochs=100, device=Config.device)
+    res = trainer.train_mlp(model, train_loader, test_loader, loss_fn, optimizer, criterion, epochs=Config.epochs_attack, device=Config.device)
     utils.plot_training_results(res, name='Attack')
 
 def main():
@@ -119,9 +127,11 @@ def main():
     train_attack(attack_model, train_dataset, test_dataset)
 
     features = target_model(target_dataset.x, target_dataset.edge_index).cpu()
-    ground_truth = target_dataset.train_mask.long().cpu()
+    ground_truth = target_dataset.train_mask.long()
     attack_dataset = utils.AttackDataset(features, ground_truth)
-    infer.evaluate_attack_model(attack_model, attack_dataset)
+    attack_score = infer.evaluate_attack_model(attack_model, attack_dataset)
+    for key, val in attack_score.items():
+        print(f"{key.replace('_', ' ').capitalize()}: {val:.4f}")
 
 if __name__ == '__main__':
     Config.print()
