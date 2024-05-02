@@ -1,36 +1,35 @@
+import utils
+
 import torch
 from torchmetrics import AUROC, F1Score, Precision, Recall, ROC
 from pathlib import Path
 
-def test(model, dataset, criterion):
+def evaluate_graph_model(model, dataset, mask, criterion):
     model.eval()
     with torch.inference_mode():
         out = model(dataset.x, dataset.edge_index)
-        score = criterion(out[dataset.test_mask].argmax(dim=1), dataset.y[dataset.test_mask])
+        score = criterion(out[mask].argmax(dim=1), dataset.y[mask])
     return score
 
-def evaluate_attack_model(model, dataset, device, savedir):
+def evaluate_attack_model(model, dataset, device):
     model.eval()
-    auroc_fn = AUROC(task='multiclass', num_classes=2).to(device)
-    f1_fn = F1Score(task='multiclass', num_classes=2).to(device)
-    precision_fn = Precision(task='multiclass', num_classes=2).to(device)
-    recall_fn = Recall(task='multiclass', num_classes=2).to(device)
-    roc_fn = ROC(task='multiclass', num_classes=2).to(device)
+    auroc_fn = AUROC(task='binary').to(device)
+    f1_fn = F1Score(task='binary').to(device)
+    precision_fn = Precision(task='binary').to(device)
+    recall_fn = Recall(task='binary').to(device)
+    roc_fn = ROC(task='binary').to(device)
     with torch.inference_mode():
-        preds = model(dataset.features)
+        logits = model(dataset.features)[:,1]
         truth = dataset.labels
-        auroc = auroc_fn(preds, truth).item()
-        f1 = f1_fn(preds, truth).item()
-        precision = precision_fn(preds, truth).item()
-        recall = recall_fn(preds, truth).item()
-        roc = roc_fn(preds, truth)
-        roc_fn.update(preds, truth)
-        fig, ax = roc_fn.plot(score=True)
-        Path(savedir).mkdir(parents=True, exist_ok=True)
-        fig.savefig(f"{savedir}/ROC.png")
+        auroc = auroc_fn(logits, truth).item()
+        f1 = f1_fn(logits, truth).item()
+        precision = precision_fn(logits, truth).item()
+        recall = recall_fn(logits, truth).item()
+        fpr, tpr, _ = roc_fn(logits, truth)
     return {
         'auroc': auroc,
         'f1_score': f1,
         'precision': precision,
         'recall': recall,
+        'roc': (fpr, tpr)
     }

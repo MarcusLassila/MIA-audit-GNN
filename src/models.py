@@ -47,7 +47,6 @@ class MLP(nn.Module):
             nn.Linear(100, 50),
             nn.ReLU(),
             nn.Linear(50, 2),
-            nn.LogSoftmax(dim=1)
         )
     
     def forward(self, x):

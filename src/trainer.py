@@ -24,7 +24,7 @@ def train_gnn(model, dataset, loss_fn, optimizer, criterion, epochs, device):
     model.to(device)
     dataset.to(device)
     res = defaultdict(list)
-    for _ in tqdm(range(epochs), desc=f"Training on {device}."):
+    for _ in tqdm(range(epochs), desc=f"Training {model.__class__.__name__} on {device}."):
         train_loss, train_score = train_step_gnn(model, dataset, loss_fn, optimizer, criterion)
         valid_loss, valid_score = valid_step_gnn(model, dataset, loss_fn, criterion)
         res['train_loss'].append(train_loss)
@@ -39,10 +39,10 @@ def train_step(model, data_loader, loss_fn, optimizer, criterion, device):
     for X, y in data_loader:
         optimizer.zero_grad()
         X, y = X.to(device), y.to(device)
-        pred = model(X)
-        loss = loss_fn(pred, y)
+        logits = model(X)
+        loss = loss_fn(logits, y)
         accumulated_loss += loss.item()
-        score += criterion(pred, y).item()
+        score += criterion(logits, y).item()
         loss.backward(retain_graph=True)
         optimizer.step()
     score /= len(data_loader)
@@ -54,16 +54,16 @@ def valid_step(model, data_loader, loss_fn, criterion, device):
     with torch.inference_mode():
         for X, y in data_loader:
             X, y = X.to(device), y.to(device)
-            pred = model(X)
-            accumulated_loss += loss_fn(pred, y).item()
-            score += criterion(pred, y).item()
+            logits = model(X)
+            accumulated_loss += loss_fn(logits, y).item()
+            score += criterion(logits, y).item()
         score /= len(data_loader)
     return accumulated_loss, score
 
 def train_mlp(model, train_loader, valid_loader, loss_fn, optimizer, criterion, epochs, device):
     model.to(device)
     res = defaultdict(list)
-    for _ in tqdm(range(epochs), desc=f"Training MLP on {device}."):
+    for _ in tqdm(range(epochs), desc=f"Training {model.__class__.__name__} on {device}."):
         train_loss, train_score = train_step(model, train_loader, loss_fn, optimizer, criterion, device)
         valid_loss, valid_score = valid_step(model, valid_loader, loss_fn, criterion, device)
         res['train_loss'].append(train_loss)
