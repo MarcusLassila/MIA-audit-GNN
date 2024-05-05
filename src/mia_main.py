@@ -35,12 +35,12 @@ class Config:
     batch_size    = args.batch_size
     epochs        = args.epochs
     epochs_attack = args.epochs_attack
-    dataset       = args.dataset
+    dataset       = args.dataset.lower()
     device        = "cuda" if torch.cuda.is_available() else "cpu"
     root          = "./data"
     hidden_dim    = 256
     lr            = args.lr
-    model         = args.model
+    model         = args.model.upper()
     savedir       = args.savedir
     experiments   = args.experiments
     identifier    = args.id or args.model + "_" + args.dataset
@@ -73,20 +73,15 @@ def get_dataset():
     return dataset
 
 def get_model(dataset):
-    if Config.model == "GCN":
-        model = models.GCN(
+    try:
+        model = getattr(models, Config.model)(
             dataset.num_features,
             Config.hidden_dim,
             dataset.num_classes,
         )
-    elif Config.model == 'GAT':
-        model = models.GAT(
-            dataset.num_features,
-            Config.hidden_dim,
-            dataset.num_classes,
-        )
-    else:
-        raise ValueError("Unsupported model!")
+    except AttributeError:
+        err = AttributeError(f'Unsupported model {Config.model}')
+        raise err
     return model
 
 def get_criterion(dataset):
@@ -196,7 +191,7 @@ def main():
     print(f"F1 score: {f1_score[0]:.4f} +- {f1_score[1]:.4f}")
     print(f"Precision: {precision[0]:.4f} +- {precision[1]:.4f}")
     print(f"Recall: {recall[0]:.4f} +- {recall[1]:.4f}")
-    utils.plot_roc_loglog(*best_roc, name=f"{Config.model}_{Config.dataset}", savedir=Config.savedir)
+    utils.plot_roc_loglog(*best_roc, name=Config.identifier, savedir=Config.savedir)
 
 if __name__ == '__main__':
     Config.print()
