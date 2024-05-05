@@ -9,7 +9,7 @@ def evaluate_graph_model(model, dataset, mask, criterion):
     with torch.inference_mode():
         out = model(dataset.x, dataset.edge_index)
         score = criterion(out[mask].argmax(dim=1), dataset.y[mask])
-    return score
+    return score.item()
 
 def evaluate_attack_model(model, dataset, device):
     model.eval()

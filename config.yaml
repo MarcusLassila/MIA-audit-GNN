@@ -1,0 +1,25 @@
+---
+cora-GCN:
+  dataset: "cora"
+  model: "GCN"
+  batch_size: 32
+  epochs: 50
+  epochs_attack: 100
+  lr: 0.001
+  name: "cora-GCN"
+citeseer-GCN:
+  dataset: "citeseer"
+  model: "GCN"
+  batch_size: 32
+  epochs: 30
+  epochs_attack: 100
+  lr: 0.001
+  name: "citeseer-GCN"
+cora-SAGE:
+  dataset: "cora"
+  model: "SAGE"
+  batch_size: 32
+  epochs: 40
+  epochs_attack: 100
+  lr: 0.001
+  name: "cora-SAGE"
