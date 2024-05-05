@@ -28,6 +28,7 @@ parser.add_argument("--lr", default=1e-3, type=float)
 parser.add_argument("--model", default="GCN", type=str)
 parser.add_argument("--savedir", default="plots", type=str)
 parser.add_argument("--experiments", default=1, type=int)
+parser.add_argument("--id", default=None, type=str)
 args = parser.parse_args()
 
 class Config:
@@ -42,7 +43,7 @@ class Config:
     model         = args.model
     savedir       = args.savedir
     experiments   = args.experiments
-    
+    identifier    = args.id or args.model + "_" + args.dataset
     
     @staticmethod
     def print():
@@ -116,7 +117,7 @@ def train_attack(model, train_dataset, valid_dataset):
     train_loader = DataLoader(train_dataset, batch_size=32, shuffle=True)
     valid_loader = DataLoader(valid_dataset, batch_size=32, shuffle=False)
     optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
-    criterion = F1Score(task="multiclass", num_classes=2).to(Config.device)
+    criterion = Accuracy(task="multiclass", num_classes=2).to(Config.device)
     loss_fn = nn.CrossEntropyLoss()
     res = trainer.train_mlp(
         model=model,
@@ -167,10 +168,27 @@ def main():
         f1s.append(metrics['f1_score'])
         precisions.append(metrics['precision'])
         recalls.append(metrics['recall'])
-    auroc = (mean(aurocs), stdev(aurocs))
-    f1_score = (mean(f1s), stdev(f1s))
-    precision = (mean(precisions), stdev(precisions))
-    recall = (mean(recalls), stdev(recalls))
+    if Config.experiments > 1:
+        auroc = (mean(aurocs), stdev(aurocs))
+        f1_score = (mean(f1s), stdev(f1s))
+        precision = (mean(precisions), stdev(precisions))
+        recall = (mean(recalls), stdev(recalls))
+    else:
+        auroc = (aurocs[0], 0)
+        f1_score = (f1s[0], 0)
+        precision = (precisions[0], 0)
+        recall = (recalls[0], 0)
+    with open("MIA_output.txt", "a") as f:
+        f.write(Config.identifier + '\n')
+        f.write(str({
+            'train_acc': metrics['train_score'],
+            'test_acc': metrics['test_score'],
+            'auroc': auroc,
+            'f1_score': f1_score,
+            'precision': precision,
+            'recall': recall,
+        }))
+        f.write('\n')
     print()
     print(f"Target train score: {metrics['train_score']:.4f}")
     print(f"Target test score: {metrics['test_score']:.4f}")
