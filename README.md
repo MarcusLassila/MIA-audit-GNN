@@ -7,13 +7,13 @@ Specify attack settings in config.yaml and run "src/run_experiments.py". Plots o
 
 Alternatively, run "src/run_mia.py" which only run one MIA simulation experiment and can be customized by the following flags:
 
-  --dataset: cora, siteseer, pubmed or flickr. Default cora.
-  --model: GCN, SGC, SAGE or GAT. Default GCN.
-  --epochs: Number of epochs to train target and shadow model. Default 50.
-  --epochs-attack: Number of epochs to train the attack model. Default 100.
-  --batch-size: Size of mini-batches. Default 32.
-  --lr: Learning rate when training target and shadow model (attack model training is fixed to 0.001 currently). Default 0.001. 
-  --datadir: Path to save dataset. Default './data'.
-  --savedir: Path to store plots. Default './plots'.
-  --name: Name to add to result files. Default 'unnamed'.
-  --experiments: Number of samples (retraining target, shadow and attack models) to compute result statistics over. Default 1.
+* --dataset: cora, siteseer, pubmed or flickr. Default cora.
+* --model: GCN, SGC, SAGE or GAT. Default GCN.
+* --epochs: Number of epochs to train target and shadow model. Default 50.
+* --epochs-attack: Number of epochs to train the attack model. Default 100.
+* --batch-size: Size of mini-batches. Default 32.
+* --lr: Learning rate when training target and shadow model (attack model training is fixed to 0.001 currently). Default 0.001. 
+* --datadir: Path to save dataset. Default './data'.
+* --savedir: Path to store plots. Default './plots'.
+* --name: Name to add to result files. Default 'unnamed'.
+* --experiments: Number of samples (retraining target, shadow and attack models) to compute result statistics over. Default 1.
