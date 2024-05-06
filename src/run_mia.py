@@ -125,6 +125,7 @@ def main(config):
     global CONFIG
     CONFIG = Objectify(config)
     CONFIG.device = 'cuda' if torch.cuda.is_available() else 'cpu'
+    train_scores, test_scores = [], []
     aurocs, f1s, precisions, recalls = [], [], [], []
     best_auroc, best_roc = 0, ()
     for i in range(CONFIG.experiments):
@@ -133,40 +134,37 @@ def main(config):
         if best_auroc < metrics['auroc']:
             best_auroc = metrics['auroc']
             best_roc = metrics['roc']
+        train_scores.append(metrics['train_score'])
+        test_scores.append(metrics['test_score'])
         aurocs.append(metrics['auroc'])
         f1s.append(metrics['f1_score'])
         precisions.append(metrics['precision'])
         recalls.append(metrics['recall'])
     if CONFIG.experiments > 1:
-        auroc = (mean(aurocs), stdev(aurocs))
-        f1_score = (mean(f1s), stdev(f1s))
-        precision = (mean(precisions), stdev(precisions))
-        recall = (mean(recalls), stdev(recalls))
+        with open("MIA_output.yaml", "a") as file:
+            file.write(CONFIG.name + ':\n')
+            file.write(f'  train_score_mean: {mean(train_scores)}\n')
+            file.write(f'  train_score_stdev: {stdev(train_scores)}\n')
+            file.write(f'  test_score_mean: {mean(test_scores)}\n')
+            file.write(f'  test_score_std: {stdev(test_scores)}\n')
+            file.write(f'  auroc_mean: {mean(aurocs)}\n')
+            file.write(f'  auroc_stdev: {stdev(aurocs)}\n')
+            file.write(f'  f1_score_mean: {mean(f1s)}\n')
+            file.write(f'  f1_score_stdev: {stdev(f1s)}\n')
+            file.write(f'  precision_mean: {mean(precisions)}\n')
+            file.write(f'  precision_stdev: {stdev(precisions)}\n')
+            file.write(f'  recall_mean: {mean(recalls)}\n')
+            file.write(f'  recall_stdev: {stdev(recalls)}\n')
     else:
-        auroc = (aurocs[0], 0)
-        f1_score = (f1s[0], 0)
-        precision = (precisions[0], 0)
-        recall = (recalls[0], 0)
-    with open("MIA_output.txt", "a") as f:
-        f.write(CONFIG.name + '\n')
-        f.write(str({
-            'train_acc': metrics['train_score'],
-            'test_acc': metrics['test_score'],
-            'auroc': auroc,
-            'f1_score': f1_score,
-            'precision': precision,
-            'recall': recall,
-        }))
-        f.write('\n')
-    print()
-    print(f"Target train score: {metrics['train_score']:.4f}")
-    print(f"Target test score: {metrics['test_score']:.4f}")
-    print(f"Auroc: {auroc[0]:.4f} +- {auroc[1]:.4f}")
-    print(f"F1 score: {f1_score[0]:.4f} +- {f1_score[1]:.4f}")
-    print(f"Precision: {precision[0]:.4f} +- {precision[1]:.4f}")
-    print(f"Recall: {recall[0]:.4f} +- {recall[1]:.4f}")
-    print()
-    utils.plot_roc_loglog(*best_roc, name=CONFIG.name, savedir=CONFIG.savedir)
+        with open("MIA_output.yaml", "a") as file:
+            file.write(CONFIG.name + ':\n')
+            file.write(f'  train_score: {train_scores[0]}')
+            file.write(f'  test_score: {test_scores[0]}')
+            file.write(f'  auroc: {aurocs[0]}')
+            file.write(f'  f1_score: {f1s[0]}')
+            file.write(f'  precision: {precisions[0]}')
+            file.write(f'  recall: {recalls[0]}')
+    utils.plot_roc_loglog(*best_roc, name=CONFIG.name, savedir=CONFIG.savedir) # Plot the ROC curve for sample with highest AUROC.
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()

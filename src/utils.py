@@ -43,7 +43,7 @@ def plot_training_results(res, name, savedir):
     plt.grid(True)
     Path(savedir).mkdir(parents=True, exist_ok=True)
     plt.savefig(f"{savedir}/training_results_{name}.png")
-    plt.clf()
+    plt.close()
 
 def plot_roc_loglog(fpr, tpr, name, savedir='plots'):
     plt.figure(figsize=(8, 8))
@@ -54,4 +54,4 @@ def plot_roc_loglog(fpr, tpr, name, savedir='plots'):
     plt.ylabel('TPR')
     Path(savedir).mkdir(parents=True, exist_ok=True)
     plt.savefig(f"{savedir}/{name}_roc_loglog.png")
-    plt.clf()
+    plt.close()

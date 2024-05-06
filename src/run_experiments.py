@@ -1,12 +1,16 @@
 import run_mia
 import yaml
+import pandas as pd
 
 def parse_MIA_output():
-    with open("MIA_output.txt", "r") as file:
-        pass # TODO: Compute plots comparing auroc, f1, etc. between models and datasets.
+    with open("MIA_output.yaml", "r") as file:
+        result = yaml.safe_load(file)
+        df = pd.DataFrame.from_dict(result).transpose()
+        print(df)
 
 def main():
-    open("MIA_output.txt", "w").close() # Clear previous outputs before saving new.
+    with open("MIA_output.yaml", "w") as file: # Erase previous content.
+        file.write("---\n")
     with open("config.yaml", "r") as file:
         config = yaml.safe_load(file)
         
@@ -17,12 +21,14 @@ def main():
         'hidden_dim': 256,
     }
     for experiment, params in config.items():
-        print(f'Running {experiment} attack.')
+        print(f'Running MIA experiment.')
         for k, v in params.items():
             print(f'{k}: {v}')
         print()
         params.update(**static_params)
         run_mia.main(params)
+        print()
 
 if __name__ == "__main__":
     main()
+    parse_MIA_output()

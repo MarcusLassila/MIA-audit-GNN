@@ -4,7 +4,7 @@ cora-GCN:
   model: "GCN"
   batch_size: 32
   epochs: 50
-  epochs_attack: 100
+  epochs_attack: 50
   lr: 0.001
   name: "cora-GCN"
 citeseer-GCN:
@@ -12,7 +12,7 @@ citeseer-GCN:
   model: "GCN"
   batch_size: 32
   epochs: 30
-  epochs_attack: 100
+  epochs_attack: 50
   lr: 0.001
   name: "citeseer-GCN"
 cora-SAGE:
@@ -20,6 +20,6 @@ cora-SAGE:
   model: "SAGE"
   batch_size: 32
   epochs: 40
-  epochs_attack: 100
+  epochs_attack: 50
   lr: 0.001
   name: "cora-SAGE"
