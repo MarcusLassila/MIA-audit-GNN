@@ -2,14 +2,16 @@ import run_mia
 import yaml
 import pandas as pd
 
+OUTPUTFILE = "MIA_output.yaml"
+
 def parse_MIA_output():
-    with open("MIA_output.yaml", "r") as file:
+    with open(OUTPUTFILE, "r") as file:
         result = yaml.safe_load(file)
         df = pd.DataFrame.from_dict(result).transpose()
         print(df)
 
 def main():
-    with open("MIA_output.yaml", "w") as file: # Erase previous content.
+    with open(OUTPUTFILE, "w") as file: # Erase previous content.
         file.write("---\n")
     with open("config.yaml", "r") as file:
         config = yaml.safe_load(file)
@@ -19,6 +21,7 @@ def main():
         'savedir': 'plots',
         'experiments': 3,
         'hidden_dim': 256,
+        'outputfile': OUTPUTFILE,
     }
     for experiment, params in config.items():
         print(f'Running MIA experiment.')

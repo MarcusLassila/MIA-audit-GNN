@@ -1,3 +1,4 @@
+import data_setup
 import infer
 import models
 import utils
@@ -30,7 +31,8 @@ class Objectify:
 
 def get_dataset():
     if CONFIG.dataset == "cora":
-        dataset = torch_geometric.datasets.Planetoid(root=CONFIG.datadir, name="Cora", split="random", num_train_per_class=90)
+        #dataset = torch_geometric.datasets.Planetoid(root=CONFIG.datadir, name="Cora", split="random", num_train_per_class=90)
+        dataset = data_setup.Cora(root=CONFIG.datadir, disjoint_split=True)
     elif CONFIG.dataset == "citeseer":
         dataset = torch_geometric.datasets.Planetoid(root=CONFIG.datadir, name="CiteSeer", split="random", num_train_per_class=100)
     elif CONFIG.dataset == "pubmed":
@@ -98,8 +100,13 @@ def train_attack(model, train_dataset, valid_dataset):
 
 def run_experiment(seed):
     torch.manual_seed(seed)
-    target_dataset = get_dataset()
-    shadow_dataset = get_dataset()
+    if CONFIG.dataset == 'cora':
+        dataset = get_dataset()
+        target_dataset = dataset.target_dataset
+        shadow_dataset = dataset.shadow_dataset
+    else:
+        target_dataset = get_dataset()
+        shadow_dataset = get_dataset()
     target_model = get_model(target_dataset)
     shadow_model = get_model(shadow_dataset)
     train_graph_model(target_dataset, target_model, 'Target')
@@ -141,7 +148,7 @@ def main(config):
         precisions.append(metrics['precision'])
         recalls.append(metrics['recall'])
     if CONFIG.experiments > 1:
-        with open("MIA_output.yaml", "a") as file:
+        with open(CONFIG.outputfile, "a") as file:
             file.write(CONFIG.name + ':\n')
             file.write(f'  train_score_mean: {mean(train_scores)}\n')
             file.write(f'  train_score_stdev: {stdev(train_scores)}\n')
@@ -156,14 +163,14 @@ def main(config):
             file.write(f'  recall_mean: {mean(recalls)}\n')
             file.write(f'  recall_stdev: {stdev(recalls)}\n')
     else:
-        with open("MIA_output.yaml", "a") as file:
+        with open(CONFIG.outputfile, "a") as file:
             file.write(CONFIG.name + ':\n')
-            file.write(f'  train_score: {train_scores[0]}')
-            file.write(f'  test_score: {test_scores[0]}')
-            file.write(f'  auroc: {aurocs[0]}')
-            file.write(f'  f1_score: {f1s[0]}')
-            file.write(f'  precision: {precisions[0]}')
-            file.write(f'  recall: {recalls[0]}')
+            file.write(f'  train_score: {train_scores[0]}\n')
+            file.write(f'  test_score: {test_scores[0]}\n')
+            file.write(f'  auroc: {aurocs[0]}\n')
+            file.write(f'  f1_score: {f1s[0]}\n')
+            file.write(f'  precision: {precisions[0]}\n')
+            file.write(f'  recall: {recalls[0]}\n')
     utils.plot_roc_loglog(*best_roc, name=CONFIG.name, savedir=CONFIG.savedir) # Plot the ROC curve for sample with highest AUROC.
 
 if __name__ == '__main__':
@@ -177,9 +184,10 @@ if __name__ == '__main__':
     parser.add_argument("--datadir", default="data", type=str)
     parser.add_argument("--savedir", default="plots", type=str)
     parser.add_argument("--experiments", default=1, type=int)
-    parser.add_argument("--id", default="", type=str)
     parser.add_argument("--hidden-dim", default=256, type=int)
     parser.add_argument("--name", default="unnamed", type=str)
+    parser.add_argument("--outputfile", default="output.yaml", type=str)
     args = parser.parse_args()
+    open(args.outputfile, "w").close() # Clear output file.
     config = vars(args)
     main(config)
