@@ -2,7 +2,6 @@ import numpy as np
 import matplotlib.pyplot as plt
 from pathlib import Path
 
-
 def plot_training_results(res, name, savedir):
     epochs = np.array([*range(len(res['train_loss']))])
     plt.figure(figsize=(15, 15))

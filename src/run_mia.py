@@ -30,7 +30,7 @@ class Objectify:
 
 def get_dataset():
     if CONFIG.dataset == "cora":
-        dataset = data_setup.Cora(root=CONFIG.datadir, disjoint_split=False)
+        dataset = data_setup.Cora(root=CONFIG.datadir, split=CONFIG.split)
     elif CONFIG.dataset == "citeseer":
         dataset = torch_geometric.datasets.Planetoid(root=CONFIG.datadir, name="CiteSeer", split="random", num_train_per_class=100)
     elif CONFIG.dataset == "pubmed":
@@ -72,8 +72,8 @@ def train_graph_model(dataset, model, name):
 
 def train_attack(model, train_dataset, valid_dataset):
     ''' Train attack model. '''
-    train_loader = DataLoader(train_dataset, batch_size=32, shuffle=True)
-    valid_loader = DataLoader(valid_dataset, batch_size=32, shuffle=False)
+    train_loader = DataLoader(train_dataset, batch_size=CONFIG.batch_size, shuffle=True)
+    valid_loader = DataLoader(valid_dataset, batch_size=CONFIG.batch_size, shuffle=False)
     optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
     criterion = Accuracy(task="multiclass", num_classes=2).to(CONFIG.device)
     loss_fn = nn.CrossEntropyLoss()
@@ -92,9 +92,7 @@ def train_attack(model, train_dataset, valid_dataset):
 def run_experiment(seed):
     torch.manual_seed(seed)
     if CONFIG.dataset == 'cora':
-        dataset = get_dataset()
-        target_dataset = dataset.target
-        shadow_dataset = dataset.shadow
+        target_dataset, shadow_dataset = get_dataset().get_split()
     else:
         target_dataset = get_dataset()
         shadow_dataset = get_dataset()
@@ -175,6 +173,7 @@ if __name__ == '__main__':
     parser.add_argument("--dropout", default=0.0, type=float)
     parser.add_argument("--hidden-dim-target", default=256, type=int)
     parser.add_argument("--hidden-dim-attack", default=[100, 50], type=lambda x: [*map(int, x.split(','))])
+    parser.add_argument("--split", default="sampled", type=str)
     parser.add_argument("--name", default="unnamed", type=str)
     parser.add_argument("--outputfile", default="output.yaml", type=str)
     args = parser.parse_args()

@@ -19,7 +19,7 @@ def evaluate_attack_model(attack_model, target_model, dataset, device):
     roc_fn = ROC(task='binary').to(device)
     with torch.inference_mode():
         features = []
-        for v in range(dataset[0].num_nodes):
+        for v in range(dataset.x.shape[0]): # TODO: Evaluate only on target subset
             features.append(target_model(dataset.x[v].unsqueeze(dim=0), torch.tensor([[v], [v]])).squeeze()) # Only self-loop
         features = torch.stack(features, dim=0)
         logits = attack_model(features)[:,1]

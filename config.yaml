@@ -1,6 +1,7 @@
 ---
 Olatunji-cora-GCN:
   dataset: "cora"
+  split: "TSTF"
   model: "GCN"
   batch_size: 32
   epochs_target: 50
@@ -12,6 +13,7 @@ Olatunji-cora-GCN:
   name: "Olatunji-cora-GCN"
 Olatunji-citeseer-GCN:
   dataset: "citeseer"
+  split: "TSTF"
   model: "GCN"
   batch_size: 32
   epochs_target: 30
@@ -23,6 +25,7 @@ Olatunji-citeseer-GCN:
   name: "Olatunji-citeseer-GCN"
 Olatunji-cora-SAGE:
   dataset: "cora"
+  split: "TSTF"
   model: "SAGE"
   batch_size: 32
   epochs_target: 40
@@ -34,6 +37,7 @@ Olatunji-cora-SAGE:
   name: "Olatunji-cora-SAGE"
 He-cora-SAGE:
   dataset: "cora"
+  split: "disjoint"
   model: "SAGE"
   batch_size: 32
   epochs_target: 200

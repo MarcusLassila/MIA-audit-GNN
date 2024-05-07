@@ -45,8 +45,9 @@ def train_step(model, data_loader, loss_fn, optimizer, criterion, device):
         score += criterion(logits, y).item()
         loss.backward(retain_graph=True)
         optimizer.step()
+    avg_loss = accumulated_loss / len(data_loader)
     score /= len(data_loader)
-    return accumulated_loss, score
+    return avg_loss, score
 
 def valid_step(model, data_loader, loss_fn, criterion, device):
     model.eval()
@@ -57,8 +58,9 @@ def valid_step(model, data_loader, loss_fn, criterion, device):
             logits = model(X)
             accumulated_loss += loss_fn(logits, y).item()
             score += criterion(logits, y).item()
+        avg_loss = accumulated_loss / len(data_loader)
         score /= len(data_loader)
-    return accumulated_loss, score
+    return avg_loss, score
 
 def train_mlp(model, train_loader, valid_loader, loss_fn, optimizer, criterion, epochs, device):
     model.to(device)
