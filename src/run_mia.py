@@ -13,7 +13,6 @@ import torch.nn.functional as F
 from torch.utils.data import DataLoader
 import torch_geometric
 from torchmetrics import Accuracy, Precision, Recall, F1Score
-from sklearn.model_selection import train_test_split
 from statistics import mean, stdev
 
 torch.random.manual_seed(0)
@@ -31,7 +30,6 @@ class Objectify:
 
 def get_dataset():
     if CONFIG.dataset == "cora":
-        #dataset = torch_geometric.datasets.Planetoid(root=CONFIG.datadir, name="Cora", split="random", num_train_per_class=90)
         dataset = data_setup.Cora(root=CONFIG.datadir, disjoint_split=True)
     elif CONFIG.dataset == "citeseer":
         dataset = torch_geometric.datasets.Planetoid(root=CONFIG.datadir, name="CiteSeer", split="random", num_train_per_class=100)
@@ -48,8 +46,9 @@ def get_model(dataset):
     try:
         model = getattr(models, CONFIG.model)(
             dataset.num_features,
-            CONFIG.hidden_dim,
+            CONFIG.hidden_dim_target,
             dataset.num_classes,
+            dropout=CONFIG.dropout,
         )
     except AttributeError:
         err = AttributeError(f'Unsupported model {CONFIG.model}')
@@ -59,20 +58,12 @@ def get_model(dataset):
 def get_criterion(dataset):
     return Accuracy(task='multiclass', num_classes=dataset.num_classes).to(CONFIG.device)
 
-def create_attack_dataset(shadow_dataset, shadow_model):
-    features = shadow_model(shadow_dataset.x, shadow_dataset.edge_index).cpu()
-    labels = shadow_dataset.train_mask.long().cpu()
-    train_X, test_X, train_y, test_y = train_test_split(features, labels, test_size=50, stratify=labels) # test_size=0.2
-    train_dataset = utils.AttackDataset(train_X, train_y)
-    test_dataset = utils.AttackDataset(test_X, test_y)
-    return train_dataset, test_dataset
-
 def train_graph_model(dataset, model, name):
     ''' Train target or shadow model. '''
     optimizer = torch.optim.Adam(model.parameters(), lr=CONFIG.lr)
     criterion = get_criterion(dataset)
     loss_fn = F.nll_loss
-    res = trainer.train_gnn(model, dataset, loss_fn, optimizer, criterion, CONFIG.epochs, CONFIG.device)
+    res = trainer.train_gnn(model, dataset, loss_fn, optimizer, criterion, CONFIG.epochs_target, CONFIG.device)
     utils.plot_training_results(res, name, CONFIG.savedir)
     Path('models').mkdir(parents=True, exist_ok=True)
     torch.save(model.state_dict(), f"models/{name}_{model.__class__.__name__}_{dataset.name}.pth")
@@ -102,8 +93,8 @@ def run_experiment(seed):
     torch.manual_seed(seed)
     if CONFIG.dataset == 'cora':
         dataset = get_dataset()
-        target_dataset = dataset.target_dataset
-        shadow_dataset = dataset.shadow_dataset
+        target_dataset = dataset.target
+        shadow_dataset = dataset.shadow
     else:
         target_dataset = get_dataset()
         shadow_dataset = get_dataset()
@@ -118,13 +109,13 @@ def run_experiment(seed):
         'test_score': infer.evaluate_graph_model(target_model, target_dataset, target_dataset.test_mask, criterion)
     }
 
-    train_dataset, valid_dataset = create_attack_dataset(shadow_dataset, shadow_model)
-    attack_model = models.MLP(in_dim=shadow_dataset.num_classes)
+    train_dataset, valid_dataset = data_setup.create_attack_dataset(shadow_dataset, shadow_model)
+    attack_model = models.MLP(in_dim=shadow_dataset.num_classes, hidden_dims=CONFIG.hidden_dim_attack)
     train_attack(attack_model, train_dataset, valid_dataset)
 
     features = target_model(target_dataset.x, target_dataset.edge_index)
     ground_truth = target_dataset.train_mask.long()
-    attack_dataset = utils.AttackDataset(features, ground_truth)
+    attack_dataset = data_setup.AttackDataset(features, ground_truth)
     eval_metrics = infer.evaluate_attack_model(attack_model, attack_dataset, CONFIG.device)
     return dict(target_scores, **eval_metrics)
 
@@ -178,13 +169,15 @@ if __name__ == '__main__':
     parser.add_argument("--dataset", default='cora', type=str)
     parser.add_argument("--model", default="GCN", type=str)
     parser.add_argument("--batch-size", default=32, type=int)
-    parser.add_argument("--epochs", default=50, type=int)
+    parser.add_argument("--epochs-target", default=50, type=int)
     parser.add_argument("--epochs-attack", default=100, type=int)
     parser.add_argument("--lr", default=1e-3, type=float)
     parser.add_argument("--datadir", default="./data", type=str)
     parser.add_argument("--savedir", default="./plots", type=str)
     parser.add_argument("--experiments", default=1, type=int)
-    parser.add_argument("--hidden-dim", default=256, type=int)
+    parser.add_argument("--dropout", default=0.0, type=float)
+    parser.add_argument("--hidden-dim-target", default=256, type=int)
+    parser.add_argument("--hidden-dim-attack", default=[100, 50], type=lambda x: [*map(int, x.split(','))])
     parser.add_argument("--name", default="unnamed", type=str)
     parser.add_argument("--outputfile", default="output.yaml", type=str)
     args = parser.parse_args()

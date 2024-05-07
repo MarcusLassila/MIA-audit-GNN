@@ -17,13 +17,12 @@ def main():
         config = yaml.safe_load(file)
         
     static_params = {
-        'datadir': 'data',
-        'savedir': 'plots',
+        'datadir': './data',
+        'savedir': './plots',
         'experiments': 3,
-        'hidden_dim': 256,
         'outputfile': OUTPUTFILE,
     }
-    for experiment, params in config.items():
+    for _, params in config.items():
         print(f'Running MIA experiment.')
         for k, v in params.items():
             print(f'{k}: {v}')

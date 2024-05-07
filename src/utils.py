@@ -2,21 +2,6 @@ import numpy as np
 import matplotlib.pyplot as plt
 from pathlib import Path
 
-from torch.utils.data import Dataset
-
-class AttackDataset(Dataset):
-    
-    def __init__(self, features, labels):
-        self.features = features
-        self.labels = labels
-        
-    def __len__(self):
-        return len(self.labels)
-    
-    def __getitem__(self, idx):
-        feature = self.features[idx]
-        label = self.labels[idx]
-        return feature, label
 
 def plot_training_results(res, name, savedir):
     epochs = np.array([*range(len(res['train_loss']))])

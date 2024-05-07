@@ -3,34 +3,43 @@ Olatunji-cora-GCN:
   dataset: "cora"
   model: "GCN"
   batch_size: 32
-  epochs: 50
+  epochs_target: 50
   epochs_attack: 50
+  hidden_dim_target: 256
+  hidden_dim_attack: [100, 50]
   lr: 0.001
+  dropout: 0.0
   name: "Olatunji-cora-GCN"
 Olatunji-citeseer-GCN:
   dataset: "citeseer"
   model: "GCN"
   batch_size: 32
-  epochs: 30
+  epochs_target: 30
   epochs_attack: 50
+  hidden_dim_target: 256
+  hidden_dim_attack: [100, 50]
   lr: 0.001
+  dropout: 0.0
   name: "Olatunji-citeseer-GCN"
 Olatunji-cora-SAGE:
   dataset: "cora"
   model: "SAGE"
   batch_size: 32
-  epochs: 40
+  epochs_target: 40
   epochs_attack: 50
+  hidden_dim_target: 256
+  hidden_dim_attack: [100, 50]
   lr: 0.001
+  dropout: 0.0
   name: "Olatunji-cora-SAGE"
 He-cora-SAGE:
   dataset: "cora"
   model: "SAGE"
   batch_size: 32
-  epochs: 200
+  epochs_target: 200
   epochs_attack: 500
+  hidden_dim_target: 32
+  hidden_dim_attack: [128]
   lr: 0.003
-  # target_hidden_layer: 32
-  # attack_hidden_layer: 128
-  # dropout: 0.5
+  dropout: 0.5
   name: "He-cora-SAGE"

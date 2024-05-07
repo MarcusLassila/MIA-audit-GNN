@@ -2,8 +2,31 @@ import torch
 import torch_geometric
 import torch_geometric.datasets as datasets
 from torch_geometric.data import Data
+from sklearn.model_selection import train_test_split
 
 torch.manual_seed(1)
+
+class AttackDataset(torch.utils.data.Dataset):
+    
+    def __init__(self, features, labels):
+        self.features = features
+        self.labels = labels
+        
+    def __len__(self):
+        return len(self.labels)
+    
+    def __getitem__(self, idx):
+        feature = self.features[idx]
+        label = self.labels[idx]
+        return feature, label
+
+def create_attack_dataset(shadow_dataset, shadow_model):
+    features = shadow_model(shadow_dataset.x, shadow_dataset.edge_index).cpu()
+    labels = shadow_dataset.train_mask.long().cpu()
+    train_X, test_X, train_y, test_y = train_test_split(features, labels, test_size=50, stratify=labels) # test_size=0.2
+    train_dataset = AttackDataset(train_X, train_y)
+    test_dataset = AttackDataset(test_X, test_y)
+    return train_dataset, test_dataset
 
 def index_to_mask(size, index):
     mask = torch.zeros(size, dtype=bool)
@@ -64,9 +87,10 @@ class Cora:
             node_index = torch.randperm(num_nodes)
             target_index = node_index[:num_target_nodes]
             shadow_index = node_index[num_target_nodes:]
-            self.target_dataset = extract_subgraph(dataset, target_index)
-            self.shadow_dataset = extract_subgraph(dataset, shadow_index)
+            target_set = extract_subgraph(dataset, target_index)
+            shadow_set = extract_subgraph(dataset, shadow_index)
         else:
-            self.target_dataset = datasets.Planetoid(root=root, name='Cora', split='random', num_train_per_class=90)
-            self.shadow_dataset = datasets.Planetoid(root=root, name='Cora', split='random', num_train_per_class=90)
-
+            target_set = datasets.Planetoid(root=root, name='Cora', split='random', num_train_per_class=90)
+            shadow_set = datasets.Planetoid(root=root, name='Cora', split='random', num_train_per_class=90)
+        self.target = target_set
+        self.shadow = shadow_set
