@@ -30,7 +30,7 @@ class Objectify:
 
 def get_dataset():
     if CONFIG.dataset == "cora":
-        dataset = data_setup.Cora(root=CONFIG.datadir, disjoint_split=True)
+        dataset = data_setup.Cora(root=CONFIG.datadir, disjoint_split=False)
     elif CONFIG.dataset == "citeseer":
         dataset = torch_geometric.datasets.Planetoid(root=CONFIG.datadir, name="CiteSeer", split="random", num_train_per_class=100)
     elif CONFIG.dataset == "pubmed":
@@ -113,10 +113,7 @@ def run_experiment(seed):
     attack_model = models.MLP(in_dim=shadow_dataset.num_classes, hidden_dims=CONFIG.hidden_dim_attack)
     train_attack(attack_model, train_dataset, valid_dataset)
 
-    features = target_model(target_dataset.x, target_dataset.edge_index)
-    ground_truth = target_dataset.train_mask.long()
-    attack_dataset = data_setup.AttackDataset(features, ground_truth)
-    eval_metrics = infer.evaluate_attack_model(attack_model, attack_dataset, CONFIG.device)
+    eval_metrics = infer.evaluate_attack_model(attack_model, target_model, target_dataset, CONFIG.device)
     return dict(target_scores, **eval_metrics)
 
 def main(config):
