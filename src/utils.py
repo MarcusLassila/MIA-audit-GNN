@@ -1,4 +1,5 @@
 import numpy as np
+import pandas as pd
 import matplotlib.pyplot as plt
 from pathlib import Path
 
@@ -29,13 +30,21 @@ def plot_training_results(res, name, savedir):
     plt.savefig(f"{savedir}/training_results_{name}.png")
     plt.close()
 
-def plot_roc_loglog(fpr, tpr, name, savedir='plots'):
+def plot_roc_loglog(fpr, tpr, savepath=None):
     plt.figure(figsize=(8, 8))
     plt.loglog(fpr, tpr)
     plt.xlim(1e-4, 1)
     plt.grid(True)
     plt.xlabel('FPR')
     plt.ylabel('TPR')
-    Path(savedir).mkdir(parents=True, exist_ok=True)
-    plt.savefig(f"{savedir}/{name}_roc_loglog.png")
+    if savepath:
+        savedir = '/'.join(savepath.split('/')[:-1])
+        Path(savedir).mkdir(parents=True, exist_ok=True)
+        plt.savefig(savepath)
+    else:
+        plt.show()
     plt.close()
+
+def plot_roc_csv(filepath, savepath=None):
+    df = pd.read_csv(filepath, sep=',')
+    plot_roc_loglog(df['fpr'], df['tpr'], savepath=savepath)

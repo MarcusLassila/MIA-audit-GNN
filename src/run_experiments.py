@@ -1,4 +1,5 @@
 import run_mia
+import utils
 import yaml
 import pandas as pd
 from pathlib import Path
@@ -11,7 +12,7 @@ def main():
     static_params = {
         'datadir': './data',
         'savedir': './results',
-        'plot_roc': False,
+        'plot_roc': True,
         'experiments': 3,
     }
     for _, params in config.items():

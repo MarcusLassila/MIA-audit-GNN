@@ -149,8 +149,6 @@ def main(config):
             'recall_mean': [mean(recalls)],
             'recall_stdev': [stdev(recalls)],
         }
-        stat_df = pd.DataFrame(stats, index=[CONFIG.name])
-        roc_df = pd.DataFrame({'fpr': fpr, 'tpr': tpr})
     else:
         stats = {
             'train_acc': train_scores,
@@ -160,10 +158,11 @@ def main(config):
             'precision': precisions,
             'recall': recalls,
         }
-        stat_df = pd.DataFrame(stats, index=[CONFIG.name])
-        roc_df = pd.DataFrame({'fpr': fpr, 'tpr': tpr})
+    stat_df = pd.DataFrame(stats, index=[CONFIG.name])
+    roc_df = pd.DataFrame({'fpr': fpr, 'tpr': tpr})
     if CONFIG.plot_roc:
-        utils.plot_roc_loglog(fpr, tpr, name=CONFIG.name, savedir=CONFIG.savedir) # Plot the ROC curve for sample with highest AUROC.
+        savepath = f'{CONFIG.savedir}/{CONFIG.name}_roc_loglog.png'
+        utils.plot_roc_loglog(fpr, tpr, savepath=savepath) # Plot the ROC curve for sample with highest AUROC.
     return stat_df, roc_df
 
 if __name__ == '__main__':
