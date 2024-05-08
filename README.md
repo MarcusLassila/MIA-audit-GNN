@@ -23,6 +23,6 @@ Alternatively, run "src/run_mia.py" which only run one MIA simulation experiment
 * --query-hops: The size of the k-hop neighborhood to query the target model when creating features for the attack model.
 * --datadir: Path to save dataset.
 * --savedir: Path to store results.
-* --plot-roc: Plot ROC curve in log scale and store in savedir.
+* --plot-roc: If true, plot ROC curve in log scale and store in savedir.
 * --name: Name to add to result files.
 * --experiments: Number of samples (retraining target, shadow and attack models) to compute result statistics over.
