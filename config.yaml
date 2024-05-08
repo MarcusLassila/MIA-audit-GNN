@@ -10,7 +10,7 @@ Olatunji-cora-GCN:
   hidden_dim_attack: [100, 50]
   lr: 0.001
   dropout: 0.0
-  query_hops: 0
+  query_hops: 1
   name: "Olatunji-cora-GCN"
 Olatunji-citeseer-GCN:
   dataset: "citeseer"
@@ -23,20 +23,20 @@ Olatunji-citeseer-GCN:
   hidden_dim_attack: [100, 50]
   lr: 0.001
   dropout: 0.0
-  query_hops: 0
+  query_hops: 1
   name: "Olatunji-citeseer-GCN"
 Olatunji-cora-SAGE:
   dataset: "cora"
   split: "TSTF"
   model: "SAGE"
   batch_size: 32
-  epochs_target: 40
+  epochs_target: 30
   epochs_attack: 100
   hidden_dim_target: 256
   hidden_dim_attack: [100, 50]
   lr: 0.001
   dropout: 0.0
-  query_hops: 0
+  query_hops: 1
   name: "Olatunji-cora-SAGE"
 He-cora-SAGE:
   dataset: "cora"

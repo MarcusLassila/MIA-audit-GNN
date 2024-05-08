@@ -46,5 +46,5 @@ def evaluate_attack_model(attack_model, target_model, dataset, num_hops=0):
         'f1_score': f1,
         'precision': precision,
         'recall': recall,
-        'roc': (fpr, tpr)
+        'roc': (fpr, tpr),
     }

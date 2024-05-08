@@ -7,12 +7,13 @@ import trainer
 import argparse
 from pathlib import Path
 
+import pandas as pd
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.utils.data import DataLoader
 import torch_geometric.datasets
-import torch_geometric.nn as gnn
 from torchmetrics import Accuracy, Precision, Recall, F1Score
 from statistics import mean, stdev
 
@@ -57,17 +58,13 @@ def get_model(dataset):
             dropout=CONFIG.dropout,
         )
     except AttributeError:
-        err = AttributeError(f'Unsupported model {CONFIG.model}. Supported models are GCN, SGC, GraphSAGE, GAT and GIN.')
-        raise err
+        raise AttributeError(f'Unsupported model {CONFIG.model}. Supported models are GCN, SGC, GraphSAGE, GAT and GIN.')
     return model
-
-def get_criterion(dataset):
-    return Accuracy(task='multiclass', num_classes=dataset.num_classes).to(CONFIG.device)
 
 def train_graph_model(dataset, model, name, model_savedir=None):
     ''' Train target or shadow model. '''
     optimizer = torch.optim.Adam(model.parameters(), lr=CONFIG.lr)
-    criterion = get_criterion(dataset)
+    criterion = Accuracy(task='multiclass', num_classes=dataset.num_classes).to(CONFIG.device)
     loss_fn = F.nll_loss
     res = trainer.train_gnn(model, dataset, loss_fn, optimizer, criterion, CONFIG.epochs_target, CONFIG.device)
     utils.plot_training_results(res, name, CONFIG.savedir)
@@ -104,7 +101,7 @@ def run_experiment(seed):
     train_graph_model(target_dataset, target_model, 'Target')
     train_graph_model(shadow_dataset, shadow_model, 'Shadow')
     
-    criterion = get_criterion(target_dataset)
+    criterion = Accuracy(task='multiclass', num_classes=target_dataset.num_classes).to(CONFIG.device)
     target_scores = {
         'train_score': infer.evaluate_graph_model(target_model, target_dataset, target_dataset.train_mask, criterion),
         'test_score': infer.evaluate_graph_model(target_model, target_dataset, target_dataset.test_mask, criterion)
@@ -124,13 +121,13 @@ def main(config):
     CONFIG.device = 'cuda' if torch.cuda.is_available() else 'cpu'
     train_scores, test_scores = [], []
     aurocs, f1s, precisions, recalls = [], [], [], []
-    best_auroc, best_roc = 0, ()
+    best_auroc = 0
     for i in range(CONFIG.experiments):
         print(f'Running experiment {i + 1}/{CONFIG.experiments}.')
         metrics = run_experiment(i)
         if best_auroc < metrics['auroc']:
             best_auroc = metrics['auroc']
-            best_roc = metrics['roc']
+            fpr, tpr = metrics['roc']
         train_scores.append(metrics['train_score'])
         test_scores.append(metrics['test_score'])
         aurocs.append(metrics['auroc'])
@@ -138,30 +135,36 @@ def main(config):
         precisions.append(metrics['precision'])
         recalls.append(metrics['recall'])
     if CONFIG.experiments > 1:
-        with open(CONFIG.outputfile, "a") as file:
-            file.write(CONFIG.name + ':\n')
-            file.write(f'  train_score_mean: {mean(train_scores)}\n')
-            file.write(f'  train_score_stdev: {stdev(train_scores)}\n')
-            file.write(f'  test_score_mean: {mean(test_scores)}\n')
-            file.write(f'  test_score_std: {stdev(test_scores)}\n')
-            file.write(f'  auroc_mean: {mean(aurocs)}\n')
-            file.write(f'  auroc_stdev: {stdev(aurocs)}\n')
-            file.write(f'  f1_score_mean: {mean(f1s)}\n')
-            file.write(f'  f1_score_stdev: {stdev(f1s)}\n')
-            file.write(f'  precision_mean: {mean(precisions)}\n')
-            file.write(f'  precision_stdev: {stdev(precisions)}\n')
-            file.write(f'  recall_mean: {mean(recalls)}\n')
-            file.write(f'  recall_stdev: {stdev(recalls)}\n')
+        stats = {
+            'train_acc_mean': [mean(train_scores)],
+            'train_acc_stdev': [stdev(train_scores)],
+            'test_acc_mean': [mean(test_scores)],
+            'test_acc_stdev': [stdev(test_scores)],
+            'auroc_mean': [mean(aurocs)],
+            'auroc_stdev': [stdev(aurocs)],
+            'f1_score_mean': [mean(f1s)],
+            'f1_score_stdev': [stdev(f1s)],
+            'precision_mean': [mean(precisions)],
+            'precision_stdev': [stdev(precisions)],
+            'recall_mean': [mean(recalls)],
+            'recall_stdev': [stdev(recalls)],
+        }
+        stat_df = pd.DataFrame(stats, index=[CONFIG.name])
+        roc_df = pd.DataFrame({'fpr': fpr, 'tpr': tpr})
     else:
-        with open(CONFIG.outputfile, "a") as file:
-            file.write(CONFIG.name + ':\n')
-            file.write(f'  train_score: {train_scores[0]}\n')
-            file.write(f'  test_score: {test_scores[0]}\n')
-            file.write(f'  auroc: {aurocs[0]}\n')
-            file.write(f'  f1_score: {f1s[0]}\n')
-            file.write(f'  precision: {precisions[0]}\n')
-            file.write(f'  recall: {recalls[0]}\n')
-    utils.plot_roc_loglog(*best_roc, name=CONFIG.name, savedir=CONFIG.savedir) # Plot the ROC curve for sample with highest AUROC.
+        stats = {
+            'train_acc': train_scores,
+            'test_acc': test_scores,
+            'auroc': aurocs,
+            'f1_score': f1s,
+            'precision': precisions,
+            'recall': recalls,
+        }
+        stat_df = pd.DataFrame(stats, index=[CONFIG.name])
+        roc_df = pd.DataFrame({'fpr': fpr, 'tpr': tpr})
+    if CONFIG.plot_roc:
+        utils.plot_roc_loglog(fpr, tpr, name=CONFIG.name, savedir=CONFIG.savedir) # Plot the ROC curve for sample with highest AUROC.
+    return stat_df, roc_df
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
@@ -179,12 +182,15 @@ if __name__ == '__main__':
     parser.add_argument("--experiments", default=1, type=int)
     parser.add_argument("--name", default="unnamed", type=str)
     parser.add_argument("--datadir", default="./data", type=str)
-    parser.add_argument("--savedir", default="./plots", type=str)
-    parser.add_argument("--outputfile", default="output.yaml", type=str)
+    parser.add_argument("--savedir", default="./results", type=str)
+    parser.add_argument("--plot-roc", default=True, type=bool)
     args = parser.parse_args()
     open(args.outputfile, "w").close() # Clear output file.
     config = vars(args)
     print('Running MIA experiment.')
     print(Objectify(config))
     print()
-    main(config)
+    stat_df, roc_df = main(config)
+    print('Attack statistics:')
+    print(stat_df)
+    roc_df.to_csv(f'roc_{args.name}.csv', index=False)

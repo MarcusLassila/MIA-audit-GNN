@@ -3,7 +3,7 @@ Replicate the results of node-level membership inference attacks of [Membership 
 
 ### Instructions
 
-Specify attack settings in config.yaml and run "src/run_experiments.py". Plots of ROC curves and training results are stored in plots, and averaged metrics are written to MIA_output.yaml.
+Specify attack settings in config.yaml and run "src/run_experiments.py". CSV files of attack performance statistics, ROC data, and plots are stored in results folder. 
 
 Alternatively, run "src/run_mia.py" which only run one MIA simulation experiment and can be customized by the following flags:
 
@@ -22,6 +22,7 @@ Alternatively, run "src/run_mia.py" which only run one MIA simulation experiment
 * --hidden-dim-attack: Dimensions of the hidden layers in the MLP. Input is given as a comma separeted list, e.g. 128,64,32.
 * --query-hops: The size of the k-hop neighborhood to query the target model when creating features for the attack model.
 * --datadir: Path to save dataset.
-* --savedir: Path to store plots.
+* --savedir: Path to store results.
+* --plot-roc: Plot ROC curve in log scale and store in savedir.
 * --name: Name to add to result files.
 * --experiments: Number of samples (retraining target, shadow and attack models) to compute result statistics over.
