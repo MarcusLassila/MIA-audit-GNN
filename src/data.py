@@ -1,7 +1,7 @@
 import torch
-import torch_geometric
 import torch_geometric.datasets as datasets
 from torch_geometric.data import Data
+from torch_geometric.utils import index_to_mask, subgraph
 from sklearn.model_selection import train_test_split
 
 torch.manual_seed(1)
@@ -28,16 +28,6 @@ def create_attack_dataset(shadow_dataset, shadow_model):
     test_dataset = AttackDataset(test_X, test_y)
     return train_dataset, test_dataset
 
-def index_to_mask(size, index):
-    mask = torch.zeros(size, dtype=bool)
-    mask[index] = True
-    return mask
-
-def internal_edges(dataset, node_index):
-    index_set = set(node_index.numpy())
-    edge_mask = torch.tensor([x.item() in index_set and y.item() in index_set for x, y in dataset.edge_index.t()])
-    return dataset.edge_index[:,edge_mask]
-
 def extract_subgraph(dataset, node_index, train_frac=0.2, val_frac=0.2):
     '''
     Args:
@@ -55,21 +45,20 @@ def extract_subgraph(dataset, node_index, train_frac=0.2, val_frac=0.2):
     Note that there is no guarantee that the train/val/test split have any balanced
     representation of class labels or similarly connected as the full graph.
     '''
-    total_num_nodes = dataset[0].num_nodes
-    edge_index = internal_edges(dataset, node_index)
+    edge_index, _ = subgraph(node_index, dataset.edge_index, relabel_nodes=True)
     num_nodes = len(node_index)
     num_train_nodes = int(train_frac * num_nodes)
     num_val_nodes = int(val_frac * num_nodes)
-    train_index = node_index[:num_train_nodes]
-    val_index = node_index[num_train_nodes: num_train_nodes + num_val_nodes]
-    test_index = node_index[num_train_nodes + num_val_nodes:]
-    train_mask = index_to_mask(total_num_nodes, train_index)
-    val_mask = index_to_mask(total_num_nodes, val_index)
-    test_mask = index_to_mask(total_num_nodes, test_index)
+    train_index = torch.arange(0, num_train_nodes)
+    val_index = torch.arange(num_train_nodes, num_train_nodes + num_val_nodes)
+    test_index = torch.arange(num_train_nodes + num_val_nodes, num_nodes)
+    train_mask = index_to_mask(train_index, num_nodes)
+    val_mask = index_to_mask(val_index, num_nodes)
+    test_mask = index_to_mask(test_index, num_nodes)
     return Data(
-        x=dataset.x,
+        x=dataset.x[node_index],
         edge_index=edge_index,
-        y=dataset.y,
+        y=dataset.y[node_index],
         train_mask=train_mask,
         val_mask=val_mask,
         test_mask=test_mask,
@@ -81,20 +70,20 @@ def extract_subgraph(dataset, node_index, train_frac=0.2, val_frac=0.2):
 def sample_subgraph(dataset, num_nodes, train_frac=0.2, val_frac=0.2):
     total_num_nodes = dataset[0].num_nodes
     assert 0 < num_nodes <= total_num_nodes
-    node_index = torch.randperm(num_nodes)
-    edge_index = internal_edges(dataset, node_index)
+    node_index = torch.randperm(total_num_nodes)[:num_nodes]
+    edge_index, _ = subgraph(node_index, dataset.edge_index, relabel_nodes=True)
     num_train_nodes = int(train_frac * num_nodes)
     num_val_nodes = int(val_frac * num_nodes)
-    train_index = node_index[:num_train_nodes]
-    val_index = node_index[num_train_nodes: num_train_nodes + num_val_nodes]
-    test_index = node_index[num_train_nodes + num_val_nodes:]
-    train_mask = index_to_mask(total_num_nodes, train_index)
-    val_mask = index_to_mask(total_num_nodes, val_index)
-    test_mask = index_to_mask(total_num_nodes, test_index)
+    train_index = torch.arange(0, num_train_nodes)
+    val_index = torch.arange(num_train_nodes, num_train_nodes + num_val_nodes)
+    test_index = torch.arange(num_train_nodes + num_val_nodes, num_nodes)
+    train_mask = index_to_mask(train_index, num_nodes)
+    val_mask = index_to_mask(val_index, num_nodes)
+    test_mask = index_to_mask(test_index, num_nodes)
     return Data(
-        x=dataset.x,
+        x=dataset.x[node_index],
         edge_index=edge_index,
-        y=dataset.y,
+        y=dataset.y[node_index],
         train_mask=train_mask,
         val_mask=val_mask,
         test_mask=test_mask,

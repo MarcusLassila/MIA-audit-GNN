@@ -1,4 +1,4 @@
-import data_setup
+import data
 import infer
 import models
 import utils
@@ -30,7 +30,7 @@ class Objectify:
 
 def get_dataset():
     if CONFIG.dataset == "cora":
-        dataset = data_setup.Cora(root=CONFIG.datadir, split=CONFIG.split)
+        dataset = data.Cora(root=CONFIG.datadir, split=CONFIG.split)
     elif CONFIG.dataset == "citeseer":
         dataset = torch_geometric.datasets.Planetoid(root=CONFIG.datadir, name="CiteSeer", split="random", num_train_per_class=100)
     elif CONFIG.dataset == "pubmed":
@@ -107,11 +107,11 @@ def run_experiment(seed):
         'test_score': infer.evaluate_graph_model(target_model, target_dataset, target_dataset.test_mask, criterion)
     }
 
-    train_dataset, valid_dataset = data_setup.create_attack_dataset(shadow_dataset, shadow_model)
+    train_dataset, valid_dataset = data.create_attack_dataset(shadow_dataset, shadow_model)
     attack_model = models.MLP(in_dim=shadow_dataset.num_classes, hidden_dims=CONFIG.hidden_dim_attack)
     train_attack(attack_model, train_dataset, valid_dataset)
 
-    eval_metrics = infer.evaluate_attack_model(attack_model, target_model, target_dataset, CONFIG.device)
+    eval_metrics = infer.evaluate_attack_model(attack_model, target_model, target_dataset, num_hops=CONFIG.query_hops)
     return dict(target_scores, **eval_metrics)
 
 def main(config):
@@ -122,7 +122,7 @@ def main(config):
     aurocs, f1s, precisions, recalls = [], [], [], []
     best_auroc, best_roc = 0, ()
     for i in range(CONFIG.experiments):
-        print(f'Running experiment {i + 1}.')
+        print(f'Running experiment {i + 1}/{CONFIG.experiments}.')
         metrics = run_experiment(i)
         if best_auroc < metrics['auroc']:
             best_auroc = metrics['auroc']
@@ -162,21 +162,24 @@ def main(config):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument("--dataset", default='cora', type=str)
+    parser.add_argument("--split", default="sampled", type=str)
     parser.add_argument("--model", default="GCN", type=str)
     parser.add_argument("--batch-size", default=32, type=int)
     parser.add_argument("--epochs-target", default=50, type=int)
     parser.add_argument("--epochs-attack", default=100, type=int)
     parser.add_argument("--lr", default=1e-3, type=float)
-    parser.add_argument("--datadir", default="./data", type=str)
-    parser.add_argument("--savedir", default="./plots", type=str)
-    parser.add_argument("--experiments", default=1, type=int)
     parser.add_argument("--dropout", default=0.0, type=float)
     parser.add_argument("--hidden-dim-target", default=256, type=int)
     parser.add_argument("--hidden-dim-attack", default=[100, 50], type=lambda x: [*map(int, x.split(','))])
-    parser.add_argument("--split", default="sampled", type=str)
+    parser.add_argument("--query-hops", default=0, type=int)
+    parser.add_argument("--experiments", default=1, type=int)
     parser.add_argument("--name", default="unnamed", type=str)
+    parser.add_argument("--datadir", default="./data", type=str)
+    parser.add_argument("--savedir", default="./plots", type=str)
     parser.add_argument("--outputfile", default="output.yaml", type=str)
     args = parser.parse_args()
     open(args.outputfile, "w").close() # Clear output file.
     config = vars(args)
+    print('Running MIA experiment.')
+    print(Objectify(config))
     main(config)

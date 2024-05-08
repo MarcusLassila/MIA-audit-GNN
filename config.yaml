@@ -5,11 +5,12 @@ Olatunji-cora-GCN:
   model: "GCN"
   batch_size: 32
   epochs_target: 50
-  epochs_attack: 50
+  epochs_attack: 100
   hidden_dim_target: 256
   hidden_dim_attack: [100, 50]
   lr: 0.001
   dropout: 0.0
+  query_hops: 0
   name: "Olatunji-cora-GCN"
 Olatunji-citeseer-GCN:
   dataset: "citeseer"
@@ -17,11 +18,12 @@ Olatunji-citeseer-GCN:
   model: "GCN"
   batch_size: 32
   epochs_target: 30
-  epochs_attack: 50
+  epochs_attack: 100
   hidden_dim_target: 256
   hidden_dim_attack: [100, 50]
   lr: 0.001
   dropout: 0.0
+  query_hops: 0
   name: "Olatunji-citeseer-GCN"
 Olatunji-cora-SAGE:
   dataset: "cora"
@@ -29,11 +31,12 @@ Olatunji-cora-SAGE:
   model: "SAGE"
   batch_size: 32
   epochs_target: 40
-  epochs_attack: 50
+  epochs_attack: 100
   hidden_dim_target: 256
   hidden_dim_attack: [100, 50]
   lr: 0.001
   dropout: 0.0
+  query_hops: 0
   name: "Olatunji-cora-SAGE"
 He-cora-SAGE:
   dataset: "cora"
@@ -46,4 +49,5 @@ He-cora-SAGE:
   hidden_dim_attack: [128]
   lr: 0.003
   dropout: 0.5
+  query_hops: 2
   name: "He-cora-SAGE"
