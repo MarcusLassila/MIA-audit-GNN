@@ -34,12 +34,12 @@ class SGC(TwoLayerGNN):
         self.conv1 = gnn.SGConv(in_dim, hidden_dim, K=2, cached=False)
         self.conv2 = gnn.SGConv(hidden_dim, out_dim, K=2, cached=False)
 
-class SAGE(TwoLayerGNN):
+class GraphSAGE(TwoLayerGNN):
 
     def __init__(self, in_dim, hidden_dim, out_dim, dropout=0.0):
-        super(SAGE, self).__init__(dropout=dropout)
-        self.conv1 = gnn.SGConv(in_dim, hidden_dim)
-        self.conv2 = gnn.SGConv(hidden_dim, out_dim)
+        super(GraphSAGE, self).__init__(dropout=dropout)
+        self.conv1 = gnn.SAGEConv(in_dim, hidden_dim)
+        self.conv2 = gnn.SAGEConv(hidden_dim, out_dim)
 
 class GAT(TwoLayerGNN):
 
@@ -48,12 +48,18 @@ class GAT(TwoLayerGNN):
         self.conv1 = gnn.GATConv(in_dim, hidden_dim, heads=heads[0], dropout=dropout)
         self.conv2 = gnn.GATConv(hidden_dim * heads[0], out_dim, heads=heads[1], dropout=dropout, concat=False)
 
+class GIN(TwoLayerGNN):
+
+    def __init__(self, in_dim, hidden_dim, out_dim, dropout=0.0):
+        super(GIN, self).__init__(dropout=dropout)
+        self.conv1 = gnn.GINConv(MLP(in_dim, (hidden_dim,), hidden_dim))
+        self.conv2 = gnn.GINConv(MLP(hidden_dim, (hidden_dim,), out_dim))
+
 class MLP(nn.Module):
-    ''' MLP net used for the attack model (binary classification). '''
-    
-    def __init__(self, in_dim, hidden_dims):
+
+    def __init__(self, in_dim, hidden_dims, out_dim=2):
         super(MLP, self).__init__()
-        dims = [in_dim, *hidden_dims, 2]
+        dims = [in_dim, *hidden_dims, out_dim]
         self.layers = nn.ModuleList([nn.Linear(x, y) for x, y in zip(dims, dims[1:])])
     
     def forward(self, x):

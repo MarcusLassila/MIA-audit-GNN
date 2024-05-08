@@ -12,6 +12,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.utils.data import DataLoader
 import torch_geometric.datasets
+import torch_geometric.nn as gnn
 from torchmetrics import Accuracy, Precision, Recall, F1Score
 from statistics import mean, stdev
 
@@ -29,15 +30,19 @@ class Objectify:
         return '\n'.join(f'{k}: {v}'.replace('_', ' ') for k, v in self.dictionary.items())
 
 def get_target_shadow_dataset_split():
+    root = CONFIG.datadir
     if CONFIG.dataset == "cora":
-        dataset = torch_geometric.datasets.Planetoid(root=CONFIG.datadir, name="Cora")
+        dataset = torch_geometric.datasets.Planetoid(root=root, name="Cora")
+    elif CONFIG.dataset == "corafull":
+        dataset = torch_geometric.datasets.CoraFull(root=root)
+        dataset.name == "CoraFull"
     elif CONFIG.dataset == "citeseer":
-        dataset = torch_geometric.datasets.Planetoid(root=CONFIG.datadir, name="CiteSeer")
+        dataset = torch_geometric.datasets.Planetoid(root=root, name="CiteSeer")
     elif CONFIG.dataset == "pubmed":
-        dataset = torch_geometric.datasets.Planetoid(root=CONFIG.datadir, name="PubMed")
+        dataset = torch_geometric.datasets.Planetoid(root=root, name="PubMed")
     elif CONFIG.dataset == "flickr":
-        dataset = torch_geometric.datasets.Flickr(root=CONFIG.datadir)
-        dataset.name = 'Flickr'
+        dataset = torch_geometric.datasets.Flickr(root=root)
+        dataset.name = "Flickr"
     else:
         raise ValueError("Unsupported dataset!")
     target_dataset, shadow_dataset = datasetup.target_shadow_split(dataset, split=CONFIG.split, target_frac=0.5, shadow_frac=0.5)
@@ -52,22 +57,23 @@ def get_model(dataset):
             dropout=CONFIG.dropout,
         )
     except AttributeError:
-        err = AttributeError(f'Unsupported model {CONFIG.model}')
+        err = AttributeError(f'Unsupported model {CONFIG.model}. Supported models are GCN, SGC, GraphSAGE, GAT and GIN.')
         raise err
     return model
 
 def get_criterion(dataset):
     return Accuracy(task='multiclass', num_classes=dataset.num_classes).to(CONFIG.device)
 
-def train_graph_model(dataset, model, name):
+def train_graph_model(dataset, model, name, model_savedir=None):
     ''' Train target or shadow model. '''
     optimizer = torch.optim.Adam(model.parameters(), lr=CONFIG.lr)
     criterion = get_criterion(dataset)
     loss_fn = F.nll_loss
     res = trainer.train_gnn(model, dataset, loss_fn, optimizer, criterion, CONFIG.epochs_target, CONFIG.device)
     utils.plot_training_results(res, name, CONFIG.savedir)
-    Path('models').mkdir(parents=True, exist_ok=True)
-    torch.save(model.state_dict(), f"models/{name}_{model.__class__.__name__}_{dataset.name}.pth")
+    if model_savedir is not None:
+        Path(model_savedir).mkdir(parents=True, exist_ok=True)
+        torch.save(model.state_dict(), f"{model_savedir}/{name}_{model.__class__.__name__}_{dataset.name}.pth")
     test_score = infer.evaluate_graph_model(model, dataset, dataset.test_mask, criterion)
     print(f"{name} test score: {test_score:.4f}")
 
@@ -114,6 +120,7 @@ def run_experiment(seed):
 def main(config):
     global CONFIG
     CONFIG = Objectify(config)
+    CONFIG.dataset = CONFIG.dataset.lower()
     CONFIG.device = 'cuda' if torch.cuda.is_available() else 'cpu'
     train_scores, test_scores = [], []
     aurocs, f1s, precisions, recalls = [], [], [], []
