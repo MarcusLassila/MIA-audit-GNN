@@ -2,6 +2,20 @@ import torch
 from torch_geometric.utils import k_hop_subgraph
 from torchmetrics import AUROC, F1Score, Precision, Recall, ROC
 
+def query_attack_features(model, dataset, query_nodes, num_hops=0):
+    model.eval()
+    features = []
+    for v in query_nodes:
+        node_index, edge_index, v_idx, _ = k_hop_subgraph(
+            node_idx=v,
+            num_hops=num_hops,
+            edge_index=dataset.edge_index,
+            relabel_nodes=True
+        )
+        pred = model(dataset.x[node_index], edge_index)[v_idx]
+        features.append(pred)
+    return torch.cat(features, dim=0)
+
 def evaluate_graph_model(model, dataset, mask, criterion):
     model.eval()
     with torch.inference_mode():
@@ -19,17 +33,7 @@ def evaluate_attack_model(attack_model, target_model, dataset, num_hops=0):
     recall_fn = Recall(task='binary').to(device)
     roc_fn = ROC(task='binary').to(device)
     with torch.inference_mode():
-        features = []
-        for v in range(dataset.x.shape[0]):
-            node_index, edge_index, v_idx, _ = k_hop_subgraph(
-                node_idx=v,
-                num_hops=num_hops,
-                edge_index=dataset.edge_index,
-                relabel_nodes=True
-            )
-            pred = target_model(dataset.x[node_index], edge_index)[v_idx]
-            features.append(pred)
-        features = torch.cat(features, dim=0)
+        features = query_attack_features(target_model, dataset, range(dataset.x.shape[0]), num_hops=num_hops)
         logits = attack_model(features)[:,1]
         truth = dataset.train_mask.long()
         auroc = auroc_fn(logits, truth).item()

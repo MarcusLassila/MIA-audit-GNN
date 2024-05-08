@@ -1,4 +1,4 @@
-import data
+import datasetup
 import infer
 import models
 import utils
@@ -11,7 +11,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.utils.data import DataLoader
-import torch_geometric
+import torch_geometric.datasets
 from torchmetrics import Accuracy, Precision, Recall, F1Score
 from statistics import mean, stdev
 
@@ -28,19 +28,20 @@ class Objectify:
     def __str__(self):
         return '\n'.join(f'{k}: {v}'.replace('_', ' ') for k, v in self.dictionary.items())
 
-def get_dataset():
+def get_target_shadow_dataset_split():
     if CONFIG.dataset == "cora":
-        dataset = data.Cora(root=CONFIG.datadir, split=CONFIG.split)
+        dataset = torch_geometric.datasets.Planetoid(root=CONFIG.datadir, name="Cora")
     elif CONFIG.dataset == "citeseer":
-        dataset = torch_geometric.datasets.Planetoid(root=CONFIG.datadir, name="CiteSeer", split="random", num_train_per_class=100)
+        dataset = torch_geometric.datasets.Planetoid(root=CONFIG.datadir, name="CiteSeer")
     elif CONFIG.dataset == "pubmed":
-        dataset = torch_geometric.datasets.Planetoid(root=CONFIG.datadir, name="PubMed", split="random", num_train_per_class=1500)
+        dataset = torch_geometric.datasets.Planetoid(root=CONFIG.datadir, name="PubMed")
     elif CONFIG.dataset == "flickr":
         dataset = torch_geometric.datasets.Flickr(root=CONFIG.datadir)
         dataset.name = 'Flickr'
     else:
         raise ValueError("Unsupported dataset!")
-    return dataset
+    target_dataset, shadow_dataset = datasetup.target_shadow_split(dataset, split=CONFIG.split, target_frac=0.5, shadow_frac=0.5)
+    return target_dataset, shadow_dataset
 
 def get_model(dataset):
     try:
@@ -91,11 +92,7 @@ def train_attack(model, train_dataset, valid_dataset):
 
 def run_experiment(seed):
     torch.manual_seed(seed)
-    if CONFIG.dataset == 'cora':
-        target_dataset, shadow_dataset = get_dataset().get_split()
-    else:
-        target_dataset = get_dataset()
-        shadow_dataset = get_dataset()
+    target_dataset, shadow_dataset = get_target_shadow_dataset_split()
     target_model = get_model(target_dataset)
     shadow_model = get_model(shadow_dataset)
     train_graph_model(target_dataset, target_model, 'Target')
@@ -107,7 +104,7 @@ def run_experiment(seed):
         'test_score': infer.evaluate_graph_model(target_model, target_dataset, target_dataset.test_mask, criterion)
     }
 
-    train_dataset, valid_dataset = data.create_attack_dataset(shadow_dataset, shadow_model)
+    train_dataset, valid_dataset = datasetup.create_attack_dataset(shadow_dataset, shadow_model)
     attack_model = models.MLP(in_dim=shadow_dataset.num_classes, hidden_dims=CONFIG.hidden_dim_attack)
     train_attack(attack_model, train_dataset, valid_dataset)
 
@@ -182,4 +179,5 @@ if __name__ == '__main__':
     config = vars(args)
     print('Running MIA experiment.')
     print(Objectify(config))
+    print()
     main(config)

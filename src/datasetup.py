@@ -1,3 +1,5 @@
+from infer import query_attack_features
+
 import torch
 import torch_geometric.datasets as datasets
 from torch_geometric.data import Data
@@ -20,31 +22,18 @@ class AttackDataset(torch.utils.data.Dataset):
         label = self.labels[idx]
         return feature, label
 
-def create_attack_dataset(shadow_dataset, shadow_model):
-    features = shadow_model(shadow_dataset.x, shadow_dataset.edge_index).cpu()
+def create_attack_dataset(shadow_dataset, shadow_model, k_hop_queries=False, num_hops=0):
+    if k_hop_queries:
+        features = query_attack_features(shadow_model, shadow_dataset, range(shadow_dataset.x.shape[0]), num_hops=num_hops).cpu()
+    else:
+        features = shadow_model(shadow_dataset.x, shadow_dataset.edge_index).cpu()
     labels = shadow_dataset.train_mask.long().cpu()
-    train_X, test_X, train_y, test_y = train_test_split(features, labels, test_size=50, stratify=labels) # test_size=0.2
+    train_X, test_X, train_y, test_y = train_test_split(features, labels, test_size=0.2, stratify=labels)
     train_dataset = AttackDataset(train_X, train_y)
     test_dataset = AttackDataset(test_X, test_y)
     return train_dataset, test_dataset
 
 def extract_subgraph(dataset, node_index, train_frac=0.2, val_frac=0.2):
-    '''
-    Args:
-        dataset: dataset of the full graph.
-        node_index: index of a subset of the full graph.
-        train_frac: fraction node_index to be included in train_mask
-        val_frac: fraction of node_index to be included in val_mask
-    
-    test_mask include the remaining of node_index.
-    
-    Return:
-        Data object where only edges between node_index nodes remains in edge_index,
-        and train_mask, val_mask and test_mask only include nodes in node_index.
-        
-    Note that there is no guarantee that the train/val/test split have any balanced
-    representation of class labels or similarly connected as the full graph.
-    '''
     edge_index, _ = subgraph(node_index, dataset.edge_index, relabel_nodes=True)
     num_nodes = len(node_index)
     num_train_nodes = int(train_frac * num_nodes)
@@ -92,31 +81,23 @@ def sample_subgraph(dataset, num_nodes, train_frac=0.2, val_frac=0.2):
         name=dataset.name,
     )
 
-class Cora:
-
-    def __init__(self, root, split="sampled"):
-        if split == "sampled":
-            dataset = datasets.Planetoid(root=root, name='Cora')
-            subset_size = dataset[0].num_nodes // 2
-            target_set = sample_subgraph(dataset, subset_size)
-            shadow_set = sample_subgraph(dataset, subset_size)
-        elif split == "disjoint":
-            dataset = datasets.Planetoid(root=root, name='Cora')
-            num_nodes = dataset[0].num_nodes
-            num_target_nodes = num_nodes // 2
-            node_index = torch.randperm(num_nodes)
-            target_index = node_index[:num_target_nodes]
-            shadow_index = node_index[num_target_nodes:]
-            target_set = extract_subgraph(dataset, target_index)
-            shadow_set = extract_subgraph(dataset, shadow_index)
-        elif split == "TSTF":
-            # Deviating from the paper by Olatunji et al. by allowing overlap of target and shadow set.
-            target_set = datasets.Planetoid(root=root, name='Cora', split='random', num_train_per_class=90)
-            shadow_set = datasets.Planetoid(root=root, name='Cora', split='random', num_train_per_class=90)
-        else:
-            raise AttributeError("")
-        self.target_set = target_set
-        self.shadow_set = shadow_set
-
-    def get_split(self):
-        return self.target_set, self.shadow_set
+def target_shadow_split(dataset, split="sampled", target_frac=0.5, shadow_frac=0.5):
+    num_nodes = dataset.x.shape[0]
+    if split == "sampled":
+        assert 0.0 < target_frac <= 1.0 and 0.0 <= shadow_frac <= 1.0
+        target_size = int(num_nodes * target_frac)
+        shadow_size = int(num_nodes * shadow_frac)
+        target_set = sample_subgraph(dataset, target_size)
+        shadow_set = sample_subgraph(dataset, shadow_size)
+    elif split == "disjoint":
+        assert 0.0 < target_frac + shadow_frac <= 1.0
+        target_size = int(num_nodes * target_frac)
+        shadow_size = int(num_nodes * shadow_frac)
+        node_index = torch.randperm(num_nodes)
+        target_index = node_index[:target_size]
+        shadow_index = node_index[target_size: target_size + shadow_size]
+        target_set = extract_subgraph(dataset, target_index)
+        shadow_set = extract_subgraph(dataset, shadow_index)
+    elif split == "TSTF":
+        target_set, shadow_set = target_shadow_split(dataset, split="sampled", target_frac=1.0, shadow_frac=1.0)
+    return target_set, shadow_set
