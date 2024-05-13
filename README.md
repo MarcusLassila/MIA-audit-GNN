@@ -7,7 +7,7 @@ Specify attack settings in config.yaml and run "src/run_experiments.py". CSV fil
 
 Alternatively, run "src/run_mia.py" which only run one MIA simulation experiment and can be customized with the following flags:
 
-* --dataset: cora, corafull, citeseer, pubmed, flickr or lastfm.
+* --dataset: cora, corafull, citeseer, pubmed or flickr.
 * --split: How to split the dataset into target/shadow datasets.
     * "sampled": randomly sample subgraphs consisting of 50% of the nodes for target and shadow model. Overlap allowed.
     * "disjoint": randomly split the graph into two disjoint halves, one for the target and the other for the shadow model.
