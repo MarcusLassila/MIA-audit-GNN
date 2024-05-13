@@ -1,6 +1,7 @@
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+import re
 from pathlib import Path
 
 def plot_training_results(res, name, savedir):
@@ -30,13 +31,14 @@ def plot_training_results(res, name, savedir):
     plt.savefig(f"{savedir}/training_results_{name}.png")
     plt.close()
 
-def plot_roc_loglog(fpr, tpr, savepath=None):
+def plot_roc_loglog(fpr, tpr, name=None, savepath=None):
     plt.figure(figsize=(8, 8))
     plt.loglog(fpr, tpr)
     plt.xlim(1e-4, 1)
     plt.grid(True)
     plt.xlabel('FPR')
     plt.ylabel('TPR')
+    plt.title(name)
     if savepath:
         savedir = '/'.join(savepath.split('/')[:-1])
         Path(savedir).mkdir(parents=True, exist_ok=True)
@@ -47,4 +49,7 @@ def plot_roc_loglog(fpr, tpr, savepath=None):
 
 def plot_roc_csv(filepath, savepath=None):
     df = pd.read_csv(filepath, sep=',')
-    plot_roc_loglog(df['fpr'], df['tpr'], savepath=savepath)
+    for fpr in filter(lambda x: re.match(r".*fpr$", x), df.keys()):
+        name = fpr[:-4]
+        tpr = name + "_tpr"
+        plot_roc_loglog(df[fpr], df[tpr], name=name, savepath=savepath)

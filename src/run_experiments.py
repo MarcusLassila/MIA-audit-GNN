@@ -9,7 +9,9 @@ def main():
         config = yaml.safe_load(file)
     Path('./results').mkdir(parents=True, exist_ok=True)
     stat_frames = []
+    roc_frames = []
     static_params = {
+        'batch_size': 32,
         'datadir': './data',
         'savedir': './results',
         'plot_roc': True,
@@ -18,16 +20,18 @@ def main():
     }
     for _, params in config.items():
         print()
-        print(f'Running MIA experiment.')
+        print(f'Running MIA.')
         for k, v in params.items():
             print(f'{k}: {v}')
         print()
         params.update(**static_params)
         stat_df, roc_df = run_mia.main(params)
         stat_frames.append(stat_df)
-        roc_df.to_csv(f'./results/roc_{params['name']}.csv', index=False)
-    pd.concat(stat_frames).to_csv('./results/statistics.csv', sep=',')
+        roc_frames.append(roc_df)
+    pd.concat(stat_frames).to_csv(f'{static_params["savedir"]}/statistics.csv', sep=',')
+    pd.concat(roc_frames, axis=1).to_csv(f'{static_params["savedir"]}/rocs.csv', sep=',', index=False)
     print('Done.')
 
 if __name__ == "__main__":
     main()
+    utils.plot_roc_csv("./results/rocs.csv")

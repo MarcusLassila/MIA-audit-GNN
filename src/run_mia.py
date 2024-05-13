@@ -160,7 +160,7 @@ def main(config):
             'recall': recalls,
         }
     stat_df = pd.DataFrame(stats, index=[CONFIG.name])
-    roc_df = pd.DataFrame({'fpr': fpr, 'tpr': tpr})
+    roc_df = pd.DataFrame({f'{CONFIG.name}_fpr': fpr, f'{CONFIG.name}_tpr': tpr})
     if CONFIG.plot_roc:
         savepath = f'{CONFIG.savedir}/{CONFIG.name}_roc_loglog.png'
         utils.plot_roc_loglog(fpr, tpr, savepath=savepath) # Plot the ROC curve for sample with highest AUROC.
@@ -178,7 +178,7 @@ if __name__ == '__main__':
     parser.add_argument("--dropout", default=0.0, type=float)
     parser.add_argument("--early-stopping", action=argparse.BooleanOptionalAction)
     parser.add_argument("--hidden-dim-target", default=256, type=int)
-    parser.add_argument("--hidden-dim-attack", default=[100, 50], type=lambda x: [*map(int, x.split(','))])
+    parser.add_argument("--hidden-dim-attack", default=[128, 64], type=lambda x: [*map(int, x.split(','))])
     parser.add_argument("--query-hops", default=0, type=int)
     parser.add_argument("--experiments", default=1, type=int)
     parser.add_argument("--name", default="unnamed", type=str)
