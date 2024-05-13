@@ -34,4 +34,4 @@ def main():
 
 if __name__ == "__main__":
     main()
-    utils.plot_roc_csv("./results/rocs.csv")
+    # utils.plot_roc_csv("./results/rocs.csv")
