@@ -10,7 +10,8 @@ def query_attack_features(model, dataset, query_nodes, num_hops=0):
             node_idx=v,
             num_hops=num_hops,
             edge_index=dataset.edge_index,
-            relabel_nodes=True
+            relabel_nodes=True,
+            num_nodes=dataset.x.shape[0],
         )
         pred = model(dataset.x[node_index], edge_index)[v_idx]
         features.append(pred)

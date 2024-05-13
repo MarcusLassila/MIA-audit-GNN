@@ -1,18 +1,18 @@
 ---
-Olatunji-cora-GCN:
+cora-GCN:
   dataset: "cora"
   split: "sampled"
   model: "GCN"
   batch_size: 32
-  epochs_target: 50
+  epochs_target: 100
   epochs_attack: 100
   hidden_dim_target: 256
-  hidden_dim_attack: [100, 50]
+  hidden_dim_attack: [128, 64]
   lr: 0.001
-  dropout: 0.0
+  dropout: 0.2
   query_hops: 1
-  name: "Olatunji-cora-GCN"
-Olatunji-citeseer-GCN:
+  name: "cora-GCN"
+citeseer-GCN:
   dataset: "citeseer"
   split: "sampled"
   model: "GCN"
@@ -20,34 +20,47 @@ Olatunji-citeseer-GCN:
   epochs_target: 30
   epochs_attack: 100
   hidden_dim_target: 256
-  hidden_dim_attack: [100, 50]
+  hidden_dim_attack: [128, 64]
   lr: 0.001
-  dropout: 0.0
+  dropout: 0.2
   query_hops: 1
-  name: "Olatunji-citeseer-GCN"
-Olatunji-cora-SAGE:
-  dataset: "cora"
+  name: "citeseer-GCN"
+pubmed-GCN:
+  dataset: "pubmed"
   split: "sampled"
-  model: "SAGE"
+  model: "GCN"
+  batch_size: 32
+  epochs_target: 100
+  epochs_attack: 100
+  hidden_dim_target: 256
+  hidden_dim_attack: [128, 64]
+  lr: 0.001
+  dropout: 0.2
+  query_hops: 1
+  name: "pubmed-GCN"
+corafull-GCN:
+  dataset: "corafull"
+  split: "sampled"
+  model: "GCN"
   batch_size: 32
   epochs_target: 30
   epochs_attack: 100
   hidden_dim_target: 256
-  hidden_dim_attack: [100, 50]
+  hidden_dim_attack: [128, 64]
   lr: 0.001
-  dropout: 0.0
+  dropout: 0.2
   query_hops: 1
-  name: "Olatunji-cora-SAGE"
-He-cora-SAGE:
-  dataset: "cora"
-  split: "disjoint"
-  model: "SAGE"
+  name: "corafull-GCN"
+flickr-GCN:
+  dataset: "flickr"
+  split: "sampled"
+  model: "GCN"
   batch_size: 32
-  epochs_target: 200
-  epochs_attack: 500
-  hidden_dim_target: 32
-  hidden_dim_attack: [128]
-  lr: 0.003
-  dropout: 0.5
-  query_hops: 2
-  name: "He-cora-SAGE"
+  epochs_target: 30
+  epochs_attack: 100
+  hidden_dim_target: 256
+  hidden_dim_attack: [128, 64]
+  lr: 0.001
+  dropout: 0.2
+  query_hops: 1
+  name: "flickr-GCN"

@@ -66,7 +66,7 @@ def train_graph_model(dataset, model, name, model_savedir=None):
     optimizer = torch.optim.Adam(model.parameters(), lr=CONFIG.lr)
     criterion = Accuracy(task='multiclass', num_classes=dataset.num_classes).to(CONFIG.device)
     loss_fn = F.nll_loss
-    res = trainer.train_gnn(model, dataset, loss_fn, optimizer, criterion, CONFIG.epochs_target, CONFIG.device)
+    res = trainer.train_gnn(model, dataset, loss_fn, optimizer, criterion, CONFIG.epochs_target, CONFIG.device, early_stopping=CONFIG.early_stopping)
     utils.plot_training_results(res, name, CONFIG.savedir)
     if model_savedir is not None:
         Path(model_savedir).mkdir(parents=True, exist_ok=True)
@@ -89,7 +89,8 @@ def train_attack(model, train_dataset, valid_dataset):
         optimizer=optimizer,
         criterion=criterion,
         epochs=CONFIG.epochs_attack,
-        device=CONFIG.device
+        device=CONFIG.device,
+        early_stopping=CONFIG.early_stopping,
     )
     utils.plot_training_results(res, name='Attack', savedir=CONFIG.savedir)
 
@@ -171,10 +172,11 @@ if __name__ == '__main__':
     parser.add_argument("--split", default="sampled", type=str)
     parser.add_argument("--model", default="GCN", type=str)
     parser.add_argument("--batch-size", default=32, type=int)
-    parser.add_argument("--epochs-target", default=50, type=int)
+    parser.add_argument("--epochs-target", default=100, type=int)
     parser.add_argument("--epochs-attack", default=100, type=int)
     parser.add_argument("--lr", default=1e-3, type=float)
     parser.add_argument("--dropout", default=0.0, type=float)
+    parser.add_argument("--early-stopping", action=argparse.BooleanOptionalAction)
     parser.add_argument("--hidden-dim-target", default=256, type=int)
     parser.add_argument("--hidden-dim-attack", default=[100, 50], type=lambda x: [*map(int, x.split(','))])
     parser.add_argument("--query-hops", default=0, type=int)
@@ -182,9 +184,8 @@ if __name__ == '__main__':
     parser.add_argument("--name", default="unnamed", type=str)
     parser.add_argument("--datadir", default="./data", type=str)
     parser.add_argument("--savedir", default="./results", type=str)
-    parser.add_argument("--plot-roc", default=True, type=bool)
+    parser.add_argument("--plot-roc", action=argparse.BooleanOptionalAction)
     args = parser.parse_args()
-    open(args.outputfile, "w").close() # Clear output file.
     config = vars(args)
     print('Running MIA experiment.')
     print(Objectify(config))
@@ -192,4 +193,4 @@ if __name__ == '__main__':
     stat_df, roc_df = main(config)
     print('Attack statistics:')
     print(stat_df)
-    roc_df.to_csv(f'roc_{args.name}.csv', index=False)
+    roc_df.to_csv(f'{args.savedir}/roc_{args.name}.csv', index=False)
