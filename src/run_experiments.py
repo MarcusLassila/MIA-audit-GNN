@@ -14,17 +14,17 @@ def main():
         'batch_size': 32,
         'datadir': './data',
         'savedir': './results',
-        'plot_roc': True,
+        'plot_roc': False,
         'early_stopping': True,
         'experiments': 10,
     }
     for _, params in config.items():
+        params.update(**static_params)
         print()
         print(f'Running MIA.')
         for k, v in params.items():
             print(f'{k}: {v}')
         print()
-        params.update(**static_params)
         stat_df, roc_df = run_mia.main(params)
         stat_frames.append(stat_df)
         roc_frames.append(roc_df)

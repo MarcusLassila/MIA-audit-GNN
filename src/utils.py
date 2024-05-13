@@ -1,7 +1,6 @@
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-import re
 from pathlib import Path
 
 def plot_training_results(res, name, savedir):
@@ -49,7 +48,7 @@ def plot_roc_loglog(fpr, tpr, name=None, savepath=None):
 
 def plot_roc_csv(filepath, savepath=None):
     df = pd.read_csv(filepath, sep=',')
-    for fpr in filter(lambda x: re.match(r".*fpr$", x), df.keys()):
+    for fpr in filter(lambda s: s.endswith('fpr'), df.keys()):
         name = fpr[:-4]
         tpr = name + "_tpr"
         plot_roc_loglog(df[fpr], df[tpr], name=name, savepath=savepath)
