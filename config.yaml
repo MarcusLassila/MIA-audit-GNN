@@ -11,7 +11,6 @@ cora-GCN:
   dropout: 0.3
   query_hops: 2
   name: "cora-GCN"
-
 citeseer-GCN:
   dataset: "citeseer"
   split: "sampled"
@@ -52,8 +51,8 @@ flickr-GCN:
   dataset: "flickr"
   split: "sampled"
   model: "GCN"
-  epochs_target: 200
-  epochs_attack: 200
+  epochs_target: 500
+  epochs_attack: 500
   hidden_dim_target: 256
   hidden_dim_attack: [128, 64]
   lr: 0.001
@@ -113,8 +112,8 @@ flickr-SGC:
   dataset: "flickr"
   split: "sampled"
   model: "SGC"
-  epochs_target: 200
-  epochs_attack: 200
+  epochs_target: 500
+  epochs_attack: 500
   hidden_dim_target: 256
   hidden_dim_attack: [128, 64]
   lr: 0.001
@@ -174,8 +173,8 @@ flickr-GraphSAGE:
   dataset: "flickr"
   split: "sampled"
   model: "GraphSAGE"
-  epochs_target: 200
-  epochs_attack: 200
+  epochs_target: 500
+  epochs_attack: 500
   hidden_dim_target: 256
   hidden_dim_attack: [128, 64]
   lr: 0.001
@@ -235,8 +234,8 @@ flickr-GAT:
   dataset: "flickr"
   split: "sampled"
   model: "GAT"
-  epochs_target: 200
-  epochs_attack: 200
+  epochs_target: 500
+  epochs_attack: 500
   hidden_dim_target: 256
   hidden_dim_attack: [128, 64]
   lr: 0.001
@@ -296,8 +295,8 @@ flickr-GIN:
   dataset: "flickr"
   split: "sampled"
   model: "GIN"
-  epochs_target: 200
-  epochs_attack: 200
+  epochs_target: 500
+  epochs_attack: 500
   hidden_dim_target: 256
   hidden_dim_attack: [128, 64]
   lr: 0.001
