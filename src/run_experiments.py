@@ -16,7 +16,7 @@ def main():
         'savedir': './results',
         'plot_roc': True,
         'early_stopping': True,
-        'experiments': 3,
+        'experiments': 10,
     }
     for _, params in config.items():
         print()
