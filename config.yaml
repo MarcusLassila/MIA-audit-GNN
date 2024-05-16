@@ -27,8 +27,8 @@ pubmed-GCN:
   dataset: "pubmed"
   split: "sampled"
   model: "GCN"
-  epochs_target: 100
-  epochs_attack: 100
+  epochs_target: 200
+  epochs_attack: 200
   hidden_dim_target: 256
   hidden_dim_attack: [128, 64]
   lr: 0.001
@@ -88,8 +88,8 @@ pubmed-SGC:
   dataset: "pubmed"
   split: "sampled"
   model: "SGC"
-  epochs_target: 100
-  epochs_attack: 100
+  epochs_target: 200
+  epochs_attack: 200
   hidden_dim_target: 256
   hidden_dim_attack: [128, 64]
   lr: 0.001
@@ -149,8 +149,8 @@ pubmed-GraphSAGE:
   dataset: "pubmed"
   split: "sampled"
   model: "GraphSAGE"
-  epochs_target: 100
-  epochs_attack: 100
+  epochs_target: 200
+  epochs_attack: 200
   hidden_dim_target: 256
   hidden_dim_attack: [128, 64]
   lr: 0.001
@@ -210,8 +210,8 @@ pubmed-GAT:
   dataset: "pubmed"
   split: "sampled"
   model: "GAT"
-  epochs_target: 100
-  epochs_attack: 100
+  epochs_target: 200
+  epochs_attack: 200
   hidden_dim_target: 256
   hidden_dim_attack: [128, 64]
   lr: 0.001
@@ -271,8 +271,8 @@ pubmed-GIN:
   dataset: "pubmed"
   split: "sampled"
   model: "GIN"
-  epochs_target: 100
-  epochs_attack: 100
+  epochs_target: 200
+  epochs_attack: 200
   hidden_dim_target: 256
   hidden_dim_attack: [128, 64]
   lr: 0.001

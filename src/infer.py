@@ -1,4 +1,5 @@
 import torch
+import torch.nn.functional as F
 from torch_geometric.utils import k_hop_subgraph
 from torchmetrics import AUROC, F1Score, Precision, Recall, ROC
 
@@ -24,7 +25,7 @@ def evaluate_graph_model(model, dataset, mask, criterion):
         score = criterion(out[mask].argmax(dim=1), dataset.y[mask])
     return score.item()
 
-def evaluate_attack_model(attack_model, target_model, dataset, num_hops=0):
+def evaluate_shadow_attack(attack_model, target_model, dataset, num_hops=0):
     attack_model.eval()
     target_model.eval()
     device = torch.device(next(attack_model.parameters()).device)
@@ -42,6 +43,32 @@ def evaluate_attack_model(attack_model, target_model, dataset, num_hops=0):
         precision = precision_fn(logits, truth).item()
         recall = recall_fn(logits, truth).item()
         fpr, tpr, _ = roc_fn(logits, truth)
+    return {
+        'auroc': auroc,
+        'f1_score': f1,
+        'precision': precision,
+        'recall': recall,
+        'roc': (fpr, tpr),
+    }
+
+def evaluate_confidence_attack(target_model, dataset, threshold, num_hops=0):
+    target_model.eval()
+    device = torch.device(next(target_model.parameters()).device)
+    auroc_fn = AUROC(task='binary').to(device)
+    f1_fn = F1Score(task='binary').to(device)
+    precision_fn = Precision(task='binary').to(device)
+    recall_fn = Recall(task='binary').to(device)
+    roc_fn = ROC(task='binary').to(device)
+    with torch.inference_mode():
+        features = query_attack_features(target_model, dataset, range(dataset.x.shape[0]), num_hops=num_hops)
+        confidences = F.softmax(features, dim=1).max(dim=1).values
+        preds = torch.where(confidences > threshold, 1, 0)
+        truth = dataset.train_mask.long()
+        auroc = auroc_fn(confidences, truth).item()
+        f1 = f1_fn(preds, truth).item()
+        precision = precision_fn(preds, truth).item()
+        recall = recall_fn(preds, truth).item()
+        fpr, tpr, _ = roc_fn(confidences, truth)
     return {
         'auroc': auroc,
         'f1_score': f1,

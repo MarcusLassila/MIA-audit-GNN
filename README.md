@@ -1,4 +1,4 @@
-Replicate the node-level membership inference attacks of [Membership Inference Attack on Graph Neural Networks](https://arxiv.org/abs/2101.06570) and [Node-Level Membership Inference Attacks Against Graph Neural Networks
+Replicate the black-box node-level membership inference attacks of [Membership Inference Attack on Graph Neural Networks](https://arxiv.org/abs/2101.06570), [Quantifying Privacy Leakage in Graph Embedding](https://arxiv.org/abs/2010.00906) and [Node-Level Membership Inference Attacks Against Graph Neural Networks
 ](https://arxiv.org/abs/2102.05429), with the purpose of re-evaluating the results, particurlarly at low FPR.
 
 ### Instructions
@@ -7,6 +7,9 @@ Specify attack settings in config.yaml and run "src/run_experiments.py". CSV fil
 
 Alternatively, run "src/run_mia.py" which only run one MIA simulation experiment and can be customized with the following flags:
 
+* --attack: Type of attack to use.
+    * "shadow": The black-box shadow model attack used in "Membership Inference Attack on Graph Neural Networks", "Quantifying Privacy Leakage in Graph Embedding" and "Node-Level Membership Inference Attacks Against Graph Neural Networks".
+    * "confidence": The confidence attack in "Quantifying Privacy Leakage in Graph Embedding", which thresholds the confidence values from the target model for a membership prediction.
 * --dataset: cora, corafull, citeseer, pubmed or flickr.
 * --split: How to split the dataset into target/shadow datasets.
     * "sampled": randomly sample subgraphs consisting of 50% of the nodes for target and shadow model. Overlap allowed.

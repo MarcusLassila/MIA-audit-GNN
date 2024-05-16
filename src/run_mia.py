@@ -94,7 +94,7 @@ def train_attack(model, train_dataset, valid_dataset):
     )
     utils.plot_training_results(res, name='Attack', savedir=CONFIG.savedir)
 
-def run_experiment(seed):
+def run_shadow_attack(seed):
     torch.manual_seed(seed)
     target_dataset, shadow_dataset = get_target_shadow_dataset_split()
     target_model = get_model(target_dataset)
@@ -112,7 +112,22 @@ def run_experiment(seed):
     attack_model = models.MLP(in_dim=shadow_dataset.num_classes, hidden_dims=CONFIG.hidden_dim_attack)
     train_attack(attack_model, train_dataset, valid_dataset)
 
-    eval_metrics = infer.evaluate_attack_model(attack_model, target_model, target_dataset, num_hops=CONFIG.query_hops)
+    eval_metrics = infer.evaluate_shadow_attack(attack_model, target_model, target_dataset, num_hops=CONFIG.query_hops)
+    return dict(target_scores, **eval_metrics)
+
+def run_confidence_attack(seed):
+    torch.manual_seed(seed)
+    threshold = CONFIG.confidence_threshold
+    target_dataset, _ = get_target_shadow_dataset_split()
+    target_model = get_model(target_dataset)
+    train_graph_model(target_dataset, target_model, 'Target')
+    
+    criterion = Accuracy(task='multiclass', num_classes=target_dataset.num_classes).to(CONFIG.device)
+    target_scores = {
+        'train_score': infer.evaluate_graph_model(target_model, target_dataset, target_dataset.train_mask, criterion),
+        'test_score': infer.evaluate_graph_model(target_model, target_dataset, target_dataset.test_mask, criterion)
+    }
+    eval_metrics = infer.evaluate_confidence_attack(target_model, target_dataset, threshold, num_hops=CONFIG.query_hops)
     return dict(target_scores, **eval_metrics)
 
 def main(config):
@@ -125,7 +140,12 @@ def main(config):
     best_auroc = 0
     for i in range(CONFIG.experiments):
         print(f'Running experiment {i + 1}/{CONFIG.experiments}.')
-        metrics = run_experiment(i)
+        try:
+            metrics = globals()[f"run_{CONFIG.attack}_attack"](i)
+        except KeyError:
+            print("Unsupported attack type. Aborting.")
+            import sys
+            sys.exit(0)
         if best_auroc < metrics['auroc']:
             best_auroc = metrics['auroc']
             fpr, tpr = metrics['roc']
@@ -168,7 +188,8 @@ def main(config):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument("--dataset", default='cora', type=str)
+    parser.add_argument("--attack", default="shadow", type=str)
+    parser.add_argument("--dataset", default="cora", type=str)
     parser.add_argument("--split", default="sampled", type=str)
     parser.add_argument("--model", default="GCN", type=str)
     parser.add_argument("--batch-size", default=32, type=int)
@@ -181,6 +202,7 @@ if __name__ == '__main__':
     parser.add_argument("--hidden-dim-attack", default=[128, 64], type=lambda x: [*map(int, x.split(','))])
     parser.add_argument("--query-hops", default=0, type=int)
     parser.add_argument("--experiments", default=1, type=int)
+    parser.add_argument("--confidence-threshold", default=0.5, type=float)
     parser.add_argument("--name", default="unnamed", type=str)
     parser.add_argument("--datadir", default="./data", type=str)
     parser.add_argument("--savedir", default="./results", type=str)

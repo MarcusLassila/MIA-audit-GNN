@@ -11,6 +11,7 @@ def main():
     stat_frames = []
     roc_frames = []
     static_params = {
+        'attack': 'shadow',
         'batch_size': 32,
         'datadir': './data',
         'savedir': './results',
