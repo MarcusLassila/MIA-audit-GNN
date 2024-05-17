@@ -1,3 +1,4 @@
+import attacks
 import datasetup
 import evaluation
 import models
@@ -30,7 +31,7 @@ class Objectify:
     def __str__(self):
         return '\n'.join(f'{k}: {v}'.replace('_', ' ') for k, v in self.dictionary.items())
 
-def get_target_shadow_dataset_split():
+def get_dataset():
     root = CONFIG.datadir
     if CONFIG.dataset == "cora":
         dataset = torch_geometric.datasets.Planetoid(root=root, name="Cora")
@@ -46,98 +47,19 @@ def get_target_shadow_dataset_split():
         dataset.name = "Flickr"
     else:
         raise ValueError("Unsupported dataset!")
-    target_dataset, shadow_dataset = datasetup.target_shadow_split(dataset, split=CONFIG.split, target_frac=0.5, shadow_frac=0.5)
-    return target_dataset, shadow_dataset
+    return dataset
 
-def get_model(dataset):
+def get_model(in_dim, out_dim):
     try:
         model = getattr(models, CONFIG.model)(
-            dataset.num_features,
-            CONFIG.hidden_dim_target,
-            dataset.num_classes,
+            in_dim=in_dim,
+            hidden_dim=CONFIG.hidden_dim_target,
+            out_dim=out_dim,
             dropout=CONFIG.dropout,
         )
     except AttributeError:
         raise AttributeError(f'Unsupported model {CONFIG.model}. Supported models are GCN, SGC, GraphSAGE, GAT and GIN.')
     return model
-
-def train_graph_model(dataset, model, name, model_savedir=None):
-    ''' Train target or shadow model. '''
-    optimizer = torch.optim.Adam(model.parameters(), lr=CONFIG.lr)
-    criterion = Accuracy(task='multiclass', num_classes=dataset.num_classes).to(CONFIG.device)
-    loss_fn = F.nll_loss
-    res = trainer.train_gnn(
-        model=model,
-        dataset=dataset,
-        loss_fn=loss_fn,
-        optimizer=optimizer,
-        criterion=criterion,
-        epochs=CONFIG.epochs_target,
-        device=CONFIG.device,
-        early_stopping=CONFIG.early_stopping
-    )
-    utils.plot_training_results(res, name, CONFIG.savedir)
-    if model_savedir is not None:
-        Path(model_savedir).mkdir(parents=True, exist_ok=True)
-        torch.save(model.state_dict(), f"{model_savedir}/{name}_{model.__class__.__name__}_{dataset.name}.pth")
-    test_score = evaluation.evaluate_graph_model(model, dataset, dataset.test_mask, criterion)
-    print(f"{name} test score: {test_score:.4f}")
-
-def train_attack(model, train_dataset, valid_dataset):
-    ''' Train attack model. '''
-    train_loader = DataLoader(train_dataset, batch_size=CONFIG.batch_size, shuffle=True)
-    valid_loader = DataLoader(valid_dataset, batch_size=CONFIG.batch_size, shuffle=False)
-    optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
-    criterion = Accuracy(task="multiclass", num_classes=2).to(CONFIG.device)
-    loss_fn = nn.CrossEntropyLoss()
-    res = trainer.train_mlp(
-        model=model,
-        train_loader=train_loader,
-        valid_loader=valid_loader,
-        loss_fn=loss_fn,
-        optimizer=optimizer,
-        criterion=criterion,
-        epochs=CONFIG.epochs_attack,
-        device=CONFIG.device,
-        early_stopping=CONFIG.early_stopping,
-    )
-    utils.plot_training_results(res, name='Attack', savedir=CONFIG.savedir)
-
-def run_shadow_attack(seed):
-    torch.manual_seed(seed)
-    target_dataset, shadow_dataset = get_target_shadow_dataset_split()
-    target_model = get_model(target_dataset)
-    shadow_model = get_model(shadow_dataset)
-    train_graph_model(target_dataset, target_model, 'Target')
-    train_graph_model(shadow_dataset, shadow_model, 'Shadow')
-    
-    criterion = Accuracy(task='multiclass', num_classes=target_dataset.num_classes).to(CONFIG.device)
-    target_scores = {
-        'train_score': evaluation.evaluate_graph_model(target_model, target_dataset, target_dataset.train_mask, criterion),
-        'test_score': evaluation.evaluate_graph_model(target_model, target_dataset, target_dataset.test_mask, criterion)
-    }
-
-    train_dataset, valid_dataset = datasetup.create_attack_dataset(shadow_dataset, shadow_model)
-    attack_model = models.MLP(in_dim=shadow_dataset.num_classes, hidden_dims=CONFIG.hidden_dim_attack)
-    train_attack(attack_model, train_dataset, valid_dataset)
-
-    eval_metrics = evaluation.evaluate_shadow_attack(attack_model, target_model, target_dataset, num_hops=CONFIG.query_hops)
-    return dict(target_scores, **eval_metrics)
-
-def run_confidence_attack(seed):
-    torch.manual_seed(seed)
-    threshold = CONFIG.confidence_threshold
-    target_dataset, _ = get_target_shadow_dataset_split()
-    target_model = get_model(target_dataset)
-    train_graph_model(target_dataset, target_model, 'Target')
-    
-    criterion = Accuracy(task='multiclass', num_classes=target_dataset.num_classes).to(CONFIG.device)
-    target_scores = {
-        'train_score': evaluation.evaluate_graph_model(target_model, target_dataset, target_dataset.train_mask, criterion),
-        'test_score': evaluation.evaluate_graph_model(target_model, target_dataset, target_dataset.test_mask, criterion)
-    }
-    eval_metrics = evaluation.evaluate_confidence_attack(target_model, target_dataset, threshold, num_hops=CONFIG.query_hops)
-    return dict(target_scores, **eval_metrics)
 
 def main(config):
     global CONFIG
@@ -147,14 +69,20 @@ def main(config):
     train_scores, test_scores = [], []
     aurocs, f1s, precisions, recalls = [], [], [], []
     best_auroc = 0
+    dataset = get_dataset()
     for i in range(CONFIG.experiments):
         print(f'Running experiment {i + 1}/{CONFIG.experiments}.')
-        try:
-            metrics = globals()[f"run_{CONFIG.attack}_attack"](i)
-        except KeyError:
-            print("Unsupported attack type. Aborting.")
-            import sys
-            sys.exit(0)
+        
+        if CONFIG.attack == "basic-shadow":
+            target_model = get_model(dataset.num_features, dataset.num_classes)
+            shadow_model = get_model(dataset.num_features, dataset.num_classes)
+            metrics = attacks.BasicShadowAttack(dataset=dataset, target_model=target_model, shadow_model=shadow_model, config=CONFIG).run_attack()
+        elif CONFIG.attack == "confidence":
+            target_model = get_model(dataset.num_features, dataset.num_classes)
+            target_dataset = datasetup.sample_subgraph(dataset, num_nodes=dataset.x.shape[0]//2)
+            print(target_dataset)
+            metrics = attacks.ConfidenceAttack(dataset=target_dataset, target_model=target_model, config=CONFIG).run_attack()
+
         if best_auroc < metrics['auroc']:
             best_auroc = metrics['auroc']
             fpr, tpr = metrics['roc']
@@ -197,7 +125,7 @@ def main(config):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument("--attack", default="shadow", type=str)
+    parser.add_argument("--attack", default="basic-shadow", type=str)
     parser.add_argument("--dataset", default="cora", type=str)
     parser.add_argument("--split", default="sampled", type=str)
     parser.add_argument("--model", default="GCN", type=str)
@@ -211,6 +139,7 @@ if __name__ == '__main__':
     parser.add_argument("--hidden-dim-attack", default=[128, 64], type=lambda x: [*map(int, x.split(','))])
     parser.add_argument("--query-hops", default=0, type=int)
     parser.add_argument("--experiments", default=1, type=int)
+    parser.add_argument("--optimizer", default="Adam", type=str)
     parser.add_argument("--confidence-threshold", default=0.5, type=float)
     parser.add_argument("--name", default="unnamed", type=str)
     parser.add_argument("--datadir", default="./data", type=str)

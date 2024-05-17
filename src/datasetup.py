@@ -6,7 +6,6 @@ from torch_geometric.data import Data
 from torch_geometric.utils import index_to_mask, subgraph
 from sklearn.model_selection import train_test_split
 
-torch.manual_seed(1)
 
 class AttackDataset(torch.utils.data.Dataset):
     
@@ -51,7 +50,7 @@ def extract_subgraph(dataset, node_index, train_frac=0.2, val_frac=0.2):
         train_mask=train_mask,
         val_mask=val_mask,
         test_mask=test_mask,
-        num_classes=dataset.num_classes,
+        num_classes=dataset.num_classes, # The number of classes is the same as for the overall dataset, even if some class would not be represented in the sample.
         num_features=dataset.num_features,
         name=dataset.name,
     )
@@ -76,7 +75,7 @@ def sample_subgraph(dataset, num_nodes, train_frac=0.2, val_frac=0.2):
         train_mask=train_mask,
         val_mask=val_mask,
         test_mask=test_mask,
-        num_classes=dataset.num_classes,
+        num_classes=dataset.num_classes, # The number of classes is the same as for the overall dataset, even if some class would not be represented in the sample.
         num_features=dataset.num_features,
         name=dataset.name,
     )
