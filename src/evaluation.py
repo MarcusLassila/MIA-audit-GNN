@@ -1,7 +1,23 @@
+import numpy as np
 import torch
 import torch.nn.functional as F
 from torch_geometric.utils import k_hop_subgraph
 from torchmetrics import AUROC, F1Score, Precision, Recall, ROC
+
+
+def bc_evaluation(preds, labels, device, threshold=0.5):
+    auroc = AUROC(task='binary').to(device)(preds, labels).item()
+    f1 = F1Score(task='binary', threshold=threshold).to(device)(preds, labels).item()
+    precision = Precision(task='binary', threshold=threshold).to(device)(preds, labels).item()
+    recall = Recall(task='binary', threshold=threshold).to(device)(preds, labels).item()
+    fpr, tpr, _ = ROC(task='binary').to(device)(preds, labels)
+    return {
+        'auroc': auroc,
+        'f1_score': f1,
+        'precision': precision,
+        'recall': recall,
+        'roc': (fpr, tpr),
+    }
 
 def query_attack_features(model, dataset, query_nodes, num_hops=0):
     model.eval()
@@ -29,50 +45,17 @@ def evaluate_shadow_attack(attack_model, target_model, dataset, num_hops=0):
     attack_model.eval()
     target_model.eval()
     device = torch.device(next(attack_model.parameters()).device)
-    auroc_fn = AUROC(task='binary').to(device)
-    f1_fn = F1Score(task='binary').to(device)
-    precision_fn = Precision(task='binary').to(device)
-    recall_fn = Recall(task='binary').to(device)
-    roc_fn = ROC(task='binary').to(device)
     with torch.inference_mode():
         features = query_attack_features(target_model, dataset, range(dataset.x.shape[0]), num_hops=num_hops)
         logits = attack_model(features)[:,1]
-        truth = dataset.train_mask.long()
-        auroc = auroc_fn(logits, truth).item()
-        f1 = f1_fn(logits, truth).item()
-        precision = precision_fn(logits, truth).item()
-        recall = recall_fn(logits, truth).item()
-        fpr, tpr, _ = roc_fn(logits, truth)
-    return {
-        'auroc': auroc,
-        'f1_score': f1,
-        'precision': precision,
-        'recall': recall,
-        'roc': (fpr, tpr),
-    }
+        labels = dataset.train_mask.long()
+        return bc_evaluation(logits, labels, device)
 
 def evaluate_confidence_attack(target_model, dataset, threshold, num_hops=0):
     target_model.eval()
     device = torch.device(next(target_model.parameters()).device)
-    auroc_fn = AUROC(task='binary').to(device)
-    f1_fn = F1Score(task='binary').to(device)
-    precision_fn = Precision(task='binary').to(device)
-    recall_fn = Recall(task='binary').to(device)
-    roc_fn = ROC(task='binary').to(device)
     with torch.inference_mode():
         features = query_attack_features(target_model, dataset, range(dataset.x.shape[0]), num_hops=num_hops)
         confidences = F.softmax(features, dim=1).max(dim=1).values
-        preds = torch.where(confidences > threshold, 1, 0)
-        truth = dataset.train_mask.long()
-        auroc = auroc_fn(confidences, truth).item()
-        f1 = f1_fn(preds, truth).item()
-        precision = precision_fn(preds, truth).item()
-        recall = recall_fn(preds, truth).item()
-        fpr, tpr, _ = roc_fn(confidences, truth)
-    return {
-        'auroc': auroc,
-        'f1_score': f1,
-        'precision': precision,
-        'recall': recall,
-        'roc': (fpr, tpr),
-    }
+        labels = dataset.train_mask.long()
+        return bc_evaluation(confidences, labels, device, threshold=threshold)

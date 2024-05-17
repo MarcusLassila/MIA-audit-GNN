@@ -1,4 +1,4 @@
-from infer import query_attack_features
+from evaluation import query_attack_features
 
 import torch
 import torch_geometric.datasets as datasets

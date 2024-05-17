@@ -1,5 +1,5 @@
 import datasetup
-import infer
+import evaluation
 import models
 import utils
 import trainer
@@ -66,12 +66,21 @@ def train_graph_model(dataset, model, name, model_savedir=None):
     optimizer = torch.optim.Adam(model.parameters(), lr=CONFIG.lr)
     criterion = Accuracy(task='multiclass', num_classes=dataset.num_classes).to(CONFIG.device)
     loss_fn = F.nll_loss
-    res = trainer.train_gnn(model, dataset, loss_fn, optimizer, criterion, CONFIG.epochs_target, CONFIG.device, early_stopping=CONFIG.early_stopping)
+    res = trainer.train_gnn(
+        model=model,
+        dataset=dataset,
+        loss_fn=loss_fn,
+        optimizer=optimizer,
+        criterion=criterion,
+        epochs=CONFIG.epochs_target,
+        device=CONFIG.device,
+        early_stopping=CONFIG.early_stopping
+    )
     utils.plot_training_results(res, name, CONFIG.savedir)
     if model_savedir is not None:
         Path(model_savedir).mkdir(parents=True, exist_ok=True)
         torch.save(model.state_dict(), f"{model_savedir}/{name}_{model.__class__.__name__}_{dataset.name}.pth")
-    test_score = infer.evaluate_graph_model(model, dataset, dataset.test_mask, criterion)
+    test_score = evaluation.evaluate_graph_model(model, dataset, dataset.test_mask, criterion)
     print(f"{name} test score: {test_score:.4f}")
 
 def train_attack(model, train_dataset, valid_dataset):
@@ -104,15 +113,15 @@ def run_shadow_attack(seed):
     
     criterion = Accuracy(task='multiclass', num_classes=target_dataset.num_classes).to(CONFIG.device)
     target_scores = {
-        'train_score': infer.evaluate_graph_model(target_model, target_dataset, target_dataset.train_mask, criterion),
-        'test_score': infer.evaluate_graph_model(target_model, target_dataset, target_dataset.test_mask, criterion)
+        'train_score': evaluation.evaluate_graph_model(target_model, target_dataset, target_dataset.train_mask, criterion),
+        'test_score': evaluation.evaluate_graph_model(target_model, target_dataset, target_dataset.test_mask, criterion)
     }
 
     train_dataset, valid_dataset = datasetup.create_attack_dataset(shadow_dataset, shadow_model)
     attack_model = models.MLP(in_dim=shadow_dataset.num_classes, hidden_dims=CONFIG.hidden_dim_attack)
     train_attack(attack_model, train_dataset, valid_dataset)
 
-    eval_metrics = infer.evaluate_shadow_attack(attack_model, target_model, target_dataset, num_hops=CONFIG.query_hops)
+    eval_metrics = evaluation.evaluate_shadow_attack(attack_model, target_model, target_dataset, num_hops=CONFIG.query_hops)
     return dict(target_scores, **eval_metrics)
 
 def run_confidence_attack(seed):
@@ -124,10 +133,10 @@ def run_confidence_attack(seed):
     
     criterion = Accuracy(task='multiclass', num_classes=target_dataset.num_classes).to(CONFIG.device)
     target_scores = {
-        'train_score': infer.evaluate_graph_model(target_model, target_dataset, target_dataset.train_mask, criterion),
-        'test_score': infer.evaluate_graph_model(target_model, target_dataset, target_dataset.test_mask, criterion)
+        'train_score': evaluation.evaluate_graph_model(target_model, target_dataset, target_dataset.train_mask, criterion),
+        'test_score': evaluation.evaluate_graph_model(target_model, target_dataset, target_dataset.test_mask, criterion)
     }
-    eval_metrics = infer.evaluate_confidence_attack(target_model, target_dataset, threshold, num_hops=CONFIG.query_hops)
+    eval_metrics = evaluation.evaluate_confidence_attack(target_model, target_dataset, threshold, num_hops=CONFIG.query_hops)
     return dict(target_scores, **eval_metrics)
 
 def main(config):
