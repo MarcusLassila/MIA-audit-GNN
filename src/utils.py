@@ -1,7 +1,21 @@
+import models
+
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 from pathlib import Path
+
+def fresh_model(model_type, num_features, hidden_dim, num_classes, dropout=0.0):
+    try:
+        model = getattr(models, model_type)(
+            in_dim=num_features,
+            hidden_dim=hidden_dim,
+            out_dim=num_classes,
+            dropout=dropout,
+        )
+    except AttributeError:
+        raise AttributeError(f'Unsupported model {model_type}. Supported models are GCN, SGC, GraphSAGE, GAT and GIN.')
+    return model
 
 def plot_training_results(res, name, savedir):
     epochs = np.array([*range(len(res['train_loss']))])
