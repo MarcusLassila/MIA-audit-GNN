@@ -4,6 +4,9 @@ import yaml
 import pandas as pd
 from pathlib import Path
 
+def add_name(params):
+    params['name'] = '-'.join([params['attack'], params['dataset'], params['split'], params['model']])
+
 def main():
     with open("config.yaml", "r") as file:
         config = yaml.safe_load(file)
@@ -11,16 +14,17 @@ def main():
     stat_frames = []
     roc_frames = []
     static_params = {
-        'attack': 'shadow',
         'batch_size': 32,
         'datadir': './data',
         'savedir': './results',
         'plot_roc': False,
         'early_stopping': True,
+        'optimizer': 'Adam',
         'experiments': 10,
     }
     for _, params in config.items():
         params.update(**static_params)
+        add_name(params)
         print()
         print(f'Running MIA.')
         for k, v in params.items():

@@ -1,11 +1,26 @@
+import numpy as np
 import torch
 from tqdm.auto import tqdm
 from collections import defaultdict
 from copy import deepcopy
+from dataclasses import dataclass
+from typing import Callable, Union
 
 EARLY_STOPPING_THRESHOLD = 10 # Number of consecutive epochs with worse than the best seen validation set loss before early stopping.
 
-def train_step_gnn(model, dataset, loss_fn, optimizer, criterion):
+ArrayType = Union[np.ndarray, torch.tensor]
+
+@dataclass
+class TrainConfig:
+    criterion: Callable[[ArrayType, ArrayType], float]
+    device: Union[str, torch.device]
+    epochs: int
+    early_stopping: bool
+    loss_fn: Callable[[ArrayType, ArrayType], float]
+    lr: float
+    optimizer: torch.optim.Optimizer
+
+def train_step_gnn(model, dataset, optimizer, loss_fn, criterion):
     model.train()
     optimizer.zero_grad()
     out = model(dataset.x, dataset.edge_index)
@@ -23,37 +38,37 @@ def valid_step_gnn(model, dataset, loss_fn, criterion):
         score = criterion(out[dataset.val_mask].argmax(dim=1), dataset.y[dataset.val_mask])
     return loss.item() / dataset.val_mask.sum(), score.item()
 
-def train_gnn(model, dataset, loss_fn, optimizer, criterion, epochs, device, early_stopping=True):
-    model.to(device)
-    dataset.to(device)
+def train_gnn(model, dataset, config: TrainConfig):
+    model.to(config.device)
+    dataset.to(config.device)
+    optimizer = config.optimizer(model.parameters(), lr=config.lr)
+    loss_fn, criterion = config.loss_fn, config.criterion
     res = defaultdict(list)
     early_stopping_counter = 0
     min_loss = float('inf')
     best_epoch = 0
     best_model = None
-    for epoch in tqdm(range(epochs), desc=f"Training {model.__class__.__name__} on {device}."):
-        train_loss, train_score = train_step_gnn(model, dataset, loss_fn, optimizer, criterion)
+    for epoch in tqdm(range(config.epochs), desc=f"Training {model.__class__.__name__} on {config.device}."):
+        train_loss, train_score = train_step_gnn(model, dataset, optimizer, loss_fn, criterion)
         valid_loss, valid_score = valid_step_gnn(model, dataset, loss_fn, criterion)
         res['train_loss'].append(train_loss)
         res['train_score'].append(train_score)
         res['valid_loss'].append(valid_loss)
         res['valid_score'].append(valid_score)
-        if early_stopping:
-            if valid_loss < min_loss:
-                min_loss = valid_loss
-                best_epoch = epoch + 1
-                best_model = deepcopy(model)
-                early_stopping_counter = 0
-            else:
-                early_stopping_counter += 1
-                if early_stopping_counter == EARLY_STOPPING_THRESHOLD:
-                    print(f'Early stopping on epoch {best_epoch}.')
-                    break
-    if early_stopping:
-        model = best_model
+        if valid_loss < min_loss:
+            min_loss = valid_loss
+            best_epoch = epoch + 1
+            best_model = deepcopy(model)
+            early_stopping_counter = 0
+        elif config.early_stopping:
+            early_stopping_counter += 1
+            if early_stopping_counter == EARLY_STOPPING_THRESHOLD:
+                print(f'Early stopping on epoch {best_epoch}.')
+                break
+    model = best_model
     return res
 
-def train_step(model, data_loader, loss_fn, optimizer, criterion, device):
+def train_step(model, data_loader, optimizer, loss_fn, criterion, device):
     model.train()
     accumulated_loss, score = 0, 0
     for X, y in data_loader:
@@ -82,16 +97,18 @@ def valid_step(model, data_loader, loss_fn, criterion, device):
         score /= len(data_loader)
     return avg_loss, score
 
-def train_mlp(model, train_loader, valid_loader, loss_fn, optimizer, criterion, epochs, device, early_stopping=True):
-    model.to(device)
+def train_mlp(model, train_loader, valid_loader, config: TrainConfig):
+    model.to(config.device)
+    optimizer = config.optimizer(model.parameters(), lr=config.lr)
+    loss_fn, criterion = config.loss_fn, config.criterion
     res = defaultdict(list)
     early_stopping_counter = 0
     min_loss = float('inf')
     best_epoch = 0
     best_model = None
-    for epoch in tqdm(range(epochs), desc=f"Training {model.__class__.__name__} on {device}."):
-        train_loss, train_score = train_step(model, train_loader, loss_fn, optimizer, criterion, device)
-        valid_loss, valid_score = valid_step(model, valid_loader, loss_fn, criterion, device)
+    for epoch in tqdm(range(config.epochs), desc=f"Training {model.__class__.__name__} on {config.device}."):
+        train_loss, train_score = train_step(model, train_loader, optimizer, loss_fn, criterion, config.device)
+        valid_loss, valid_score = valid_step(model, valid_loader, loss_fn, criterion, config.device)
         res['train_loss'].append(train_loss)
         res['train_score'].append(train_score)
         res['valid_loss'].append(valid_loss)
@@ -101,7 +118,7 @@ def train_mlp(model, train_loader, valid_loader, loss_fn, optimizer, criterion, 
             best_epoch = epoch + 1
             best_model = deepcopy(model)
             early_stopping_counter = 0
-        elif early_stopping:
+        elif config.early_stopping:
             early_stopping_counter += 1
             if early_stopping_counter == EARLY_STOPPING_THRESHOLD:
                 print(f'Early stopping on epoch {best_epoch}.')

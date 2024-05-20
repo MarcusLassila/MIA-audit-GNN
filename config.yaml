@@ -1,5 +1,6 @@
 ---
 cora-GCN:
+  attack: "basic-shadow"
   dataset: "cora"
   split: "sampled"
   model: "GCN"
@@ -10,8 +11,8 @@ cora-GCN:
   lr: 0.001
   dropout: 0.3
   query_hops: 2
-  name: "cora-GCN"
 citeseer-GCN:
+  attack: "basic-shadow"
   dataset: "citeseer"
   split: "sampled"
   model: "GCN"
@@ -22,32 +23,32 @@ citeseer-GCN:
   lr: 0.001
   dropout: 0.3
   query_hops: 2
-  name: "citeseer-GCN"
 pubmed-GCN:
+  attack: "basic-shadow"
   dataset: "pubmed"
   split: "sampled"
   model: "GCN"
-  epochs_target: 200
+  epochs_target: 300
   epochs_attack: 200
   hidden_dim_target: 256
   hidden_dim_attack: [128, 64]
   lr: 0.001
   dropout: 0.3
   query_hops: 2
-  name: "pubmed-GCN"
 corafull-GCN:
+  attack: "basic-shadow"
   dataset: "corafull"
   split: "sampled"
   model: "GCN"
-  epochs_target: 200
-  epochs_attack: 200
+  epochs_target: 500
+  epochs_attack: 500
   hidden_dim_target: 256
   hidden_dim_attack: [128, 64]
   lr: 0.001
   dropout: 0.2
   query_hops: 2
-  name: "corafull-GCN"
 flickr-GCN:
+  attack: "basic-shadow"
   dataset: "flickr"
   split: "sampled"
   model: "GCN"
@@ -58,9 +59,9 @@ flickr-GCN:
   lr: 0.001
   dropout: 0.1
   query_hops: 2
-  name: "flickr-GCN"
 
 cora-SGC:
+  attack: "basic-shadow"
   dataset: "cora"
   split: "sampled"
   model: "SGC"
@@ -71,8 +72,8 @@ cora-SGC:
   lr: 0.001
   dropout: 0.3
   query_hops: 2
-  name: "cora-SGC"
 citeseer-SGC:
+  attack: "basic-shadow"
   dataset: "citeseer"
   split: "sampled"
   model: "SGC"
@@ -83,20 +84,20 @@ citeseer-SGC:
   lr: 0.001
   dropout: 0.3
   query_hops: 2
-  name: "citeseer-SGC"
 pubmed-SGC:
+  attack: "basic-shadow"
   dataset: "pubmed"
   split: "sampled"
   model: "SGC"
-  epochs_target: 200
-  epochs_attack: 200
+  epochs_target: 500
+  epochs_attack: 500
   hidden_dim_target: 256
   hidden_dim_attack: [128, 64]
   lr: 0.001
   dropout: 0.3
   query_hops: 2
-  name: "pubmed-SGC"
 corafull-SGC:
+  attack: "basic-shadow"
   dataset: "corafull"
   split: "sampled"
   model: "SGC"
@@ -107,8 +108,8 @@ corafull-SGC:
   lr: 0.001
   dropout: 0.2
   query_hops: 2
-  name: "corafull-SGC"
 flickr-SGC:
+  attack: "basic-shadow"
   dataset: "flickr"
   split: "sampled"
   model: "SGC"
@@ -119,9 +120,9 @@ flickr-SGC:
   lr: 0.001
   dropout: 0.1
   query_hops: 2
-  name: "flickr-SGC"
 
 cora-GraphSAGE:
+  attack: "basic-shadow"
   dataset: "cora"
   split: "sampled"
   model: "GraphSAGE"
@@ -132,8 +133,8 @@ cora-GraphSAGE:
   lr: 0.001
   dropout: 0.3
   query_hops: 2
-  name: "cora-GraphSAGE"
 citeseer-GraphSAGE:
+  attack: "basic-shadow"
   dataset: "citeseer"
   split: "sampled"
   model: "GraphSAGE"
@@ -144,32 +145,32 @@ citeseer-GraphSAGE:
   lr: 0.001
   dropout: 0.3
   query_hops: 2
-  name: "citeseer-GraphSAGE"
 pubmed-GraphSAGE:
+  attack: "basic-shadow"
   dataset: "pubmed"
   split: "sampled"
   model: "GraphSAGE"
-  epochs_target: 200
-  epochs_attack: 200
+  epochs_target: 500
+  epochs_attack: 500
   hidden_dim_target: 256
   hidden_dim_attack: [128, 64]
   lr: 0.001
   dropout: 0.3
   query_hops: 2
-  name: "pubmed-GraphSAGE"
 corafull-GraphSAGE:
+  attack: "basic-shadow"
   dataset: "corafull"
   split: "sampled"
   model: "GraphSAGE"
-  epochs_target: 200
-  epochs_attack: 200
+  epochs_target: 500
+  epochs_attack: 500
   hidden_dim_target: 256
   hidden_dim_attack: [128, 64]
   lr: 0.001
   dropout: 0.2
   query_hops: 2
-  name: "corafull-GraphSAGE"
 flickr-GraphSAGE:
+  attack: "basic-shadow"
   dataset: "flickr"
   split: "sampled"
   model: "GraphSAGE"
@@ -180,9 +181,9 @@ flickr-GraphSAGE:
   lr: 0.001
   dropout: 0.1
   query_hops: 2
-  name: "flickr-GraphSAGE"
 
 cora-GAT:
+  attack: "basic-shadow"
   dataset: "cora"
   split: "sampled"
   model: "GAT"
@@ -193,8 +194,8 @@ cora-GAT:
   lr: 0.001
   dropout: 0.3
   query_hops: 2
-  name: "cora-GAT"
 citeseer-GAT:
+  attack: "basic-shadow"
   dataset: "citeseer"
   split: "sampled"
   model: "GAT"
@@ -205,32 +206,32 @@ citeseer-GAT:
   lr: 0.001
   dropout: 0.3
   query_hops: 2
-  name: "citeseer-GAT"
 pubmed-GAT:
+  attack: "basic-shadow"
   dataset: "pubmed"
   split: "sampled"
   model: "GAT"
-  epochs_target: 200
-  epochs_attack: 200
+  epochs_target: 500
+  epochs_attack: 500
   hidden_dim_target: 256
   hidden_dim_attack: [128, 64]
   lr: 0.001
   dropout: 0.3
   query_hops: 2
-  name: "pubmed-GAT"
 corafull-GAT:
+  attack: "basic-shadow"
   dataset: "corafull"
   split: "sampled"
   model: "GAT"
-  epochs_target: 200
-  epochs_attack: 200
+  epochs_target: 500
+  epochs_attack: 500
   hidden_dim_target: 256
   hidden_dim_attack: [128, 64]
   lr: 0.001
   dropout: 0.2
   query_hops: 2
-  name: "corafull-GAT"
 flickr-GAT:
+  attack: "basic-shadow"
   dataset: "flickr"
   split: "sampled"
   model: "GAT"
@@ -241,9 +242,9 @@ flickr-GAT:
   lr: 0.001
   dropout: 0.1
   query_hops: 2
-  name: "flickr-GAT"
 
 cora-GIN:
+  attack: "basic-shadow"
   dataset: "cora"
   split: "sampled"
   model: "GIN"
@@ -254,8 +255,8 @@ cora-GIN:
   lr: 0.001
   dropout: 0.3
   query_hops: 2
-  name: "cora-GIN"
 citeseer-GIN:
+  attack: "basic-shadow"
   dataset: "citeseer"
   split: "sampled"
   model: "GIN"
@@ -266,32 +267,32 @@ citeseer-GIN:
   lr: 0.001
   dropout: 0.3
   query_hops: 2
-  name: "citeseer-GIN"
 pubmed-GIN:
+  attack: "basic-shadow"
   dataset: "pubmed"
   split: "sampled"
   model: "GIN"
-  epochs_target: 200
-  epochs_attack: 200
+  epochs_target: 500
+  epochs_attack: 500
   hidden_dim_target: 256
   hidden_dim_attack: [128, 64]
   lr: 0.001
   dropout: 0.3
   query_hops: 2
-  name: "pubmed-GIN"
 corafull-GIN:
+  attack: "basic-shadow"
   dataset: "corafull"
   split: "sampled"
   model: "GIN"
-  epochs_target: 200
-  epochs_attack: 200
+  epochs_target: 500
+  epochs_attack: 500
   hidden_dim_target: 256
   hidden_dim_attack: [128, 64]
   lr: 0.001
   dropout: 0.2
   query_hops: 2
-  name: "corafull-GIN"
 flickr-GIN:
+  attack: "basic-shadow"
   dataset: "flickr"
   split: "sampled"
   model: "GIN"
@@ -302,4 +303,3 @@ flickr-GIN:
   lr: 0.001
   dropout: 0.1
   query_hops: 2
-  name: "flickr-GIN"

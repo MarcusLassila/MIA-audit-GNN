@@ -1,9 +1,10 @@
+import utils
+
 import numpy as np
 import torch
 import torch.nn.functional as F
 from torch_geometric.utils import k_hop_subgraph
 from torchmetrics import AUROC, F1Score, Precision, Recall, ROC
-
 
 def bc_evaluation(preds, labels, device, threshold=0.5):
     auroc = AUROC(task='binary').to(device)(preds, labels).item()
@@ -40,6 +41,23 @@ def evaluate_graph_model(model, dataset, mask, criterion):
         out = model(dataset.x, dataset.edge_index)
         score = criterion(out[mask].argmax(dim=1), dataset.y[mask])
     return score.item()
+
+def evaluate_graph_training(model, dataset, criterion, training_results=None, savedir=None):
+    if training_results:
+        utils.plot_training_results(training_results, 'Shadow model', savedir)
+    train_score = evaluate_graph_model(
+        model=model,
+        dataset=dataset,
+        mask=dataset.train_mask,
+        criterion=criterion,
+    )
+    test_score = evaluate_graph_model(
+        model=model,
+        dataset=dataset,
+        mask=dataset.test_mask,
+        criterion=criterion,
+    )
+    print(f"Train accuracy: {train_score:.4f} | Test accuracy: {test_score:.4f}")
 
 def evaluate_shadow_attack(attack_model, target_model, dataset, num_hops=0):
     attack_model.eval()
