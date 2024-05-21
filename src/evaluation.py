@@ -21,6 +21,13 @@ def bc_evaluation(preds, labels, device, threshold=0.5):
     }
 
 def query_attack_features(model, dataset, query_nodes, num_hops=0):
+    '''
+    Queries the model for each node in in query_nodes,
+    using the local subgraph definded by the "num_hops"-hop neigborhood.
+
+    Output: Matrix of size "number of query nodes" times "number of classes",
+            consisting of logits/predictions for each query node.
+    '''
     model.eval()
     features = []
     for v in query_nodes:
@@ -31,9 +38,9 @@ def query_attack_features(model, dataset, query_nodes, num_hops=0):
             relabel_nodes=True,
             num_nodes=dataset.x.shape[0],
         )
-        pred = model(dataset.x[node_index], edge_index)[v_idx]
+        pred = model(dataset.x[node_index], edge_index)[v_idx].squeeze()
         features.append(pred)
-    return torch.cat(features, dim=0)
+    return torch.stack(features)
 
 def evaluate_graph_model(model, dataset, mask, criterion):
     model.eval()
@@ -42,9 +49,9 @@ def evaluate_graph_model(model, dataset, mask, criterion):
         score = criterion(out[mask].argmax(dim=1), dataset.y[mask])
     return score.item()
 
-def evaluate_graph_training(model, dataset, criterion, training_results=None, savedir=None):
+def evaluate_graph_training(model, dataset, criterion, training_results=None, plot_title="", savedir=None):
     if training_results:
-        utils.plot_training_results(training_results, 'Shadow model', savedir)
+        utils.plot_training_results(training_results, plot_title, savedir)
     train_score = evaluate_graph_model(
         model=model,
         dataset=dataset,
