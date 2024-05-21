@@ -75,6 +75,7 @@ class MembershipInferenceExperiment:
             dataset=dataset,
             criterion=train_config.criterion,
             training_results=train_res if plot_training_results else None,
+            plot_title="Target model",
             savedir=config.savedir,
         )
 

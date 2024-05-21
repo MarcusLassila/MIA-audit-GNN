@@ -31,7 +31,7 @@ def train_step_gnn(model, dataset, optimizer, loss_fn, criterion):
     score = criterion(out[dataset.train_mask].argmax(dim=1), dataset.y[dataset.train_mask])
     loss.backward()
     optimizer.step()
-    return loss.item() / dataset.train_mask.sum(), score.item()
+    return loss.item() / dataset.train_mask.sum().item(), score.item()
 
 def valid_step_gnn(model, dataset, loss_fn, criterion):
     model.eval()
@@ -39,7 +39,7 @@ def valid_step_gnn(model, dataset, loss_fn, criterion):
         out = model(dataset.x, dataset.edge_index)
         loss = loss_fn(out[dataset.val_mask], dataset.y[dataset.val_mask])
         score = criterion(out[dataset.val_mask].argmax(dim=1), dataset.y[dataset.val_mask])
-    return loss.item() / dataset.val_mask.sum(), score.item()
+    return loss.item() / dataset.val_mask.sum().item(), score.item()
 
 def train_gnn(model, dataset, config: TrainConfig, use_tqdm=True):
     model.to(config.device)

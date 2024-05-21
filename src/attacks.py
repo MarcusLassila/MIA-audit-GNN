@@ -53,6 +53,7 @@ class BasicShadowAttack:
             dataset=self.shadow_dataset,
             criterion=train_config.criterion,
             training_results=train_res if self.plot_training_results else None,
+            plot_title="Shadow model",
             savedir=config.savedir
         )
 
