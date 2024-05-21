@@ -6,12 +6,14 @@ import torch.nn.functional as F
 from torch_geometric.utils import k_hop_subgraph
 from torchmetrics import AUROC, F1Score, Precision, Recall, ROC
 
-def bc_evaluation(preds, labels, device, threshold=0.5):
-    auroc = AUROC(task='binary').to(device)(preds, labels).item()
-    f1 = F1Score(task='binary', threshold=threshold).to(device)(preds, labels).item()
-    precision = Precision(task='binary', threshold=threshold).to(device)(preds, labels).item()
-    recall = Recall(task='binary', threshold=threshold).to(device)(preds, labels).item()
-    fpr, tpr, _ = ROC(task='binary').to(device)(preds, labels)
+def bc_evaluation(preds, labels, threshold=0.5):
+    preds = preds.cpu()
+    labels = labels.cpu()
+    auroc = AUROC(task='binary')(preds, labels).item()
+    f1 = F1Score(task='binary', threshold=threshold)(preds, labels).item()
+    precision = Precision(task='binary', threshold=threshold)(preds, labels).item()
+    recall = Recall(task='binary', threshold=threshold)(preds, labels).item()
+    fpr, tpr, _ = ROC(task='binary')(preds, labels)
     return {
         'auroc': auroc,
         'f1_score': f1,
@@ -74,7 +76,7 @@ def evaluate_shadow_attack(attack_model, target_model, dataset, num_hops=0):
         features = query_attack_features(target_model, dataset, range(dataset.x.shape[0]), num_hops=num_hops)
         logits = attack_model(features)[:,1]
         labels = dataset.train_mask.long()
-        return bc_evaluation(logits, labels, device)
+        return bc_evaluation(logits, labels)
 
 def evaluate_confidence_attack(target_model, dataset, threshold, num_hops=0):
     target_model.eval()
@@ -83,4 +85,4 @@ def evaluate_confidence_attack(target_model, dataset, threshold, num_hops=0):
         features = query_attack_features(target_model, dataset, range(dataset.x.shape[0]), num_hops=num_hops)
         confidences = F.softmax(features, dim=1).max(dim=1).values
         labels = dataset.train_mask.long()
-        return bc_evaluation(confidences, labels, device, threshold=threshold)
+        return bc_evaluation(confidences, labels, threshold=threshold)

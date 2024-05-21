@@ -159,7 +159,7 @@ class OfflineLiRA:
                     model=shadow_model,
                     dataset=target_samples,
                     query_nodes=range(target_samples.x.shape[0]),
-                    num_hops=config.query_hops
+                    num_hops=config.query_hops,
                 )
                 confidences.append(F.softmax(features, dim=1).max(dim=1).values)
         confidences = torch.stack(confidences)
@@ -190,6 +190,5 @@ class OfflineLiRA:
         return evaluation.bc_evaluation(
             preds=pred_proba,
             labels=truth,
-            device=config.device,
             threshold=0.5
         )
