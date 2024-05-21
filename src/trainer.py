@@ -10,6 +10,9 @@ EARLY_STOPPING_THRESHOLD = 10 # Number of consecutive epochs with worse than the
 
 ArrayType = Union[np.ndarray, torch.tensor]
 
+def looper(iterable, use_tqdm, desc=""):
+    return tqdm(iterable, desc=desc) if use_tqdm else iterable
+
 @dataclass
 class TrainConfig:
     criterion: Callable[[ArrayType, ArrayType], float]
@@ -38,7 +41,7 @@ def valid_step_gnn(model, dataset, loss_fn, criterion):
         score = criterion(out[dataset.val_mask].argmax(dim=1), dataset.y[dataset.val_mask])
     return loss.item() / dataset.val_mask.sum(), score.item()
 
-def train_gnn(model, dataset, config: TrainConfig):
+def train_gnn(model, dataset, config: TrainConfig, use_tqdm=True):
     model.to(config.device)
     dataset.to(config.device)
     optimizer = config.optimizer(model.parameters(), lr=config.lr)
@@ -46,9 +49,8 @@ def train_gnn(model, dataset, config: TrainConfig):
     res = defaultdict(list)
     early_stopping_counter = 0
     min_loss = float('inf')
-    best_epoch = 0
     best_model = None
-    for epoch in tqdm(range(config.epochs), desc=f"Training {model.__class__.__name__} on {config.device}."):
+    for _ in looper(range(config.epochs), use_tqdm, desc=f"Training {model.__class__.__name__} on {config.device}."):
         train_loss, train_score = train_step_gnn(model, dataset, optimizer, loss_fn, criterion)
         valid_loss, valid_score = valid_step_gnn(model, dataset, loss_fn, criterion)
         res['train_loss'].append(train_loss)
@@ -57,13 +59,11 @@ def train_gnn(model, dataset, config: TrainConfig):
         res['valid_score'].append(valid_score)
         if valid_loss < min_loss:
             min_loss = valid_loss
-            best_epoch = epoch + 1
             best_model = deepcopy(model)
             early_stopping_counter = 0
         elif config.early_stopping:
             early_stopping_counter += 1
             if early_stopping_counter == EARLY_STOPPING_THRESHOLD:
-                print(f'Early stopping on epoch {best_epoch}.')
                 break
     model = best_model
     return res
@@ -104,9 +104,8 @@ def train_mlp(model, train_loader, valid_loader, config: TrainConfig):
     res = defaultdict(list)
     early_stopping_counter = 0
     min_loss = float('inf')
-    best_epoch = 0
     best_model = None
-    for epoch in tqdm(range(config.epochs), desc=f"Training {model.__class__.__name__} on {config.device}."):
+    for _ in tqdm(range(config.epochs), desc=f"Training {model.__class__.__name__} on {config.device}."):
         train_loss, train_score = train_step(model, train_loader, optimizer, loss_fn, criterion, config.device)
         valid_loss, valid_score = valid_step(model, valid_loader, loss_fn, criterion, config.device)
         res['train_loss'].append(train_loss)
@@ -115,13 +114,11 @@ def train_mlp(model, train_loader, valid_loader, config: TrainConfig):
         res['valid_score'].append(valid_score)
         if valid_loss < min_loss:
             min_loss = valid_loss
-            best_epoch = epoch + 1
             best_model = deepcopy(model)
             early_stopping_counter = 0
         elif config.early_stopping:
             early_stopping_counter += 1
             if early_stopping_counter == EARLY_STOPPING_THRESHOLD:
-                print(f'Early stopping on epoch {best_epoch}.')
                 break
     model = best_model
     return res

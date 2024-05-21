@@ -32,6 +32,7 @@ class MembershipInferenceExperiment:
             num_classes=self.dataset.num_classes,
             dropout=self.config.dropout,
         )
+        self.criterion = Accuracy(task="multiclass", num_classes=self.dataset.num_classes).to(self.config.device)
 
     def parse_dataset(self):
         config = self.config
@@ -54,9 +55,9 @@ class MembershipInferenceExperiment:
 
     def train_target_model(self, dataset, plot_training_results=True):
         config = self.config
-        criterion = Accuracy(task="multiclass", num_classes=dataset.num_classes).to(config.device)
+        
         train_config = trainer.TrainConfig(
-            criterion=criterion,
+            criterion=self.criterion,
             device=config.device,
             epochs=config.epochs_target,
             early_stopping=config.early_stopping,
@@ -102,8 +103,33 @@ class MembershipInferenceExperiment:
                 metrics = attacks.ConfidenceAttack(
                     target_model=self.target_model,
                     target_dataset=target_dataset, # For evaluation
-                    config=config
+                    config=config,
                 ).run_attack()
+
+            elif config.attack == "LiRA-offline":
+                target_dataset, population = datasetup.target_shadow_split(dataset, split="disjoint", target_frac=0.3, shadow_frac=0.7)
+                self.train_target_model(target_dataset)
+                metrics = attacks.OfflineLiRA(
+                    target_model=self.target_model,
+                    population=population,
+                    config=config,
+                ).run_attack(target_samples=target_dataset)
+
+            target_scores = {
+                'train_score': evaluation.evaluate_graph_model(
+                    model=self.target_model,
+                    dataset=target_dataset,
+                    mask=target_dataset.train_mask,
+                    criterion=self.criterion,
+                ),
+                'test_score': evaluation.evaluate_graph_model(
+                    model=self.target_model,
+                    dataset=target_dataset,
+                    mask=target_dataset.test_mask,
+                    criterion=self.criterion,
+                ),
+            }
+            metrics = dict(target_scores, **metrics)
 
             if best_auroc < metrics['auroc']:
                 best_auroc = metrics['auroc']
@@ -170,6 +196,7 @@ if __name__ == '__main__':
     parser.add_argument("--experiments", default=1, type=int)
     parser.add_argument("--optimizer", default="Adam", type=str)
     parser.add_argument("--confidence-threshold", default=0.5, type=float)
+    parser.add_argument("--num-shadow-models", default=64, type=int)
     parser.add_argument("--name", default="unnamed", type=str)
     parser.add_argument("--datadir", default="./data", type=str)
     parser.add_argument("--savedir", default="./results", type=str)

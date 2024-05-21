@@ -1,5 +1,5 @@
 Replicate the black-box node-level membership inference attacks of [Membership Inference Attack on Graph Neural Networks](https://arxiv.org/abs/2101.06570), [Quantifying Privacy Leakage in Graph Embedding](https://arxiv.org/abs/2010.00906) and [Node-Level Membership Inference Attacks Against Graph Neural Networks
-](https://arxiv.org/abs/2102.05429), with the purpose of re-evaluating the results, particurlarly at low FPR.
+](https://arxiv.org/abs/2102.05429), with the purpose of re-evaluating the results, particurlarly at low FPR. Also implements the "LiRA" membership inference attack from [Membership Inference Attacks From First Principles](https://arxiv.org/abs/2112.03570). 
 
 ### Instructions
 
@@ -10,6 +10,7 @@ Alternatively, run "src/run_mia.py" which only run one MIA simulation experiment
 * --attack: Type of attack to use.
     * "shadow": The black-box shadow model attack used in "Membership Inference Attack on Graph Neural Networks", "Quantifying Privacy Leakage in Graph Embedding" and "Node-Level Membership Inference Attacks Against Graph Neural Networks".
     * "confidence": The confidence attack in "Quantifying Privacy Leakage in Graph Embedding", which thresholds the confidence values from the target model for a membership prediction.
+    * "LiRA-offline": The offline version of LiRA from "Membership Inference Attacks From First Principles".
 * --dataset: cora, corafull, citeseer, pubmed or flickr.
 * --split: How to split the dataset into target/shadow datasets.
     * "sampled": randomly sample subgraphs consisting of 50% of the nodes for target and shadow model. Overlap allowed.
@@ -25,6 +26,10 @@ Alternatively, run "src/run_mia.py" which only run one MIA simulation experiment
 * --hidden-dim-target: Dimension of the hidden layer of the 2-layer GNN target/shadow model.
 * --hidden-dim-attack: Dimensions of the hidden layers in the MLP. Input is given as a comma separeted list, e.g. 128,64,32.
 * --query-hops: The size of the k-hop neighborhood to query the target model when creating features for the attack model.
+* --experiments: Number of times to repeat the whole attack experiment (including retraining target model) and average results over.
+* --optimizer: Will call getattr(torch.optim, optimizer) so it better exist in torch.optim.
+* --confidence-threshold: For confidence attack.
+* --num-shadow-models: For LiRA.
 * --datadir: Path to save dataset.
 * --savedir: Path to store results.
 * --plot-roc: Plot ROC curve in log scale and store in savedir.
