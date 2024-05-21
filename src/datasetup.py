@@ -33,7 +33,12 @@ def create_attack_dataset(shadow_dataset, shadow_model, k_hop_queries=False, num
     return train_dataset, test_dataset
 
 def extract_subgraph(dataset, node_index, train_frac=0.5, val_frac=0.2):
-    edge_index, _ = subgraph(node_index, dataset.edge_index, relabel_nodes=True)
+    edge_index, _ = subgraph(
+        subset=node_index,
+        edge_index=dataset.edge_index,
+        relabel_nodes=True,
+        num_nodes=dataset.x.shape[0],
+    )
     num_nodes = len(node_index)
     num_train_nodes = int(train_frac * num_nodes)
     num_val_nodes = int(val_frac * num_nodes)
@@ -59,7 +64,12 @@ def sample_subgraph(dataset, num_nodes, train_frac=0.5, val_frac=0.2):
     total_num_nodes = dataset.x.shape[0]
     assert 0 < num_nodes <= total_num_nodes
     node_index = torch.randperm(total_num_nodes)[:num_nodes]
-    edge_index, _ = subgraph(node_index, dataset.edge_index, relabel_nodes=True)
+    edge_index, _ = subgraph(
+        subset=node_index,
+        edge_index=dataset.edge_index,
+        relabel_nodes=True,
+        num_nodes=total_num_nodes,
+    )
     num_train_nodes = int(train_frac * num_nodes)
     num_val_nodes = int(val_frac * num_nodes)
     train_index = torch.arange(0, num_train_nodes)

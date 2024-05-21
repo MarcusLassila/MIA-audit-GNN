@@ -4,6 +4,7 @@ import models
 import trainer
 import utils
 
+import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -113,7 +114,7 @@ class OfflineLiRA:
         self.target_model = target_model
         self.target_model.eval()
         self.shadow_models = []
-        self.population = population # Should not contain target samples
+        self.population = population # Should not contain target samples.
         self.config = config
         self.shadow_size = population.x.shape[0] // 2
         self.train_shadow_models()
@@ -160,7 +161,8 @@ class OfflineLiRA:
                     num_hops=config.query_hops
                 )
                 confidences.append(F.softmax(features, dim=1).max(dim=1).values)
-        confidences = torch.cat(confidences, dim=0)
+        confidences = torch.stack(confidences)
+        assert confidences.shape == torch.Size([len(self.shadow_models), target_samples.x.shape[0]])
         means = confidences.mean(dim=0)
         stds = confidences.std(dim=0)
         return means, stds
@@ -176,8 +178,13 @@ class OfflineLiRA:
                 num_hops=config.query_hops,
             )
             target_confidences = F.softmax(features, dim=1).max(dim=1).values
-        target_confidences_normalized = (target_confidences - means) / stds # Normalize before erf
-        pred_proba = 0.5 * (1 + torch.erf(target_confidences_normalized)) # 1 - P[Z > conf_target], Z ~ Normal(0, 1)
+
+        # In offline LiRA the test statistic is Lambda = 1 - P(Z > conf_target), where Z is a sample from
+        # a normal distribution with mean and variance given by the shadow models confidences.
+        # We normalize the target confidence and compute the test statistic Lambda' = 1 - P(Z > x), Z ~ Normal(0, 1).
+        # We then use 1 - P(Z > x) = 0.5[1 + erf(x / sqrt(2))], Z ~ Normal(0, 1).
+        target_confidences_normalized = (target_confidences - means) / (stds + 1e-8)
+        pred_proba = 0.5 * (1 + torch.erf(target_confidences_normalized / np.sqrt(2)))
         truth = target_samples.train_mask.long()
         return evaluation.bc_evaluation(
             preds=pred_proba,

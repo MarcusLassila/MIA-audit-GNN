@@ -107,7 +107,9 @@ class MembershipInferenceExperiment:
                 ).run_attack()
 
             elif config.attack == "LiRA-offline":
-                target_dataset, population = datasetup.target_shadow_split(dataset, split="disjoint", target_frac=0.3, shadow_frac=0.7)
+                # In offline LiRA, the shadow models are trained on datasets that does not contain the target sample.
+                # Therefore we make a disjoint split and train shadow models on one part, and attack samples of the other part.
+                target_dataset, population = datasetup.target_shadow_split(dataset, split="disjoint", target_frac=0.5, shadow_frac=0.5)
                 self.train_target_model(target_dataset)
                 metrics = attacks.OfflineLiRA(
                     target_model=self.target_model,
