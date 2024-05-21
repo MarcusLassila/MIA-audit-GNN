@@ -132,7 +132,7 @@ class OfflineLiRA:
             lr=config.lr,
             optimizer=getattr(torch.optim, config.optimizer),
         )
-        for _ in tqdm(range(config.num_shadow_models), desc=f"Training {config.num_shadow_models} shadow models for LiRA."):
+        for _ in tqdm(range(config.num_shadow_models), desc=f"Training {config.num_shadow_models} shadow models for LiRA"):
             shadow_dataset = datasetup.sample_subgraph(self.population, self.shadow_size)
             shadow_model = utils.fresh_model(
                 model_type=config.model,
@@ -152,7 +152,7 @@ class OfflineLiRA:
     def get_mean_and_std(self, target_samples):
         config = self.config
         confidences = []
-        for shadow_model in self.shadow_models:
+        for shadow_model in tqdm(self.shadow_models, desc="Computing confidence values from shadow models"):
             shadow_model.eval()
             with torch.inference_mode():
                 features = evaluation.query_attack_features(

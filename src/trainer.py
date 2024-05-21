@@ -50,7 +50,7 @@ def train_gnn(model, dataset, config: TrainConfig, use_tqdm=True):
     early_stopping_counter = 0
     min_loss = float('inf')
     best_model = None
-    for _ in looper(range(config.epochs), use_tqdm, desc=f"Training {model.__class__.__name__} on {config.device}."):
+    for _ in looper(range(config.epochs), use_tqdm, desc=f"Training {model.__class__.__name__} on {config.device}"):
         train_loss, train_score = train_step_gnn(model, dataset, optimizer, loss_fn, criterion)
         valid_loss, valid_score = valid_step_gnn(model, dataset, loss_fn, criterion)
         res['train_loss'].append(train_loss)
@@ -105,7 +105,7 @@ def train_mlp(model, train_loader, valid_loader, config: TrainConfig):
     early_stopping_counter = 0
     min_loss = float('inf')
     best_model = None
-    for _ in tqdm(range(config.epochs), desc=f"Training {model.__class__.__name__} on {config.device}."):
+    for _ in tqdm(range(config.epochs), desc=f"Training {model.__class__.__name__} on {config.device}"):
         train_loss, train_score = train_step(model, train_loader, optimizer, loss_fn, criterion, config.device)
         valid_loss, valid_score = valid_step(model, valid_loader, loss_fn, criterion, config.device)
         res['train_loss'].append(train_loss)
