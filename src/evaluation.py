@@ -22,7 +22,7 @@ def bc_evaluation(preds, labels, threshold=0.5):
         'roc': (fpr, tpr),
     }
 
-def query_attack_features(model, dataset, query_nodes, num_hops=0):
+def k_hop_query(model, dataset, query_nodes, num_hops=0):
     '''
     Queries the model for each node in in query_nodes,
     using the local subgraph definded by the "num_hops"-hop neigborhood.
@@ -31,7 +31,7 @@ def query_attack_features(model, dataset, query_nodes, num_hops=0):
             consisting of logits/predictions for each query node.
     '''
     model.eval()
-    features = []
+    predictions = []
     for v in query_nodes:
         node_index, edge_index, v_idx, _ = k_hop_subgraph(
             node_idx=v,
@@ -41,8 +41,10 @@ def query_attack_features(model, dataset, query_nodes, num_hops=0):
             num_nodes=dataset.x.shape[0],
         )
         pred = model(dataset.x[node_index], edge_index)[v_idx].squeeze()
-        features.append(pred)
-    return torch.stack(features)
+        predictions.append(pred)
+    predictions = torch.stack(predictions)
+    assert predictions.shape == torch.Size([len(query_nodes), dataset.num_classes])
+    return predictions
 
 def evaluate_graph_model(model, dataset, mask, criterion):
     model.eval()
@@ -67,22 +69,3 @@ def evaluate_graph_training(model, dataset, criterion, training_results=None, pl
         criterion=criterion,
     )
     print(f"Train accuracy: {train_score:.4f} | Test accuracy: {test_score:.4f}")
-
-def evaluate_shadow_attack(attack_model, target_model, dataset, num_hops=0):
-    attack_model.eval()
-    target_model.eval()
-    device = torch.device(next(attack_model.parameters()).device)
-    with torch.inference_mode():
-        features = query_attack_features(target_model, dataset, range(dataset.x.shape[0]), num_hops=num_hops)
-        logits = attack_model(features)[:,1]
-        labels = dataset.train_mask.long()
-        return bc_evaluation(logits, labels)
-
-def evaluate_confidence_attack(target_model, dataset, threshold, num_hops=0):
-    target_model.eval()
-    device = torch.device(next(target_model.parameters()).device)
-    with torch.inference_mode():
-        features = query_attack_features(target_model, dataset, range(dataset.x.shape[0]), num_hops=num_hops)
-        confidences = F.softmax(features, dim=1).max(dim=1).values
-        labels = dataset.train_mask.long()
-        return bc_evaluation(confidences, labels, threshold=threshold)

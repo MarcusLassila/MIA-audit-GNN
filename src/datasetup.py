@@ -1,5 +1,3 @@
-from evaluation import query_attack_features
-
 import torch
 import torch_geometric.datasets as datasets
 from torch_geometric.data import Data
@@ -22,10 +20,7 @@ class AttackDataset(torch.utils.data.Dataset):
         return feature, label
 
 def create_attack_dataset(shadow_dataset, shadow_model, k_hop_queries=False, num_hops=0):
-    if k_hop_queries:
-        features = query_attack_features(shadow_model, shadow_dataset, range(shadow_dataset.x.shape[0]), num_hops=num_hops).cpu()
-    else:
-        features = shadow_model(shadow_dataset.x, shadow_dataset.edge_index).cpu()
+    features = shadow_model(shadow_dataset.x, shadow_dataset.edge_index).cpu()
     labels = shadow_dataset.train_mask.long().cpu()
     train_X, test_X, train_y, test_y = train_test_split(features, labels, test_size=0.2, stratify=labels)
     train_dataset = AttackDataset(train_X, train_y)

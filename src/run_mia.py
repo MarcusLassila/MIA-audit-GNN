@@ -61,7 +61,7 @@ class MembershipInferenceExperiment:
             device=config.device,
             epochs=config.epochs_target,
             early_stopping=config.early_stopping,
-            loss_fn=F.nll_loss,
+            loss_fn=F.cross_entropy,
             lr=config.lr,
             optimizer=getattr(torch.optim, config.optimizer),
         )
@@ -94,7 +94,7 @@ class MembershipInferenceExperiment:
                 metrics = attacks.BasicShadowAttack(
                     target_model=self.target_model,
                     shadow_dataset=shadow_dataset,
-                    target_dataset=target_dataset, # For evaluation
+                    target_samples=target_dataset, # For evaluation
                     config=config,
                 ).run_attack()
 
@@ -103,7 +103,7 @@ class MembershipInferenceExperiment:
                 self.train_target_model(target_dataset)
                 metrics = attacks.ConfidenceAttack(
                     target_model=self.target_model,
-                    target_dataset=target_dataset, # For evaluation
+                    target_samples=target_dataset, # For evaluation
                     config=config,
                 ).run_attack()
 
@@ -169,7 +169,7 @@ class MembershipInferenceExperiment:
             }
         stat_df = pd.DataFrame(stats, index=[config.name])
         roc_df = pd.DataFrame({f'{config.name}_fpr': fpr, f'{config.name}_tpr': tpr})
-        if config.plot_roc:
+        if config.experiments == 1:
             savepath = f'{config.savedir}/{config.name}_roc_loglog.png'
             utils.plot_roc_loglog(fpr, tpr, savepath=savepath) # Plot the ROC curve for sample with highest AUROC.
         return stat_df, roc_df
@@ -203,7 +203,6 @@ if __name__ == '__main__':
     parser.add_argument("--name", default="unnamed", type=str)
     parser.add_argument("--datadir", default="./data", type=str)
     parser.add_argument("--savedir", default="./results", type=str)
-    parser.add_argument("--plot-roc", action=argparse.BooleanOptionalAction)
     args = parser.parse_args()
     config = vars(args)
     print('Running MIA experiment.')

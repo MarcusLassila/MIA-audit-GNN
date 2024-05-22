@@ -17,7 +17,6 @@ def main():
         'batch_size': 32,
         'datadir': './data',
         'savedir': './results',
-        'plot_roc': False,
         'early_stopping': True,
         'optimizer': 'Adam',
         'experiments': 10,

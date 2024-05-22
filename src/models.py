@@ -18,7 +18,7 @@ class TwoLayerGNN(nn.Module):
         x = F.relu(x)
         x = F.dropout(input=x, p=self.dropout, training=self.training)
         x = self.conv2(x, edge_index)
-        return F.log_softmax(x, dim=1)
+        return x
 
 class GCN(TwoLayerGNN):
 

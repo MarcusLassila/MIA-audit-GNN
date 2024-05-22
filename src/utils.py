@@ -2,6 +2,7 @@ import models
 
 import numpy as np
 import pandas as pd
+import scipy.stats as stats
 import matplotlib.pyplot as plt
 from pathlib import Path
 
@@ -66,3 +67,19 @@ def plot_roc_csv(filepath, savepath=None):
         name = fpr[:-4]
         tpr = name + "_tpr"
         plot_roc_loglog(df[fpr], df[tpr], name=name, savepath=savepath)
+
+def plot_histogram_and_fitted_gaussian(x, mean, std, bins=10, savepath=None):
+    plt.figure(figsize=(8, 8))
+    plt.hist(x=x, bins=bins, density=True)
+    plt.grid(True)
+    xmin, xmax = plt.xlim()
+    xs = np.linspace(xmin, xmax)
+    ys = stats.norm.pdf(xs, loc=mean, scale=std)
+    plt.plot(xs, ys, label='Gaussian fit')
+    if savepath:
+        savedir = '/'.join(savepath.split('/')[:-1])
+        Path(savedir).mkdir(parents=True, exist_ok=True)
+        plt.savefig(savepath)
+    else:
+        plt.show()
+    plt.close()
