@@ -178,9 +178,9 @@ class OfflineLiRA:
         stds = logits.std(dim=0)
         if config.experiments == 1:
             utils.plot_histogram_and_fitted_gaussian(
-                x=logits[:,0].numpy(),
-                mean=means[0].numpy(),
-                std=stds[0].numpy(),
+                x=logits[:,0].cpu().numpy(),
+                mean=means[0].cpu().numpy(),
+                std=stds[0].cpu().numpy(),
                 bins=max(len(self.shadow_models) // 8, 1),
                 savepath="./results/gaussian_fit_histogram.png",
             )
