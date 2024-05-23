@@ -120,6 +120,8 @@ class ConfidenceAttack:
 
 class OfflineLiRA:
 
+    EPS = 1e-6
+
     def __init__(self, target_model, population, config):
         self.target_model = target_model
         self.target_model.eval()
@@ -161,6 +163,7 @@ class OfflineLiRA:
     def get_mean_and_std(self, target_samples):
         config = self.config
         logits = []
+        row_idx = np.arange(target_samples.x.shape[0])
         for shadow_model in tqdm(self.shadow_models, desc="Computing confidence values from shadow models"):
             shadow_model.eval()
             with torch.inference_mode():
@@ -170,8 +173,8 @@ class OfflineLiRA:
                     query_nodes=[*range(target_samples.x.shape[0])],
                     num_hops=config.query_hops,
                 )
-                confs = F.softmax(preds, dim=1).max(dim=1).values
-                logits.append(confs.logit()) # Logit scaling for approximately normal distribution.
+                confs = F.softmax(preds, dim=1)[row_idx, target_samples.y]
+                logits.append(confs.logit(eps=OfflineLiRA.EPS)) # Logit scaling for approximately normal distribution.
         logits = torch.stack(logits)
         assert logits.shape == torch.Size([len(self.shadow_models), target_samples.x.shape[0]])
         means = logits.mean(dim=0)
@@ -196,17 +199,18 @@ class OfflineLiRA:
                 query_nodes=[*range(target_samples.x.shape[0])],
                 num_hops=config.query_hops,
             )
-            target_logits = F.softmax(preds, dim=1).max(dim=1).values.logit()
+            row_idx = np.arange(target_samples.x.shape[0])
+            target_logits = F.softmax(preds, dim=1)[row_idx, target_samples.y].logit(eps=OfflineLiRA.EPS)
 
         # In offline LiRA the test statistic is Lambda = 1 - P(Z > conf_target), where Z is a sample from
         # a normal distribution with mean and variance given by the shadow models confidences.
         # We normalize the target confidence and compute the test statistic Lambda' = 1 - P(Z > x), Z ~ Normal(0, 1).
         # We then use 1 - P(Z > x) = 0.5[1 + erf(x / sqrt(2))], Z ~ Normal(0, 1).
-        x = (target_logits - means) / (stds + 1e-8)
+        x = (target_logits - means) / (stds + OfflineLiRA.EPS)
         pred_proba = 0.5 * (1 + torch.erf(x / np.sqrt(2)))
         truth = target_samples.train_mask.long()
         return evaluation.bc_evaluation(
             preds=pred_proba,
             labels=truth,
-            threshold=0.5
+            threshold=0.5,
         )
