@@ -23,7 +23,7 @@ class BasicShadowAttack:
             num_features=shadow_dataset.num_features,
             hidden_dim=config.hidden_dim_target,
             num_classes=shadow_dataset.num_classes,
-            dropout=config.dropout
+            dropout=config.dropout,
         )
         self.attack_model = models.MLP(in_dim=shadow_dataset.num_classes, hidden_dims=config.hidden_dim_attack)
         self.shadow_dataset = shadow_dataset
@@ -54,7 +54,7 @@ class BasicShadowAttack:
             criterion=train_config.criterion,
             training_results=train_res if self.plot_training_results else None,
             plot_title="Shadow model",
-            savedir=config.savedir
+            savedir=config.savedir,
         )
 
     def train_attack_model(self):
@@ -214,3 +214,95 @@ class OfflineLiRA:
             preds=pred_proba,
             labels=truth,
         )
+
+class RMIA:
+    '''
+    The attack from "Low-Cost High-Power Membership Inference Attacks".
+    Only the offline attack is currently supported.
+    '''
+
+    def __init__(self, target_model, population, config, online=False):
+        target_model.eval()
+        self.target_model = target_model
+        self.population = population
+        self.config = config
+        self.online = online
+        self.out_models = []
+        self.out_size = self.population .x.shape[0] // 2
+        self.gamma = 2 # Value used in the original paper
+        self.a = 0.3 # Tune me
+        self.train_out_models()
+        
+    def train_out_models(self):
+        config = self.config
+        criterion = Accuracy(task="multiclass", num_classes=self.population.num_classes).to(config.device)
+        train_config = trainer.TrainConfig(
+            criterion=criterion,
+            device=config.device,
+            epochs=config.epochs_target,
+            early_stopping=config.early_stopping,
+            loss_fn=F.cross_entropy,
+            lr=config.lr,
+            optimizer=getattr(torch.optim, config.optimizer),
+        )
+        for _ in tqdm(range(config.num_shadow_models), desc=f"Training {config.num_shadow_models} out models for RMIA"):
+            shadow_dataset = datasetup.sample_subgraph(self.population, self.out_size)
+            shadow_model = utils.fresh_model(
+                model_type=config.model,
+                num_features=shadow_dataset.num_features,
+                hidden_dim=config.hidden_dim_target,
+                num_classes=shadow_dataset.num_classes,
+                dropout=config.dropout,
+            )
+            _ = trainer.train_gnn(
+                model=shadow_model,
+                dataset=shadow_dataset,
+                config=train_config,
+                use_tqdm=False,
+            )
+            self.out_models.append(shadow_model)
+
+    def ratio(self, dataset):
+        config = self.config
+        num_target_nodes = dataset.x.shape[0]
+        row_idx = np.arange(num_target_nodes)
+        out_confidences = []
+        for shadow_model in tqdm(self.out_models, desc="Querying out models"):
+            shadow_model.eval()
+            with torch.inference_mode():
+                preds = evaluation.k_hop_query(
+                    model=shadow_model,
+                    dataset=dataset,
+                    query_nodes=[*range(num_target_nodes)],
+                    num_hops=config.query_hops,
+                )
+                out_confidences.append(F.softmax(preds, dim=1)[row_idx, dataset.y])
+        out_confidences = torch.stack(out_confidences)
+        pr_out = out_confidences.mean(dim=0)
+        pr = 0.5 * ((self.a + 1) * pr_out + 1 - self.a) # Heuristic to approximate the average of in and out, from out only.
+
+        with torch.inference_mode():
+            preds = evaluation.k_hop_query(
+                model=self.target_model,
+                dataset=dataset,
+                query_nodes=[*range(num_target_nodes)],
+                num_hops=config.query_hops,
+            )
+            target_confidence = F.softmax(preds, dim=1)[row_idx, dataset.y] 
+        assert pr.shape == target_confidence.shape == torch.Size([num_target_nodes])
+        return target_confidence / pr
+
+    def score(self, target_samples):
+        ratioX = self.ratio(target_samples)
+        ratioZ = self.ratio(self.population)
+        thresholds = ratioZ * self.gamma
+        count = torch.zeros_like(ratioX)
+        for i, x in enumerate(ratioX):
+            count[i] = (x > thresholds).sum().item()
+        sizeZ = thresholds.shape[0]
+        return count / sizeZ
+    
+    def run_attack(self, target_samples):
+        preds = self.score(target_samples)
+        labels = target_samples.train_mask.long()
+        return evaluation.bc_evaluation(preds=preds, labels=labels) # Beta parameter is sweeped when computing roc/auroc.

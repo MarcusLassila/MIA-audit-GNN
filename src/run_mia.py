@@ -117,6 +117,15 @@ class MembershipInferenceExperiment:
                     population=population,
                     config=config,
                 ).run_attack(target_samples=target_dataset)
+                
+            elif config.attack == "RMIA":
+                target_dataset, population = datasetup.target_shadow_split(dataset, split="disjoint", target_frac=0.5, shadow_frac=0.5)
+                self.train_target_model(target_dataset)
+                metrics = attacks.RMIA(
+                    target_model=self.target_model,
+                    population=population,
+                    config=config,
+                ).run_attack(target_samples=target_dataset)
 
             target_scores = {
                 'train_score': evaluation.evaluate_graph_model(
