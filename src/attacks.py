@@ -126,7 +126,6 @@ class LiRA:
         self.target_model = target_model
         self.shadow_models = []
         self.population = population # Should not contain target samples.
-        self.population.to(config.device)
         self.config = config
         self.shadow_size = population.x.shape[0] // 2
         self.train_shadow_models()
@@ -227,7 +226,6 @@ class RMIA:
         target_model.eval()
         self.target_model = target_model
         self.population = population
-        self.population.to(config.device)
         self.config = config
         self.online = online
         self.out_models = []
@@ -307,6 +305,7 @@ class RMIA:
     
     def run_attack(self, target_samples):
         target_samples.to(self.config.device)
+        self.population.to(self.config.device)
         preds = self.score(target_samples)
         labels = target_samples.train_mask.long()
         return evaluation.bc_evaluation(preds=preds, labels=labels) # Beta parameter is sweeped when computing roc/auroc.
