@@ -6,19 +6,13 @@ import torch.nn.functional as F
 from torch_geometric.utils import k_hop_subgraph
 from torchmetrics import AUROC, F1Score, Precision, Recall, ROC
 
-def bc_evaluation(preds, labels, threshold=0.5):
+def bc_evaluation(preds, labels):
     preds = preds.cpu()
     labels = labels.cpu()
     auroc = AUROC(task='binary')(preds, labels).item()
-    f1 = F1Score(task='binary', threshold=threshold)(preds, labels).item()
-    precision = Precision(task='binary', threshold=threshold)(preds, labels).item()
-    recall = Recall(task='binary', threshold=threshold)(preds, labels).item()
     fpr, tpr, _ = ROC(task='binary')(preds, labels)
     return {
         'auroc': auroc,
-        'f1_score': f1,
-        'precision': precision,
-        'recall': recall,
         'roc': (fpr, tpr),
     }
 

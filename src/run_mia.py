@@ -140,9 +140,6 @@ class MembershipInferenceExperiment:
             train_scores.append(metrics['train_score'])
             test_scores.append(metrics['test_score'])
             aurocs.append(metrics['auroc'])
-            f1s.append(metrics['f1_score'])
-            precisions.append(metrics['precision'])
-            recalls.append(metrics['recall'])
         if config.experiments > 1:
             stats = {
                 'train_acc_mean': [mean(train_scores)],
@@ -151,21 +148,12 @@ class MembershipInferenceExperiment:
                 'test_acc_stdev': [stdev(test_scores)],
                 'auroc_mean': [mean(aurocs)],
                 'auroc_stdev': [stdev(aurocs)],
-                'f1_score_mean': [mean(f1s)],
-                'f1_score_stdev': [stdev(f1s)],
-                'precision_mean': [mean(precisions)],
-                'precision_stdev': [stdev(precisions)],
-                'recall_mean': [mean(recalls)],
-                'recall_stdev': [stdev(recalls)],
             }
         else:
             stats = {
                 'train_acc': train_scores,
                 'test_acc': test_scores,
                 'auroc': aurocs,
-                'f1_score': f1s,
-                'precision': precisions,
-                'recall': recalls,
             }
         stat_df = pd.DataFrame(stats, index=[config.name])
         roc_df = pd.DataFrame({f'{config.name}_fpr': fpr, f'{config.name}_tpr': tpr})
@@ -198,7 +186,6 @@ if __name__ == '__main__':
     parser.add_argument("--query-hops", default=0, type=int)
     parser.add_argument("--experiments", default=1, type=int)
     parser.add_argument("--optimizer", default="Adam", type=str)
-    parser.add_argument("--confidence-threshold", default=0.5, type=float)
     parser.add_argument("--num-shadow-models", default=64, type=int)
     parser.add_argument("--name", default="unnamed", type=str)
     parser.add_argument("--datadir", default="./data", type=str)

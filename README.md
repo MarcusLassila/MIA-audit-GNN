@@ -28,7 +28,6 @@ Alternatively, run "src/run_mia.py" which only run one MIA simulation experiment
 * --query-hops: The size of the k-hop neighborhood to query the target model when creating features for the attack model.
 * --experiments: Number of times to repeat the whole attack experiment (including retraining target model) and average results over.
 * --optimizer: Will call getattr(torch.optim, optimizer) so it better exist in torch.optim.
-* --confidence-threshold: For confidence attack.
 * --num-shadow-models: For LiRA.
 * --datadir: Path to save dataset.
 * --savedir: Path to store results.

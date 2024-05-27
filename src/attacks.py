@@ -114,9 +114,10 @@ class ConfidenceAttack:
                 query_nodes=[*range(self.target_samples.x.shape[0])],
                 num_hops=config.query_hops,
             )
-            confidences = F.softmax(preds, dim=1).max(dim=1).values
+            row_idx = np.arange(self.target_samples.y.shape[0])
+            confidences = F.softmax(preds, dim=1)[row_idx, self.target_samples.y]
             labels = self.target_samples.train_mask.long()
-        return evaluation.bc_evaluation(confidences, labels, threshold=config.confidence_threshold)
+        return evaluation.bc_evaluation(confidences, labels)
 
 class OfflineLiRA:
 
@@ -199,7 +200,7 @@ class OfflineLiRA:
                 query_nodes=[*range(target_samples.x.shape[0])],
                 num_hops=config.query_hops,
             )
-            row_idx = np.arange(target_samples.x.shape[0])
+            row_idx = np.arange(target_samples.y.shape[0])
             target_logits = F.softmax(preds, dim=1)[row_idx, target_samples.y].logit(eps=OfflineLiRA.EPS)
 
         # In offline LiRA the test statistic is Lambda = 1 - P(Z > conf_target), where Z is a sample from
@@ -212,5 +213,4 @@ class OfflineLiRA:
         return evaluation.bc_evaluation(
             preds=pred_proba,
             labels=truth,
-            threshold=0.5,
         )
