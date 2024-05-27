@@ -83,7 +83,7 @@ class MembershipInferenceExperiment:
         config = self.config
         dataset = self.dataset
         train_scores, test_scores = [], []
-        aurocs, f1s, precisions, recalls = [], [], [], []
+        aurocs = []
         best_auroc = 0
         for i in range(config.experiments):
             print(f'Running experiment {i + 1}/{config.experiments}.')
@@ -94,31 +94,29 @@ class MembershipInferenceExperiment:
                 metrics = attacks.BasicShadowAttack(
                     target_model=self.target_model,
                     shadow_dataset=shadow_dataset,
-                    target_samples=target_dataset, # For evaluation
                     config=config,
-                ).run_attack()
+                ).run_attack(target_samples=target_dataset)
 
             elif config.attack == "confidence":
                 target_dataset = datasetup.sample_subgraph(dataset, num_nodes=dataset.x.shape[0]//2)
                 self.train_target_model(target_dataset)
                 metrics = attacks.ConfidenceAttack(
                     target_model=self.target_model,
-                    target_samples=target_dataset, # For evaluation
                     config=config,
-                ).run_attack()
+                ).run_attack(target_samples=target_dataset)
 
-            elif config.attack == "LiRA-offline":
+            elif config.attack == "lira":
                 # In offline LiRA, the shadow models are trained on datasets that does not contain the target sample.
                 # Therefore we make a disjoint split and train shadow models on one part, and attack samples of the other part.
                 target_dataset, population = datasetup.target_shadow_split(dataset, split="disjoint", target_frac=0.5, shadow_frac=0.5)
                 self.train_target_model(target_dataset)
-                metrics = attacks.OfflineLiRA(
+                metrics = attacks.LiRA(
                     target_model=self.target_model,
                     population=population,
                     config=config,
                 ).run_attack(target_samples=target_dataset)
                 
-            elif config.attack == "RMIA":
+            elif config.attack == "rmia":
                 target_dataset, population = datasetup.target_shadow_split(dataset, split="disjoint", target_frac=0.5, shadow_frac=0.5)
                 self.train_target_model(target_dataset)
                 metrics = attacks.RMIA(
@@ -126,6 +124,9 @@ class MembershipInferenceExperiment:
                     population=population,
                     config=config,
                 ).run_attack(target_samples=target_dataset)
+
+            else:
+                raise AttributeError(f"No attack named {config.attack}")
 
             target_scores = {
                 'train_score': evaluation.evaluate_graph_model(

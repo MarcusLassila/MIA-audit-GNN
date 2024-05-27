@@ -19,7 +19,7 @@ class AttackDataset(torch.utils.data.Dataset):
         label = self.labels[idx]
         return feature, label
 
-def create_attack_dataset(shadow_dataset, shadow_model, k_hop_queries=False, num_hops=0):
+def create_attack_dataset(shadow_dataset, shadow_model):
     features = shadow_model(shadow_dataset.x, shadow_dataset.edge_index).cpu()
     labels = shadow_dataset.train_mask.long().cpu()
     train_X, test_X, train_y, test_y = train_test_split(features, labels, test_size=0.2, stratify=labels)

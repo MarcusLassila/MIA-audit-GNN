@@ -15,9 +15,9 @@ from tqdm.auto import tqdm
 
 class BasicShadowAttack:
     
-    def __init__(self, target_model, shadow_dataset, target_samples, config):
+    def __init__(self, target_model, shadow_dataset, config):
+        target_model.eval()
         self.target_model = target_model
-        self.target_model.eval()
         self.shadow_model = utils.fresh_model(
             model_type=config.model,
             num_features=shadow_dataset.num_features,
@@ -27,15 +27,16 @@ class BasicShadowAttack:
         )
         self.attack_model = models.MLP(in_dim=shadow_dataset.num_classes, hidden_dims=config.hidden_dim_attack)
         self.shadow_dataset = shadow_dataset
-        self.target_samples = target_samples
-        self.criterion = Accuracy(task="multiclass", num_classes=shadow_dataset.num_classes).to(config.device)
         self.config = config
         self.plot_training_results = True
+        self.train_shadow_model()
+        self.train_attack_model()
+        self.attack_model.eval()
     
     def train_shadow_model(self):
         config = self.config
         train_config = trainer.TrainConfig(
-            criterion=self.criterion,
+            criterion=Accuracy(task="multiclass", num_classes=self.shadow_dataset.num_classes).to(config.device),
             device=config.device,
             epochs=config.epochs_target,
             early_stopping=config.early_stopping,
@@ -78,56 +79,54 @@ class BasicShadowAttack:
             config=train_config,
         )
     
-    def run_attack(self):
+    def run_attack(self, target_samples):
         config = self.config
-        self.train_shadow_model()
-        self.train_attack_model()
-        self.attack_model.eval()
+        num_target_samples = target_samples.x.shape[0]
         with torch.inference_mode():
             preds = evaluation.k_hop_query(
                 model=self.target_model,
-                dataset=self.target_samples,
-                query_nodes=[*range(self.target_samples.x.shape[0])],
+                dataset=target_samples,
+                query_nodes=[*range(num_target_samples)],
                 num_hops=config.query_hops,
             )
             logits = self.attack_model(preds)[:,1]
-            labels = self.target_samples.train_mask.long()
+            labels = target_samples.train_mask.long()
         return evaluation.bc_evaluation(logits, labels)
 
 class ConfidenceAttack:
     
-    def __init__(self, target_model, target_samples, config):
+    def __init__(self, target_model, config):
+        target_model.eval()
         self.target_model = target_model
-        self.target_model.eval()
-        self.target_samples = target_samples
         self.config = config
-        self.criterion = Accuracy(task="multiclass", num_classes=target_samples.num_classes).to(config.device)
-        self.plot_training_results = True
-        self.is_pretrained = False
     
-    def run_attack(self):
+    def run_attack(self, target_samples):
         config = self.config
+        num_target_samples = target_samples.x.shape[0]
         with torch.inference_mode():
             preds = evaluation.k_hop_query(
                 model=self.target_model,
-                dataset=self.target_samples,
-                query_nodes=[*range(self.target_samples.x.shape[0])],
+                dataset=target_samples,
+                query_nodes=[*range(num_target_samples)],
                 num_hops=config.query_hops,
             )
-            row_idx = np.arange(self.target_samples.y.shape[0])
-            confidences = F.softmax(preds, dim=1)[row_idx, self.target_samples.y]
-            labels = self.target_samples.train_mask.long()
+            row_idx = np.arange(num_target_samples)
+            confidences = F.softmax(preds, dim=1)[row_idx, target_samples.y]
+            labels = target_samples.train_mask.long()
         return evaluation.bc_evaluation(confidences, labels)
 
-class OfflineLiRA:
-
+class LiRA:
+    '''
+    The likelihood ratio attack from "Membership Inference Attacks From First Principles"
+    '''
     EPS = 1e-6
 
-    def __init__(self, target_model, population, config):
+    def __init__(self, target_model, population, config, online=False):
+        target_model.eval()
         self.target_model = target_model
-        self.target_model.eval()
         self.shadow_models = []
         self.population = population # Should not contain target samples.
+        self.population.to(config.device)
         self.config = config
         self.shadow_size = population.x.shape[0] // 2
         self.train_shadow_models()
@@ -164,20 +163,21 @@ class OfflineLiRA:
     def get_mean_and_std(self, target_samples):
         config = self.config
         logits = []
-        row_idx = np.arange(target_samples.x.shape[0])
+        num_target_samples = target_samples.x.shape[0]
+        row_idx = np.arange(num_target_samples)
         for shadow_model in tqdm(self.shadow_models, desc="Computing confidence values from shadow models"):
             shadow_model.eval()
             with torch.inference_mode():
                 preds = evaluation.k_hop_query(
                     model=shadow_model,
                     dataset=target_samples,
-                    query_nodes=[*range(target_samples.x.shape[0])],
+                    query_nodes=[*range(num_target_samples)],
                     num_hops=config.query_hops,
                 )
                 confs = F.softmax(preds, dim=1)[row_idx, target_samples.y]
-                logits.append(confs.logit(eps=OfflineLiRA.EPS)) # Logit scaling for approximately normal distribution.
+                logits.append(confs.logit(eps=LiRA.EPS)) # Logit scaling for approximately normal distribution.
         logits = torch.stack(logits)
-        assert logits.shape == torch.Size([len(self.shadow_models), target_samples.x.shape[0]])
+        assert logits.shape == torch.Size([len(self.shadow_models), num_target_samples])
         means = logits.mean(dim=0)
         stds = logits.std(dim=0)
         if config.experiments == 1:
@@ -192,22 +192,24 @@ class OfflineLiRA:
 
     def run_attack(self, target_samples):
         config = self.config
+        target_samples.to(config.device)
+        num_target_samples = target_samples.x.shape[0]
         means, stds = self.get_mean_and_std(target_samples)
         with torch.inference_mode():
             preds = evaluation.k_hop_query(
                 model=self.target_model,
                 dataset=target_samples,
-                query_nodes=[*range(target_samples.x.shape[0])],
+                query_nodes=[*range(num_target_samples)],
                 num_hops=config.query_hops,
             )
-            row_idx = np.arange(target_samples.y.shape[0])
-            target_logits = F.softmax(preds, dim=1)[row_idx, target_samples.y].logit(eps=OfflineLiRA.EPS)
+            row_idx = np.arange(num_target_samples)
+            target_logits = F.softmax(preds, dim=1)[row_idx, target_samples.y].logit(eps=LiRA.EPS)
 
         # In offline LiRA the test statistic is Lambda = 1 - P(Z > conf_target), where Z is a sample from
         # a normal distribution with mean and variance given by the shadow models confidences.
         # We normalize the target confidence and compute the test statistic Lambda' = 1 - P(Z > x), Z ~ Normal(0, 1).
         # We then use 1 - P(Z > x) = 0.5[1 + erf(x / sqrt(2))], Z ~ Normal(0, 1).
-        x = (target_logits - means) / (stds + OfflineLiRA.EPS)
+        x = (target_logits - means) / (stds + LiRA.EPS)
         pred_proba = 0.5 * (1 + torch.erf(x / np.sqrt(2)))
         truth = target_samples.train_mask.long()
         return evaluation.bc_evaluation(
@@ -225,6 +227,7 @@ class RMIA:
         target_model.eval()
         self.target_model = target_model
         self.population = population
+        self.population.to(config.device)
         self.config = config
         self.online = online
         self.out_models = []
@@ -303,6 +306,7 @@ class RMIA:
         return count / sizeZ
     
     def run_attack(self, target_samples):
+        target_samples.to(self.config.device)
         preds = self.score(target_samples)
         labels = target_samples.train_mask.long()
         return evaluation.bc_evaluation(preds=preds, labels=labels) # Beta parameter is sweeped when computing roc/auroc.
