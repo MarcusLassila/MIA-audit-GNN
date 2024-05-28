@@ -5,6 +5,7 @@ import pandas as pd
 import scipy.stats as stats
 import matplotlib.pyplot as plt
 from pathlib import Path
+from time import perf_counter
 
 def fresh_model(model_type, num_features, hidden_dim, num_classes, dropout=0.0):
     try:
@@ -17,6 +18,15 @@ def fresh_model(model_type, num_features, hidden_dim, num_classes, dropout=0.0):
     except AttributeError:
         raise AttributeError(f'Unsupported model {model_type}. Supported models are GCN, SGC, GraphSAGE, GAT and GIN.')
     return model
+
+def measure_execution_time(callable):
+    def wrapper(*args, **kwargs):
+        t0 = perf_counter()
+        ret = callable(*args, **kwargs)
+        t1 = perf_counter()
+        print(f"Callable '{callable.__name__}' executed in {t1 - t0:.3f} seconds.")
+        return ret
+    return wrapper
 
 def plot_training_results(res, name, savedir):
     epochs = np.array([*range(len(res['train_loss']))])
@@ -49,6 +59,7 @@ def plot_roc_loglog(fpr, tpr, name=None, savepath=None):
     plt.figure(figsize=(8, 8))
     plt.loglog(fpr, tpr)
     plt.xlim(1e-4, 1)
+    plt.ylim(1e-4, 1)
     plt.grid(True)
     plt.xlabel('FPR')
     plt.ylabel('TPR')

@@ -4,13 +4,15 @@ import numpy as np
 import torch
 import torch.nn.functional as F
 from torch_geometric.utils import k_hop_subgraph
-from torchmetrics import AUROC, F1Score, Precision, Recall, ROC
+from sklearn.metrics import roc_curve, roc_auc_score
 
 def bc_evaluation(preds, labels):
-    preds = preds.cpu()
-    labels = labels.cpu()
-    auroc = AUROC(task='binary')(preds, labels).item()
-    fpr, tpr, _ = ROC(task='binary')(preds, labels)
+    if isinstance(preds, torch.Tensor):
+        preds = preds.cpu().numpy()
+    if isinstance(labels, torch.Tensor):
+        labels = labels.cpu().numpy()
+    auroc = roc_auc_score(y_true=labels, y_score=preds)
+    fpr, tpr, _ = roc_curve(y_true=labels, y_score=preds)
     return {
         'auroc': auroc,
         'roc': (fpr, tpr),

@@ -5,10 +5,13 @@ import trainer
 import utils
 
 import numpy as np
+from scipy.stats import norm
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.utils.data import DataLoader
+from torch_geometric.data import Data
+from torch_geometric.utils import k_hop_subgraph
 from torchmetrics import Accuracy
 from tqdm.auto import tqdm
 
@@ -206,13 +209,12 @@ class LiRA:
 
         # In offline LiRA the test statistic is Lambda = 1 - P(Z > conf_target), where Z is a sample from
         # a normal distribution with mean and variance given by the shadow models confidences.
-        # We normalize the target confidence and compute the test statistic Lambda' = 1 - P(Z > x), Z ~ Normal(0, 1).
-        # We then use 1 - P(Z > x) = 0.5[1 + erf(x / sqrt(2))], Z ~ Normal(0, 1).
-        x = (target_logits - means) / (stds + LiRA.EPS)
-        pred_proba = 0.5 * (1 + torch.erf(x / np.sqrt(2)))
-        truth = target_samples.train_mask.long()
+        # We normalize the target confidence and compute the test statistic Lambda' = P(Z < x), Z ~ Normal(0, 1)
+        # For numerical stability, compute the log CDF.
+        preds = norm.logcdf(target_logits.numpy(), loc=means.numpy(), scale=stds.numpy())
+        truth = target_samples.train_mask.long().numpy()
         return evaluation.bc_evaluation(
-            preds=pred_proba,
+            preds=preds,
             labels=truth,
         )
 
