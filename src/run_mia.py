@@ -197,6 +197,7 @@ if __name__ == '__main__':
     parser.add_argument("--experiments", default=1, type=int)
     parser.add_argument("--optimizer", default="Adam", type=str)
     parser.add_argument("--num-shadow-models", default=64, type=int)
+    parser.add_argument("--rmia-offline-interp-param", default=0.4, type=float)
     parser.add_argument("--name", default="unnamed", type=str)
     parser.add_argument("--datadir", default="./data", type=str)
     parser.add_argument("--savedir", default="./results", type=str)

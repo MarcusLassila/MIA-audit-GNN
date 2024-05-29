@@ -5,7 +5,7 @@ import pandas as pd
 from pathlib import Path
 
 def add_name(params):
-    params['name'] = '-'.join([params['attack'], params['dataset'], params['split'], params['model']])
+    params['name'] = '-'.join([params['attack'], params['dataset'], params['model'], str(params["rmia_offline_interp_param"])])
 
 def main():
     with open("config.yaml", "r") as file:
@@ -14,7 +14,6 @@ def main():
     stat_frames = []
     roc_frames = []
     static_params = {
-        'batch_size': 32,
         'datadir': './data',
         'savedir': './results',
         'early_stopping': True,

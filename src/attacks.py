@@ -10,8 +10,6 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.utils.data import DataLoader
-from torch_geometric.data import Data
-from torch_geometric.utils import k_hop_subgraph
 from torchmetrics import Accuracy
 from tqdm.auto import tqdm
 
@@ -233,9 +231,9 @@ class RMIA:
         self.out_models = []
         self.out_size = self.population .x.shape[0] // 2
         self.gamma = 2 # Value used in the original paper
-        self.a = 0.3 # Tune me
+        self.a = config.rmia_offline_interp_param
         self.train_out_models()
-        
+
     def train_out_models(self):
         config = self.config
         criterion = Accuracy(task="multiclass", num_classes=self.population.num_classes).to(config.device)
