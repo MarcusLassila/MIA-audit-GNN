@@ -5,7 +5,7 @@ import pandas as pd
 from pathlib import Path
 
 def add_name(params):
-    params['name'] = '-'.join([params['attack'], params['dataset'], params['model'], str(params["rmia_offline_interp_param"])])
+    params['name'] = '-'.join([params['attack'], params['dataset'], params['model']])
 
 def main():
     with open("config.yaml", "r") as file:
