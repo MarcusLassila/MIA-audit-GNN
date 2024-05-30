@@ -165,7 +165,8 @@ class LiRA:
         logits = []
         num_target_samples = target_samples.x.shape[0]
         row_idx = np.arange(num_target_samples)
-        for shadow_model in tqdm(self.shadow_models, desc="Computing confidence values from shadow models"):
+        desc=f"Computing confidence values from shadow models. {next(self.shadow_models[0].parameters()).device} device"
+        for shadow_model in tqdm(self.shadow_models, desc=desc):
             shadow_model.eval()
             with torch.inference_mode():
                 preds = evaluation.k_hop_query(
@@ -268,7 +269,7 @@ class RMIA:
         num_target_nodes = dataset.x.shape[0]
         row_idx = np.arange(num_target_nodes)
         out_confidences = []
-        for shadow_model in tqdm(self.out_models, desc="Querying out models"):
+        for shadow_model in tqdm(self.out_models, desc=f"Querying out models. {next(self.out_models[0].parameters()).device} device"):
             shadow_model.eval()
             with torch.inference_mode():
                 preds = evaluation.k_hop_query(

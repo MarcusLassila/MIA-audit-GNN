@@ -6,7 +6,7 @@ from copy import deepcopy
 from dataclasses import dataclass
 from typing import Callable, Union
 
-EARLY_STOPPING_THRESHOLD = 10 # Number of consecutive epochs with worse than the best seen validation set loss before early stopping.
+EARLY_STOPPING_THRESHOLD = 20 # Number of consecutive epochs with worse than the best seen validation set loss before early stopping.
 
 ArrayType = Union[np.ndarray, torch.tensor]
 
