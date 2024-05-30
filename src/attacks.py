@@ -210,7 +210,11 @@ class LiRA:
         # a normal distribution with mean and variance given by the shadow models confidences.
         # We normalize the target confidence and compute the test statistic Lambda' = P(Z < x), Z ~ Normal(0, 1)
         # For numerical stability, compute the log CDF.
-        preds = norm.logcdf(target_logits.numpy(), loc=means.numpy(), scale=stds.numpy())
+        preds = norm.logcdf(
+            target_logits.cpu().numpy(),
+            loc=means.cpu().numpy(),
+            scale=stds.cpu().numpy()
+        )
         truth = target_samples.train_mask.long().numpy()
         return evaluation.bc_evaluation(
             preds=preds,
