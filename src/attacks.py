@@ -215,7 +215,7 @@ class LiRA:
             loc=means.cpu().numpy(),
             scale=stds.cpu().numpy()
         )
-        truth = target_samples.train_mask.long().numpy()
+        truth = target_samples.train_mask.long().cpu().numpy()
         return evaluation.bc_evaluation(
             preds=preds,
             labels=truth,
