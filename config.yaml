@@ -4,7 +4,7 @@ basic-shadow-cora-GCN:
   dataset: "cora"
   split: "sampled"
   model: "GCN"
-  epochs_target: 100
+  epochs_target: 200
   epochs_attack: 100
   hidden_dim_target: 256
   hidden_dim_attack: [128, 64]
@@ -17,7 +17,7 @@ confidence-cora-GCN:
   dataset: "cora"
   split: "sampled"
   model: "GCN"
-  epochs_target: 100
+  epochs_target: 200
   hidden_dim_target: 256
   lr: 0.001
   dropout: 0.2
@@ -26,7 +26,7 @@ LiRA-cora-GCN:
   attack: "lira"
   dataset: "cora"
   model: "GCN"
-  epochs_target: 100
+  epochs_target: 200
   hidden_dim_target: 256
   num_shadow_models: 128
   lr: 0.001
@@ -36,7 +36,7 @@ RMIA-cora-GCN:
   attack: "rmia"
   dataset: "cora"
   model: "GCN"
-  epochs_target: 100
+  epochs_target: 200
   hidden_dim_target: 256
   num_shadow_models: 128
   lr: 0.001

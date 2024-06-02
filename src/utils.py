@@ -55,7 +55,7 @@ def plot_training_results(res, name, savedir):
     plt.savefig(f"{savedir}/training_results_{name}.png")
     plt.close()
 
-def plot_roc_loglog(fpr, tpr, name=None, savepath=None):
+def plot_roc_loglog(fpr, tpr, title=None, savepath=None):
     plt.figure(figsize=(8, 8))
     plt.loglog(fpr, tpr)
     plt.xlim(1e-4, 1)
@@ -63,7 +63,7 @@ def plot_roc_loglog(fpr, tpr, name=None, savepath=None):
     plt.grid(True)
     plt.xlabel('FPR')
     plt.ylabel('TPR')
-    plt.title(name)
+    plt.title(title)
     if savepath:
         savedir = '/'.join(savepath.split('/')[:-1])
         Path(savedir).mkdir(parents=True, exist_ok=True)
@@ -72,12 +72,32 @@ def plot_roc_loglog(fpr, tpr, name=None, savepath=None):
         plt.show()
     plt.close()
 
-def plot_roc_csv(filepath, savepath=None):
+def plot_multi_roc_loglog(fprs, tprs, title=None, savepath=None):
+    plt.figure(figsize=(8, 8))
+    for i, (fpr, tpr) in enumerate(zip(fprs, tprs)):
+        plt.loglog(fpr, tpr, label=f'{i + 1}')
+    plt.xlim(1e-4, 1)
+    plt.ylim(1e-4, 1)
+    plt.grid(True)
+    plt.xlabel('FPR')
+    plt.ylabel('TPR')
+    plt.legend()
+    plt.title(title)
+    if savepath:
+        savedir = '/'.join(savepath.split('/')[:-1])
+        Path(savedir).mkdir(parents=True, exist_ok=True)
+        plt.savefig(savepath)
+    else:
+        plt.show()
+    plt.close()
+
+def plot_roc_csv(filepath, savedir=None):
     df = pd.read_csv(filepath, sep=',')
-    for fpr in filter(lambda s: s.endswith('fpr'), df.keys()):
-        name = fpr[:-4]
-        tpr = name + "_tpr"
-        plot_roc_loglog(df[fpr], df[tpr], name=name, savepath=savepath)
+    for s in df.keys():
+        if s.endswith('fpr'):
+            name = s[:-4]
+            t = name + "_tpr"
+            plot_roc_loglog(df[s], df[t], title=name, savepath=f'{savedir}/{name}.png')
 
 def plot_histogram_and_fitted_gaussian(x, mean, std, bins=10, savepath=None):
     plt.figure(figsize=(8, 8))

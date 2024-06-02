@@ -18,7 +18,8 @@ def main():
         'savedir': './results',
         'early_stopping': True,
         'optimizer': 'Adam',
-        'experiments': 10,
+        'experiments': 5,
+        'make_plots': True,
     }
     for _, params in config.items():
         params.update(**static_params)
@@ -37,4 +38,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-    # utils.plot_roc_csv("./results/rocs.csv")

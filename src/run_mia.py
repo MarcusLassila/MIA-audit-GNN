@@ -5,6 +5,7 @@ import trainer
 import utils
 
 import argparse
+import numpy as np
 import pandas as pd
 import torch
 import torch.nn.functional as F
@@ -85,8 +86,11 @@ class MembershipInferenceExperiment:
         train_scores, test_scores = [], []
         aurocs = []
         best_auroc = 0
+        best_roc = None
+        fprs, tprs = [], []
         for i in range(config.experiments):
             print(f'Running experiment {i + 1}/{config.experiments}.')
+            self.target_model.reset_parameters() # Reset and re-train target model for each experiment.
 
             if config.attack == "basic-shadow":
                 target_dataset, shadow_dataset = datasetup.target_shadow_split(dataset, split=config.split)
@@ -144,12 +148,17 @@ class MembershipInferenceExperiment:
             }
             metrics = dict(target_scores, **metrics)
 
+            fpr, tpr = metrics['roc']
+            fprs.append(fpr)
+            tprs.append(tpr)
             if best_auroc < metrics['auroc']:
                 best_auroc = metrics['auroc']
-                fpr, tpr = metrics['roc']
+                best_roc = metrics['roc']
+
             train_scores.append(metrics['train_score'])
             test_scores.append(metrics['test_score'])
             aurocs.append(metrics['auroc'])
+
         if config.experiments > 1:
             stats = {
                 'train_acc_mean': [mean(train_scores)],
@@ -165,11 +174,15 @@ class MembershipInferenceExperiment:
                 'test_acc': test_scores,
                 'auroc': aurocs,
             }
+
         stat_df = pd.DataFrame(stats, index=[config.name])
-        roc_df = pd.DataFrame({f'{config.name}_fpr': fpr, f'{config.name}_tpr': tpr})
-        if config.experiments == 1:
-            savepath = f'{config.savedir}/{config.name}_roc_loglog.png'
-            utils.plot_roc_loglog(fpr, tpr, savepath=savepath) # Plot the ROC curve for sample with highest AUROC.
+        roc_df = pd.DataFrame({f'{config.name}_fpr': fpr, f'{config.name}_tpr': tpr}) # TODO: save fprs and tprs.
+        if config.make_plots:
+            prefix = f'{config.savedir}/{config.name}_roc_loglog_'
+            savepath_best = prefix + 'best.png'
+            savepath_multi = prefix + 'multi.png'
+            utils.plot_roc_loglog(fpr, tpr, savepath=savepath_best) # Plot the ROC curve for sample with highest AUROC.
+            utils.plot_multi_roc_loglog(fprs, tprs, savepath=savepath_multi)
         return stat_df, roc_df
 
 
@@ -197,12 +210,13 @@ if __name__ == '__main__':
     parser.add_argument("--experiments", default=1, type=int)
     parser.add_argument("--optimizer", default="Adam", type=str)
     parser.add_argument("--num-shadow-models", default=64, type=int)
-    parser.add_argument("--rmia-offline-interp-param", default=0.4, type=float)
+    parser.add_argument("--rmia-offline-interp-param", default=0.6, type=float)
     parser.add_argument("--name", default="unnamed", type=str)
     parser.add_argument("--datadir", default="./data", type=str)
     parser.add_argument("--savedir", default="./results", type=str)
     args = parser.parse_args()
     config = vars(args)
+    config['make_plots'] = True
     print('Running MIA experiment.')
     print(Config(config))
     print()
