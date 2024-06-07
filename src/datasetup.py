@@ -50,40 +50,40 @@ def extract_subgraph(dataset, node_index, train_frac=0.5, val_frac=0.2):
         train_mask=train_mask,
         val_mask=val_mask,
         test_mask=test_mask,
-        num_classes=dataset.num_classes, # The number of classes is the same as for the overall dataset, even if some class would not be represented in the sample.
+        num_classes=dataset.num_classes,
         num_features=dataset.num_features,
         name=dataset.name,
     )
 
-def sample_subgraph(dataset, num_nodes, train_frac=0.5, val_frac=0.2):
+def sample_subgraph(dataset, num_nodes, train_frac=0.5, val_frac=0.2, keep_class_proportions=True):
     total_num_nodes = dataset.x.shape[0]
     assert 0 < num_nodes <= total_num_nodes
-    node_index = torch.randperm(total_num_nodes)[:num_nodes]
-    edge_index, _ = subgraph(
-        subset=node_index,
-        edge_index=dataset.edge_index,
-        relabel_nodes=True,
-        num_nodes=total_num_nodes,
-    )
-    num_train_nodes = int(train_frac * num_nodes)
-    num_val_nodes = int(val_frac * num_nodes)
-    train_index = torch.arange(0, num_train_nodes)
-    val_index = torch.arange(num_train_nodes, num_train_nodes + num_val_nodes)
-    test_index = torch.arange(num_train_nodes + num_val_nodes, num_nodes)
-    train_mask = index_to_mask(train_index, num_nodes)
-    val_mask = index_to_mask(val_index, num_nodes)
-    test_mask = index_to_mask(test_index, num_nodes)
-    return Data(
-        x=dataset.x[node_index],
-        edge_index=edge_index,
-        y=dataset.y[node_index],
-        train_mask=train_mask,
-        val_mask=val_mask,
-        test_mask=test_mask,
-        num_classes=dataset.num_classes, # The number of classes is the same as for the overall dataset, even if some class would not be represented in the sample.
-        num_features=dataset.num_features,
-        name=dataset.name,
-    )
+    node_frac = num_nodes / total_num_nodes
+    randomized_index = torch.randperm(total_num_nodes)
+    if keep_class_proportions:
+        node_index = []
+        for c in range(dataset.num_classes):
+            idx = (dataset.y[randomized_index] == c).nonzero().squeeze(dim=1)
+            n = int(len(idx) * node_frac)
+            node_index.append(idx[:n])
+        node_index = torch.cat(node_index)
+    else:
+        node_index = randomized_index[:num_nodes]
+    return extract_subgraph(dataset, node_index, train_frac=train_frac, val_frac=val_frac)
+
+def disjoint_split(dataset, balance=0.5):
+    node_index_A = []
+    node_index_B = []
+    num_nodes = dataset.x.shape[0]
+    randomized_index = torch.randperm(num_nodes)
+    for c in range(dataset.num_classes):
+        idx = (dataset.y[randomized_index] == c).nonzero().squeeze(dim=1)
+        n = int(len(idx) * balance)
+        node_index_A.append(idx[:n])
+        node_index_B.append(idx[n:])
+    node_index_A = torch.cat(node_index_A)
+    node_index_B = torch.cat(node_index_B)
+    return node_index_A, node_index_B
 
 def target_shadow_split(dataset, split="sampled", target_frac=0.5, shadow_frac=0.5):
     num_nodes = dataset.x.shape[0]
@@ -95,13 +95,9 @@ def target_shadow_split(dataset, split="sampled", target_frac=0.5, shadow_frac=0
         shadow_set = sample_subgraph(dataset, shadow_size)
     elif split == "disjoint":
         assert 0.0 < target_frac + shadow_frac <= 1.0
-        target_size = int(num_nodes * target_frac)
-        shadow_size = int(num_nodes * shadow_frac)
-        node_index = torch.randperm(num_nodes)
-        target_index = node_index[:target_size]
-        shadow_index = node_index[target_size: target_size + shadow_size]
+        target_index, shadow_index = disjoint_split(dataset, balance=target_frac)
         target_set = extract_subgraph(dataset, target_index)
         shadow_set = extract_subgraph(dataset, shadow_index)
-    elif split == "TSTF":
-        target_set, shadow_set = target_shadow_split(dataset, split="sampled", target_frac=1.0, shadow_frac=1.0)
+    else:
+        raise ValueError(f"Unsupported split: {split}")
     return target_set, shadow_set
