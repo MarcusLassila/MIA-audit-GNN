@@ -213,7 +213,7 @@ class LiRA:
         preds = norm.logcdf(
             target_logits.cpu().numpy(),
             loc=means.cpu().numpy(),
-            scale=stds.cpu().numpy()
+            scale=stds.cpu().numpy() + LiRA.EPS,
         )
         truth = target_samples.train_mask.long().cpu().numpy()
         return evaluation.bc_evaluation(

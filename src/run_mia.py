@@ -45,6 +45,8 @@ class MembershipInferenceExperiment:
             dataset.name == "CoraFull"
         elif config.dataset == "citeseer":
             dataset = torch_geometric.datasets.Planetoid(root=root, name="CiteSeer")
+        elif config.dataset == "chameleon":
+            dataset = torch_geometric.datasets.WikipediaNetwork(root=root, name="chameleon")
         elif config.dataset == "pubmed":
             dataset = torch_geometric.datasets.Planetoid(root=root, name="PubMed")
         elif self.config.dataset == "flickr":
@@ -179,10 +181,13 @@ class MembershipInferenceExperiment:
         roc_df = pd.DataFrame({f'{config.name}_fpr': fpr, f'{config.name}_tpr': tpr}) # TODO: save fprs and tprs.
         if config.make_plots:
             prefix = f'{config.savedir}/{config.name}_roc_loglog_'
-            savepath_best = prefix + 'best.png'
-            savepath_multi = prefix + 'multi.png'
-            utils.plot_roc_loglog(fpr, tpr, savepath=savepath_best) # Plot the ROC curve for sample with highest AUROC.
-            utils.plot_multi_roc_loglog(fprs, tprs, savepath=savepath_multi)
+            if config.experiments > 1:
+                savepath_best = prefix + 'best.png'
+                savepath_multi = prefix + 'multi.png'
+                utils.plot_roc_loglog(fpr, tpr, savepath=savepath_best) # Plot the ROC curve for sample with highest AUROC.
+                utils.plot_multi_roc_loglog(fprs, tprs, savepath=savepath_multi)
+            else:
+                utils.plot_roc_loglog(fpr, tpr, savepath=prefix[:-1] + '.png')
         return stat_df, roc_df
 
 

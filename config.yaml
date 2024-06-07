@@ -1,9 +1,9 @@
 ---
-basic-shadow-cora-GCN:
+basic-shadow-chameleon-GIN:
   attack: "basic-shadow"
-  dataset: "cora"
+  dataset: "chameleon"
   split: "sampled"
-  model: "GCN"
+  model: "GIN"
   epochs_target: 200
   epochs_attack: 100
   hidden_dim_target: 256
@@ -11,35 +11,35 @@ basic-shadow-cora-GCN:
   batch_size: 32
   lr: 0.001
   dropout: 0.2
-  query_hops: 0
-confidence-cora-GCN:
+  query_hops: 2
+confidence-chameleon-GIN:
   attack: "confidence"
-  dataset: "cora"
+  dataset: "chameleon"
   split: "sampled"
-  model: "GCN"
+  model: "GIN"
   epochs_target: 200
   hidden_dim_target: 256
   lr: 0.001
   dropout: 0.2
-  query_hops: 0
-LiRA-cora-GCN:
+  query_hops: 2
+LiRA-chameleon-GIN:
   attack: "lira"
-  dataset: "cora"
-  model: "GCN"
+  dataset: "chameleon"
+  model: "GIN"
   epochs_target: 200
   hidden_dim_target: 256
   num_shadow_models: 128
   lr: 0.001
   dropout: 0.2
-  query_hops: 0
-RMIA-cora-GCN:
+  query_hops: 2
+RMIA-chameleon-GIN:
   attack: "rmia"
-  dataset: "cora"
-  model: "GCN"
+  dataset: "chameleon"
+  model: "GIN"
   epochs_target: 200
   hidden_dim_target: 256
   num_shadow_models: 128
   lr: 0.001
   dropout: 0.2
-  query_hops: 0
+  query_hops: 2
   rmia_offline_interp_param: 0.6
