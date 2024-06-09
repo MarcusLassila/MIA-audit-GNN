@@ -27,6 +27,10 @@ def create_attack_dataset(shadow_dataset, shadow_model):
     return train_dataset, test_dataset
 
 def extract_subgraph(dataset, node_index, train_frac=0.5, val_frac=0.2):
+    '''
+    Constructs a subgraph of dataset consisting of the nodes indexed in node_index with the edges linking them.
+    Masks for training/validation/testing are constructed uniformly random with the specified proportions.
+    '''
     edge_index, _ = subgraph(
         subset=node_index,
         edge_index=dataset.edge_index,
@@ -36,9 +40,10 @@ def extract_subgraph(dataset, node_index, train_frac=0.5, val_frac=0.2):
     num_nodes = len(node_index)
     num_train_nodes = int(train_frac * num_nodes)
     num_val_nodes = int(val_frac * num_nodes)
-    train_index = torch.arange(0, num_train_nodes)
-    val_index = torch.arange(num_train_nodes, num_train_nodes + num_val_nodes)
-    test_index = torch.arange(num_train_nodes + num_val_nodes, num_nodes)
+    randomized_index = torch.randperm(num_nodes)
+    train_index = randomized_index[:num_train_nodes]
+    val_index = randomized_index[num_train_nodes: num_train_nodes + num_val_nodes]
+    test_index = randomized_index[num_train_nodes + num_val_nodes:]
     train_mask = index_to_mask(train_index, num_nodes)
     val_mask = index_to_mask(val_index, num_nodes)
     test_mask = index_to_mask(test_index, num_nodes)
@@ -55,6 +60,12 @@ def extract_subgraph(dataset, node_index, train_frac=0.5, val_frac=0.2):
     )
 
 def sample_subgraph(dataset, num_nodes, train_frac=0.5, val_frac=0.2, keep_class_proportions=True):
+    '''
+    Sample a subgraph by uniformly sample a number of nodes from the graph dataset.
+    Masks for training/validation/testing are created uniformly at random with the specified proportions.
+    The keep_class_proportions flag specifies that the sampled subgraph should have about the same
+    proportions of nodes for each class as the full graph.
+    '''
     total_num_nodes = dataset.x.shape[0]
     assert 0 < num_nodes <= total_num_nodes
     node_frac = num_nodes / total_num_nodes
@@ -71,6 +82,10 @@ def sample_subgraph(dataset, num_nodes, train_frac=0.5, val_frac=0.2, keep_class
     return extract_subgraph(dataset, node_index, train_frac=train_frac, val_frac=val_frac)
 
 def disjoint_split(dataset, balance=0.5):
+    '''
+    Split the graph dataset in two disjoint subgraphs.
+    The balance the fraction of nodes to use for the first subgraph, and the second subgraph gets the remaining nodes.
+    '''
     node_index_A = []
     node_index_B = []
     num_nodes = dataset.x.shape[0]
