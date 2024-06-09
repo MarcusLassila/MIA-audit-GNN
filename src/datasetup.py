@@ -1,5 +1,4 @@
 import torch
-import torch_geometric.datasets as datasets
 from torch_geometric.data import Data
 from torch_geometric.utils import index_to_mask, subgraph
 from sklearn.model_selection import train_test_split

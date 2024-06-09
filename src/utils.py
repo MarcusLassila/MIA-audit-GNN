@@ -7,6 +7,28 @@ import matplotlib.pyplot as plt
 from pathlib import Path
 from time import perf_counter
 
+class GraphInfo:
+
+    def __init__(self, dataset):
+        self.num_nodes = dataset.x.shape[0]
+        self.num_edges = dataset.edge_index.shape[1]
+        self.num_features = dataset.num_features
+        self.num_classes = dataset.num_classes
+        self.class_counts = np.zeros(self.num_classes)
+        for c in dataset.y:
+            self.class_counts[c] += 1
+        self.class_distr = self.class_counts / self.num_nodes
+
+    def __str__(self):
+        s = (
+            f'#Nodes: {self.num_nodes}\n'
+            f'#Edges: {self.num_edges}\n'
+            f'#Features: {self.num_features}\n'
+            f'#Classes: {self.num_classes}\n'
+            f'#Class distribution: [{", ".join(f"{x:.4f}" for x in self.class_distr)}]'
+        )
+        return s
+
 def fresh_model(model_type, num_features, hidden_dim, num_classes, dropout=0.0):
     try:
         model = getattr(models, model_type)(

@@ -1,5 +1,4 @@
 import run_mia
-import utils
 import yaml
 import pandas as pd
 from pathlib import Path

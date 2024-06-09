@@ -5,7 +5,6 @@ import trainer
 import utils
 
 import argparse
-import numpy as np
 import pandas as pd
 import torch
 import torch.nn.functional as F
@@ -54,6 +53,7 @@ class MembershipInferenceExperiment:
             dataset.name = "Flickr"
         else:
             raise ValueError("Unsupported dataset!")
+        print(utils.GraphInfo(dataset))
         return dataset
 
     def train_target_model(self, dataset, plot_training_results=True):
@@ -184,6 +184,7 @@ class MembershipInferenceExperiment:
             if config.experiments > 1:
                 savepath_best = prefix + 'best.png'
                 savepath_multi = prefix + 'multi.png'
+                fpr, tpr = best_roc
                 utils.plot_roc_loglog(fpr, tpr, savepath=savepath_best) # Plot the ROC curve for sample with highest AUROC.
                 utils.plot_multi_roc_loglog(fprs, tprs, savepath=savepath_multi)
             else:
