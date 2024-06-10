@@ -165,9 +165,8 @@ class LiRA:
     
     def get_mean_and_std(self, target_samples):
         config = self.config
-        logits = []
+        hinges = []
         num_target_samples = target_samples.x.shape[0]
-        row_idx = np.arange(num_target_samples)
         desc=f"Computing confidence values from shadow models. {next(self.shadow_models[0].parameters()).device} device"
         for shadow_model in tqdm(self.shadow_models, desc=desc):
             shadow_model.eval()
@@ -178,15 +177,15 @@ class LiRA:
                     query_nodes=[*range(num_target_samples)],
                     num_hops=config.query_hops,
                 )
-                confs = F.softmax(preds, dim=1)[row_idx, target_samples.y]
-                logits.append(confs.logit(eps=LiRA.EPS)) # Logit scaling for approximately normal distribution.
-        logits = torch.stack(logits)
-        assert logits.shape == torch.Size([len(self.shadow_models), num_target_samples])
-        means = logits.mean(dim=0)
-        stds = logits.std(dim=0)
+                # Approximate logits of confidence values using the hinge loss.
+                hinges.append(utils.hinge_loss(preds, target_samples.y))
+        hinges = torch.stack(hinges)
+        assert hinges.shape == torch.Size([len(self.shadow_models), num_target_samples])
+        means = hinges.mean(dim=0)
+        stds = hinges.std(dim=0)
         if config.experiments == 1:
             utils.plot_histogram_and_fitted_gaussian(
-                x=logits[:,0].cpu().numpy(),
+                x=hinges[:,0].cpu().numpy(),
                 mean=means[0].cpu().numpy(),
                 std=stds[0].cpu().numpy(),
                 bins=max(len(self.shadow_models) // 8, 1),
@@ -206,15 +205,14 @@ class LiRA:
                 query_nodes=[*range(num_target_samples)],
                 num_hops=config.query_hops,
             )
-            row_idx = np.arange(num_target_samples)
-            target_logits = F.softmax(preds, dim=1)[row_idx, target_samples.y].logit(eps=LiRA.EPS)
+            target_hinges = utils.hinge_loss(preds, target_samples.y)
 
         # In offline LiRA the test statistic is Lambda = 1 - P(Z > conf_target), where Z is a sample from
         # a normal distribution with mean and variance given by the shadow models confidences.
         # We normalize the target confidence and compute the test statistic Lambda' = P(Z < x), Z ~ Normal(0, 1)
         # For numerical stability, compute the log CDF.
         preds = norm.logcdf(
-            target_logits.cpu().numpy(),
+            target_hinges.cpu().numpy(),
             loc=means.cpu().numpy(),
             scale=stds.cpu().numpy() + LiRA.EPS,
         )

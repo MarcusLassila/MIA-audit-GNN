@@ -4,6 +4,7 @@ import numpy as np
 import pandas as pd
 import scipy.stats as stats
 import matplotlib.pyplot as plt
+import torch
 from pathlib import Path
 from time import perf_counter
 
@@ -40,6 +41,11 @@ def fresh_model(model_type, num_features, hidden_dim, num_classes, dropout=0.0):
     except AttributeError:
         raise AttributeError(f'Unsupported model {model_type}. Supported models are GCN, SGC, GraphSAGE, GAT and GIN.')
     return model
+
+def hinge_loss(pred, target):
+    mask = torch.ones_like(pred, dtype=bool)
+    mask[np.arange(target.shape[0]), target] = False
+    return pred[~mask] - torch.max(pred[mask].reshape(target.shape[0], -1), dim=1).values
 
 def measure_execution_time(callable):
     def wrapper(*args, **kwargs):
