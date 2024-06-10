@@ -21,6 +21,7 @@ class TrainConfig:
     early_stopping: bool
     loss_fn: Callable[[ArrayType, ArrayType], float]
     lr: float
+    weight_decay: float
     optimizer: torch.optim.Optimizer
 
 def train_step_gnn(model, dataset, optimizer, loss_fn, criterion):
@@ -44,7 +45,7 @@ def valid_step_gnn(model, dataset, loss_fn, criterion):
 def train_gnn(model, dataset, config: TrainConfig, use_tqdm=True):
     model.to(config.device)
     dataset.to(config.device)
-    optimizer = config.optimizer(model.parameters(), lr=config.lr)
+    optimizer = config.optimizer(model.parameters(), lr=config.lr, weight_decay=config.weight_decay)
     loss_fn, criterion = config.loss_fn, config.criterion
     res = defaultdict(list)
     early_stopping_counter = 0
@@ -99,7 +100,7 @@ def valid_step(model, data_loader, loss_fn, criterion, device):
 
 def train_mlp(model, train_loader, valid_loader, config: TrainConfig):
     model.to(config.device)
-    optimizer = config.optimizer(model.parameters(), lr=config.lr)
+    optimizer = config.optimizer(model.parameters(), lr=config.lr, weight_decay=config.weight_decay)
     loss_fn, criterion = config.loss_fn, config.criterion
     res = defaultdict(list)
     early_stopping_counter = 0

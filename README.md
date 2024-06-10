@@ -20,7 +20,8 @@ Alternatively, run "src/run_mia.py" which only run one MIA simulation experiment
 * --epochs_target: Number of epochs to train target and shadow model.
 * --epochs-attack: Number of epochs to train the attack model.
 * --batch-size: Size of mini-batches.
-* --lr: Learning rate when training target and shadow model (attack model training is fixed to 0.001 currently).
+* --lr: Learning rate when training target and shadow models.
+* --weight_decay: Weight decay (L2 penalty) to when training traget and shadow models.
 * --dropout: Dropout rate when training target and shadow model.
 * --early-stopping: Enable early stopping when training target, shadow and attack model.
 * --hidden-dim-target: Dimension of the hidden layer of the 2-layer GNN target/shadow model.

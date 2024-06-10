@@ -66,6 +66,7 @@ class MembershipInferenceExperiment:
             early_stopping=config.early_stopping,
             loss_fn=F.cross_entropy,
             lr=config.lr,
+            weight_decay=config.weight_decay,
             optimizer=getattr(torch.optim, config.optimizer),
         )
         train_res = trainer.train_gnn(
@@ -186,7 +187,7 @@ class MembershipInferenceExperiment:
                 savepath_multi = prefix + 'multi.png'
                 fpr, tpr = best_roc
                 utils.plot_roc_loglog(fpr, tpr, savepath=savepath_best) # Plot the ROC curve for sample with highest AUROC.
-                utils.plot_multi_roc_loglog(fprs, tprs, savepath=savepath_multi)
+                utils.plot_multi_roc_loglog(fprs, tprs, test_scores, savepath=savepath_multi)
             else:
                 utils.plot_roc_loglog(fpr, tpr, savepath=prefix[:-1] + '.png')
         return stat_df, roc_df
@@ -208,6 +209,7 @@ if __name__ == '__main__':
     parser.add_argument("--epochs-target", default=100, type=int)
     parser.add_argument("--epochs-attack", default=100, type=int)
     parser.add_argument("--lr", default=1e-3, type=float)
+    parser.add_argument("--weight-decay", default=0.0, type=float)
     parser.add_argument("--dropout", default=0.2, type=float)
     parser.add_argument("--early-stopping", action=argparse.BooleanOptionalAction)
     parser.add_argument("--hidden-dim-target", default=256, type=int)

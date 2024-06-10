@@ -43,6 +43,7 @@ class BasicShadowAttack:
             early_stopping=config.early_stopping,
             loss_fn=F.cross_entropy,
             lr=config.lr,
+            weight_decay=config.weight_decay,
             optimizer=getattr(torch.optim, config.optimizer),
         )
         train_res = trainer.train_gnn(
@@ -71,6 +72,7 @@ class BasicShadowAttack:
             early_stopping=config.early_stopping,
             loss_fn=nn.CrossEntropyLoss(),
             lr=1e-3,
+            weight_decay=1e-4,
             optimizer=getattr(torch.optim, config.optimizer),
         )
         trainer.train_mlp(
@@ -141,6 +143,7 @@ class LiRA:
             early_stopping=config.early_stopping,
             loss_fn=F.cross_entropy,
             lr=config.lr,
+            weight_decay=config.weight_decay,
             optimizer=getattr(torch.optim, config.optimizer),
         )
         for _ in tqdm(range(config.num_shadow_models), desc=f"Training {config.num_shadow_models} shadow models for LiRA"):
@@ -249,6 +252,7 @@ class RMIA:
             early_stopping=config.early_stopping,
             loss_fn=F.cross_entropy,
             lr=config.lr,
+            weight_decay=config.weight_decay,
             optimizer=getattr(torch.optim, config.optimizer),
         )
         for _ in tqdm(range(config.num_shadow_models), desc=f"Training {config.num_shadow_models} out models for RMIA"):

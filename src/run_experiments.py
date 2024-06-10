@@ -4,7 +4,7 @@ import pandas as pd
 from pathlib import Path
 
 def add_name(params):
-    params['name'] = '-'.join([params['attack'], params['dataset'], params['model']])
+    params['name'] = '-'.join([params['attack'], params['dataset'], params['model'], f"{params['query_hops']}hop"])
 
 def main():
     with open("config.yaml", "r") as file:
@@ -33,7 +33,11 @@ def main():
         roc_frames.append(roc_df)
     pd.concat(stat_frames).to_csv(f'{static_params["savedir"]}/statistics.csv', sep=',')
     pd.concat(roc_frames, axis=1).to_csv(f'{static_params["savedir"]}/rocs.csv', sep=',', index=False)
-    print('Done.')
 
 if __name__ == "__main__":
     main()
+    df = pd.read_csv('./results/statistics.csv', sep=',').set_index('Unnamed: 0')
+    pd.set_option('display.max_columns', None)
+    pd.set_option('display.max_rows', None)
+    print(df)
+    print('Done.')

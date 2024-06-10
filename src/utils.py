@@ -94,10 +94,10 @@ def plot_roc_loglog(fpr, tpr, title=None, savepath=None):
         plt.show()
     plt.close()
 
-def plot_multi_roc_loglog(fprs, tprs, title=None, savepath=None):
+def plot_multi_roc_loglog(fprs, tprs, test_accs, title=None, savepath=None):
     plt.figure(figsize=(8, 8))
-    for i, (fpr, tpr) in enumerate(zip(fprs, tprs)):
-        plt.loglog(fpr, tpr, label=f'{i + 1}')
+    for fpr, tpr, acc in zip(fprs, tprs, test_accs):
+        plt.loglog(fpr, tpr, label=f'acc: {acc:.4f}')
     plt.xlim(1e-4, 1)
     plt.ylim(1e-4, 1)
     plt.grid(True)
