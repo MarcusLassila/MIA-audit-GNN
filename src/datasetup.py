@@ -1,4 +1,5 @@
 import torch
+import torch_geometric
 from torch_geometric.data import Data
 from torch_geometric.utils import index_to_mask, subgraph
 from sklearn.model_selection import train_test_split
@@ -115,3 +116,23 @@ def target_shadow_split(dataset, split="sampled", target_frac=0.5, shadow_frac=0
     else:
         raise ValueError(f"Unsupported split: {split}")
     return target_set, shadow_set
+
+def parse_dataset(root, name):
+    match name:
+        case "cora":
+            dataset = torch_geometric.datasets.Planetoid(root=root, name="Cora")
+        case "corafull":
+            dataset = torch_geometric.datasets.CoraFull(root=root)
+            dataset.name == "CoraFull"
+        case"citeseer":
+            dataset = torch_geometric.datasets.Planetoid(root=root, name="CiteSeer")
+        case "chameleon":
+            dataset = torch_geometric.datasets.WikipediaNetwork(root=root, name="chameleon")
+        case "pubmed":
+            dataset = torch_geometric.datasets.Planetoid(root=root, name="PubMed")
+        case "flickr":
+            dataset = torch_geometric.datasets.Flickr(root=root)
+            dataset.name = "Flickr"
+        case _:
+            raise ValueError("Unsupported dataset!")
+    return dataset

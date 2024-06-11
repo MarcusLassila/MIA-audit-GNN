@@ -11,6 +11,7 @@ from time import perf_counter
 class GraphInfo:
 
     def __init__(self, dataset):
+        self.name = dataset.name
         self.num_nodes = dataset.x.shape[0]
         self.num_edges = dataset.edge_index.shape[1]
         self.num_features = dataset.num_features
@@ -22,11 +23,12 @@ class GraphInfo:
 
     def __str__(self):
         s = (
+            f'Dataset: {self.name}\n'
             f'#Nodes: {self.num_nodes}\n'
             f'#Edges: {self.num_edges}\n'
             f'#Features: {self.num_features}\n'
             f'#Classes: {self.num_classes}\n'
-            f'#Class distribution: [{", ".join(f"{x:.4f}" for x in self.class_distr)}]'
+            f'#Class distribution: [{", ".join(f"{x:.4f}" for x in self.class_distr)}]\n'
         )
         return s
 

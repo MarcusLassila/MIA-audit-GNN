@@ -1,5 +1,6 @@
 import attacks
 import datasetup
+import hypertuner
 import evaluation
 import trainer
 import utils
@@ -8,7 +9,6 @@ import argparse
 import pandas as pd
 import torch
 import torch.nn.functional as F
-import torch_geometric.datasets
 from torchmetrics import Accuracy
 from statistics import mean, stdev
 
@@ -24,64 +24,59 @@ class MembershipInferenceExperiment:
 
     def __init__(self, config):
         self.config = Config(config)
-        self.dataset = self.parse_dataset()
-        self.target_model = utils.fresh_model(
+        self.dataset = datasetup.parse_dataset(root=self.config.datadir, name=self.config.dataset)
+        self.criterion = Accuracy(task="multiclass", num_classes=self.dataset.num_classes).to(self.config.device)
+        print(utils.GraphInfo(self.dataset))
+
+    def train_target_model(self, dataset, plot_training_results=True):
+        config = self.config
+
+        if self.config.grid_search:
+            opt_hyperparams = hypertuner.grid_search(
+                dataset=dataset,
+                model_type=self.config.model,
+                epochs=self.config.epochs_target,
+                early_stopping=self.config.early_stopping,
+                optimizer=self.config.optimizer,
+                hidden_dim=self.config.hidden_dim_target,
+            )
+            print(f'Grid search results: {opt_hyperparams}')
+            lr, weight_decay, dropout = opt_hyperparams.values()
+        else:
+            lr, weight_decay, dropout = config.lr, config.weight_decay, config.dropout
+
+        target_model = utils.fresh_model(
             model_type=self.config.model,
             num_features=self.dataset.num_features,
             hidden_dim=self.config.hidden_dim_target,
             num_classes=self.dataset.num_classes,
-            dropout=self.config.dropout,
+            dropout=dropout,
         )
-        self.criterion = Accuracy(task="multiclass", num_classes=self.dataset.num_classes).to(self.config.device)
 
-    def parse_dataset(self):
-        config = self.config
-        root = config.datadir
-        if config.dataset == "cora":
-            dataset = torch_geometric.datasets.Planetoid(root=root, name="Cora")
-        elif config.dataset == "corafull":
-            dataset = torch_geometric.datasets.CoraFull(root=root)
-            dataset.name == "CoraFull"
-        elif config.dataset == "citeseer":
-            dataset = torch_geometric.datasets.Planetoid(root=root, name="CiteSeer")
-        elif config.dataset == "chameleon":
-            dataset = torch_geometric.datasets.WikipediaNetwork(root=root, name="chameleon")
-        elif config.dataset == "pubmed":
-            dataset = torch_geometric.datasets.Planetoid(root=root, name="PubMed")
-        elif self.config.dataset == "flickr":
-            dataset = torch_geometric.datasets.Flickr(root=root)
-            dataset.name = "Flickr"
-        else:
-            raise ValueError("Unsupported dataset!")
-        print(utils.GraphInfo(dataset))
-        return dataset
-
-    def train_target_model(self, dataset, plot_training_results=True):
-        config = self.config
-        
         train_config = trainer.TrainConfig(
             criterion=self.criterion,
             device=config.device,
             epochs=config.epochs_target,
             early_stopping=config.early_stopping,
             loss_fn=F.cross_entropy,
-            lr=config.lr,
-            weight_decay=config.weight_decay,
+            lr=lr,
+            weight_decay=weight_decay,
             optimizer=getattr(torch.optim, config.optimizer),
         )
         train_res = trainer.train_gnn(
-            model=self.target_model,
+            model=target_model,
             dataset=dataset,
             config=train_config,
         )
         evaluation.evaluate_graph_training(
-            model=self.target_model,
+            model=target_model,
             dataset=dataset,
             criterion=train_config.criterion,
             training_results=train_res if plot_training_results else None,
             plot_title="Target model",
             savedir=config.savedir,
         )
+        return target_model
 
     def run(self):
         config = self.config
@@ -93,22 +88,21 @@ class MembershipInferenceExperiment:
         fprs, tprs = [], []
         for i in range(config.experiments):
             print(f'Running experiment {i + 1}/{config.experiments}.')
-            self.target_model.reset_parameters() # Reset and re-train target model for each experiment.
 
             if config.attack == "basic-shadow":
                 target_dataset, shadow_dataset = datasetup.target_shadow_split(dataset, split=config.split)
-                self.train_target_model(target_dataset)
+                target_model = self.train_target_model(target_dataset)
                 metrics = attacks.BasicShadowAttack(
-                    target_model=self.target_model,
+                    target_model=target_model,
                     shadow_dataset=shadow_dataset,
                     config=config,
                 ).run_attack(target_samples=target_dataset)
 
             elif config.attack == "confidence":
                 target_dataset = datasetup.sample_subgraph(dataset, num_nodes=dataset.x.shape[0]//2)
-                self.train_target_model(target_dataset)
+                target_model = self.train_target_model(target_dataset)
                 metrics = attacks.ConfidenceAttack(
-                    target_model=self.target_model,
+                    target_model=target_model,
                     config=config,
                 ).run_attack(target_samples=target_dataset)
 
@@ -116,18 +110,18 @@ class MembershipInferenceExperiment:
                 # In offline LiRA, the shadow models are trained on datasets that does not contain the target sample.
                 # Therefore we make a disjoint split and train shadow models on one part, and attack samples of the other part.
                 target_dataset, population = datasetup.target_shadow_split(dataset, split="disjoint", target_frac=0.5, shadow_frac=0.5)
-                self.train_target_model(target_dataset)
+                target_model = self.train_target_model(target_dataset)
                 metrics = attacks.LiRA(
-                    target_model=self.target_model,
+                    target_model=target_model,
                     population=population,
                     config=config,
                 ).run_attack(target_samples=target_dataset)
                 
             elif config.attack == "rmia":
                 target_dataset, population = datasetup.target_shadow_split(dataset, split="disjoint", target_frac=0.5, shadow_frac=0.5)
-                self.train_target_model(target_dataset)
+                target_model = self.train_target_model(target_dataset)
                 metrics = attacks.RMIA(
-                    target_model=self.target_model,
+                    target_model=target_model,
                     population=population,
                     config=config,
                 ).run_attack(target_samples=target_dataset)
@@ -137,13 +131,13 @@ class MembershipInferenceExperiment:
 
             target_scores = {
                 'train_score': evaluation.evaluate_graph_model(
-                    model=self.target_model,
+                    model=target_model,
                     dataset=target_dataset,
                     mask=target_dataset.train_mask,
                     criterion=self.criterion,
                 ),
                 'test_score': evaluation.evaluate_graph_model(
-                    model=self.target_model,
+                    model=target_model,
                     dataset=target_dataset,
                     mask=target_dataset.test_mask,
                     criterion=self.criterion,
@@ -206,8 +200,9 @@ if __name__ == '__main__':
     parser.add_argument("--split", default="sampled", type=str)
     parser.add_argument("--model", default="GCN", type=str)
     parser.add_argument("--batch-size", default=32, type=int)
-    parser.add_argument("--epochs-target", default=100, type=int)
+    parser.add_argument("--epochs-target", default=500, type=int)
     parser.add_argument("--epochs-attack", default=100, type=int)
+    parser.add_argument("--grid-search", action=argparse.BooleanOptionalAction)
     parser.add_argument("--lr", default=1e-3, type=float)
     parser.add_argument("--weight-decay", default=0.0, type=float)
     parser.add_argument("--dropout", default=0.2, type=float)

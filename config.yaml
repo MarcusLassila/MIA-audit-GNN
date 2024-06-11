@@ -5,45 +5,34 @@ basic-shadow-cora-GCN:
   split: "sampled"
   model: "GCN"
   epochs_target: 500
-  epochs_attack: 500
-  hidden_dim_target: 32
+  epochs_attack: 200
   hidden_dim_attack: [256, 64]
   batch_size: 32
-  lr: 0.001
+  lr: 0.01
   weight_decay: 0.0001
   dropout: 0.5
-  query_hops: 2
 confidence-cora-GCN:
   attack: "confidence"
   dataset: "cora"
   split: "sampled"
   model: "GCN"
   epochs_target: 500
-  hidden_dim_target: 32
-  lr: 0.001
-  weight_decay: 0.0001
-  dropout: 0.5
-  query_hops: 2
 LiRA-cora-GCN:
   attack: "lira"
   dataset: "cora"
   model: "GCN"
   epochs_target: 500
-  hidden_dim_target: 32
-  num_shadow_models: 128
-  lr: 0.001
+  lr: 0.01
   weight_decay: 0.0001
   dropout: 0.5
-  query_hops: 2
+  num_shadow_models: 128
 RMIA-cora-GCN:
   attack: "rmia"
   dataset: "cora"
   model: "GCN"
   epochs_target: 500
-  hidden_dim_target: 32
   num_shadow_models: 128
-  lr: 0.001
+  lr: 0.01
   weight_decay: 0.0001
   dropout: 0.5
-  query_hops: 2
   rmia_offline_interp_param: 0.6

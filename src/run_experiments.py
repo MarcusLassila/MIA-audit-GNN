@@ -16,9 +16,12 @@ def main():
         'datadir': './data',
         'savedir': './results',
         'early_stopping': True,
+        'grid_search': True,
         'optimizer': 'Adam',
         'experiments': 5,
         'make_plots': True,
+        'hidden_dim_target': 32,
+        'query_hops': 0,
     }
     for _, params in config.items():
         params.update(**static_params)
