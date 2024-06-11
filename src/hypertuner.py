@@ -1,3 +1,5 @@
+import attacks
+import datasetup
 import trainer
 import utils
 
@@ -59,3 +61,75 @@ def grid_search(
             }
 
     return opt_hyperparams
+
+def rmia_offline_interp_param_search(
+    dataset: str,
+    model_type: str,
+    datadir: str,
+):
+    dataset = datasetup.parse_dataset(root=datadir, name=dataset)
+    target_samples, population = datasetup.target_shadow_split(dataset=dataset, split='disjoint', target_frac=0.5, shadow_frac=0.5)
+    
+    device = 'cuda' if torch.cuda.is_available() else 'cpu'
+    config = utils.Config({
+        'device': device,
+        'dataset': dataset,
+        'datadir': datadir,
+        'model': model_type,
+        'epochs_target': 500,
+        'dropout': 0.5,
+        'early_stopping': True,
+        'lr': 1e-2,
+        'weight_decay': 1e-4,
+        'optimizer': 'Adam',
+        'hidden_dim_target': 32,
+        'query_hops': 0,
+        'num_shadow_models': 8,
+    })
+    target_model = utils.fresh_model(
+        model_type=model_type,
+        num_features=dataset.num_features,
+        hidden_dim=config.hidden_dim_target,
+        num_classes=dataset.num_classes,
+        dropout=config.dropout,
+    )
+    criterion = Accuracy(task="multiclass", num_classes=dataset.num_classes).to(device)
+    train_config = trainer.TrainConfig(
+        criterion=criterion,
+        device=device,
+        epochs=config.epochs_target,
+        early_stopping=config.early_stopping,
+        loss_fn=F.cross_entropy,
+        lr=config.lr,
+        weight_decay=config.weight_decay,
+        optimizer=torch.optim.Adam,
+    )
+    _ = trainer.train_gnn(
+        model=target_model,
+        dataset=dataset,
+        config=train_config,
+    )
+
+    best_auroc = 0.0
+    opt_interp_param = 0.0
+    aurocs = []
+    for interp_param in map(0.1.__mul__, range(0, 11)):
+        auroc = attacks.RMIA(
+            target_model=target_model,
+            population=population,
+            config=config,
+            interp_param=interp_param,
+        ).run_attack(target_samples=target_samples)['auroc']
+        aurocs.append(auroc)
+        if auroc > best_auroc:
+            best_auroc = auroc
+            opt_interp_param = interp_param
+    return opt_interp_param
+
+if __name__ == '__main__':
+    interp_param = rmia_offline_interp_param_search(
+        dataset='cora',
+        model_type='GCN',
+        datadir='./data',
+    )
+    print(f"RMIA offline interpolation parameter: {interp_param}")

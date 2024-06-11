@@ -1,4 +1,6 @@
+import hypertuner
 import run_mia
+
 import yaml
 import pandas as pd
 from pathlib import Path
@@ -16,8 +18,11 @@ def main():
         'datadir': './data',
         'savedir': './results',
         'early_stopping': True,
-        'grid_search': True,
+        'grid_search': False,
         'optimizer': 'Adam',
+        'lr': 0.01,
+        'weight_decay': 1e-4,
+        'dropout': 0.5,
         'experiments': 5,
         'make_plots': True,
         'hidden_dim_target': 32,

@@ -228,16 +228,15 @@ class RMIA:
     Only the offline attack is currently supported.
     '''
 
-    def __init__(self, target_model, population, config, online=False):
+    def __init__(self, target_model, population, config):
         target_model.eval()
         self.target_model = target_model
         self.population = population
         self.config = config
-        self.online = online
         self.out_models = []
         self.out_size = self.population .x.shape[0] // 2
         self.gamma = 2 # Value used in the original paper
-        self.a = config.rmia_offline_interp_param
+        self.interp_param = config.rmia_offline_interp_param
         self.train_out_models()
 
     def train_out_models(self):
@@ -287,7 +286,7 @@ class RMIA:
                 out_confidences.append(F.softmax(preds, dim=1)[row_idx, dataset.y])
         out_confidences = torch.stack(out_confidences)
         pr_out = out_confidences.mean(dim=0)
-        pr = 0.5 * ((self.a + 1) * pr_out + 1 - self.a) # Heuristic to approximate the average of in and out, from out only.
+        pr = 0.5 * ((self.interp_param + 1) * pr_out + 1 - self.interp_param) # Heuristic to approximate the average of in and out, from out only.
 
         with torch.inference_mode():
             preds = evaluation.k_hop_query(

@@ -12,18 +12,12 @@ import torch.nn.functional as F
 from torchmetrics import Accuracy
 from statistics import mean, stdev
 
-class Config:
 
-    def __init__(self, dictionary):
-        self.__dict__.update(dictionary)
-    
-    def __str__(self):
-        return '\n'.join(f'{k}: {v}'.replace('_', ' ') for k, v in self.__dict__.items())
 
 class MembershipInferenceExperiment:
 
     def __init__(self, config):
-        self.config = Config(config)
+        self.config = utils.Config(config)
         self.dataset = datasetup.parse_dataset(root=self.config.datadir, name=self.config.dataset)
         self.criterion = Accuracy(task="multiclass", num_classes=self.dataset.num_classes).to(self.config.device)
         print(utils.GraphInfo(self.dataset))
@@ -213,7 +207,7 @@ if __name__ == '__main__':
     parser.add_argument("--experiments", default=1, type=int)
     parser.add_argument("--optimizer", default="Adam", type=str)
     parser.add_argument("--num-shadow-models", default=128, type=int)
-    parser.add_argument("--rmia-offline-interp-param", default=0.6, type=float)
+    parser.add_argument("--rmia-offline-interp-param", default=0.1, type=float)
     parser.add_argument("--name", default="unnamed", type=str)
     parser.add_argument("--datadir", default="./data", type=str)
     parser.add_argument("--savedir", default="./results", type=str)
@@ -221,7 +215,7 @@ if __name__ == '__main__':
     config = vars(args)
     config['make_plots'] = True
     print('Running MIA experiment.')
-    print(Config(config))
+    print(utils.Config(config))
     print()
     stat_df, roc_df = main(config)
     print('Attack statistics:')

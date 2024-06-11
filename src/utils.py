@@ -8,6 +8,14 @@ import torch
 from pathlib import Path
 from time import perf_counter
 
+class Config:
+
+    def __init__(self, dictionary):
+        self.__dict__.update(dictionary)
+
+    def __str__(self):
+        return '\n'.join(f'{k}: {v}'.replace('_', ' ') for k, v in self.__dict__.items())
+
 class GraphInfo:
 
     def __init__(self, dataset):
