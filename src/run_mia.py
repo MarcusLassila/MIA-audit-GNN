@@ -144,7 +144,6 @@ class MembershipInferenceExperiment:
             tprs.append(tpr)
             if best_auroc < metrics['auroc']:
                 best_auroc = metrics['auroc']
-                best_roc = metrics['roc']
 
             train_scores.append(metrics['train_score'])
             test_scores.append(metrics['test_score'])
@@ -169,15 +168,8 @@ class MembershipInferenceExperiment:
         stat_df = pd.DataFrame(stats, index=[config.name])
         roc_df = pd.DataFrame({f'{config.name}_fpr': fpr, f'{config.name}_tpr': tpr}) # TODO: save fprs and tprs.
         if config.make_plots:
-            prefix = f'{config.savedir}/{config.name}_roc_loglog_'
-            if config.experiments > 1:
-                savepath_best = prefix + 'best.png'
-                savepath_multi = prefix + 'multi.png'
-                fpr, tpr = best_roc
-                utils.plot_roc_loglog(fpr, tpr, savepath=savepath_best) # Plot the ROC curve for sample with highest AUROC.
-                utils.plot_multi_roc_loglog(fprs, tprs, test_scores, savepath=savepath_multi)
-            else:
-                utils.plot_roc_loglog(fpr, tpr, savepath=prefix[:-1] + '.png')
+            savepath = f'{config.savedir}/{config.name}_roc_loglog.png'
+            utils.plot_multi_roc_loglog(fprs, tprs, test_scores, savepath=savepath)
         return stat_df, roc_df
 
 

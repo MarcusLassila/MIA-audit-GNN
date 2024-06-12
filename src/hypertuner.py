@@ -9,6 +9,7 @@ from torch_geometric.data import Data
 from torchmetrics import Accuracy
 from tqdm.auto import tqdm
 from itertools import product
+import matplotlib.pyplot as plt
 
 def grid_search(
     dataset: Data,
@@ -106,7 +107,7 @@ def rmia_offline_interp_param_search(
     )
     _ = trainer.train_gnn(
         model=target_model,
-        dataset=dataset,
+        dataset=target_samples,
         config=train_config,
     )
 
@@ -114,21 +115,23 @@ def rmia_offline_interp_param_search(
     opt_interp_param = 0.0
     aurocs = []
     for interp_param in map(0.1.__mul__, range(0, 11)):
+        config.rmia_offline_interp_param = interp_param
         auroc = attacks.RMIA(
             target_model=target_model,
             population=population,
             config=config,
-            interp_param=interp_param,
         ).run_attack(target_samples=target_samples)['auroc']
         aurocs.append(auroc)
         if auroc > best_auroc:
             best_auroc = auroc
             opt_interp_param = interp_param
+    plt.plot([0.1 * x for x in range(0, 11)], aurocs)
+    plt.show()
     return opt_interp_param
 
 if __name__ == '__main__':
     interp_param = rmia_offline_interp_param_search(
-        dataset='cora',
+        dataset='flickr',
         model_type='GCN',
         datadir='./data',
     )

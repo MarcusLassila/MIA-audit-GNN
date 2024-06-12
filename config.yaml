@@ -1,29 +1,29 @@
 ---
-basic-shadow-cora-GCN:
+basic-shadow-chameleon-GAT:
   attack: "basic-shadow"
-  dataset: "cora"
+  dataset: "chameleon"
   split: "sampled"
-  model: "GCN"
+  model: "GAT"
   epochs_target: 500
   epochs_attack: 200
   hidden_dim_attack: [256, 64]
   batch_size: 32
-confidence-cora-GCN:
+confidence-chameleon-GAT:
   attack: "confidence"
-  dataset: "cora"
+  dataset: "chameleon"
   split: "sampled"
-  model: "GCN"
+  model: "GAT"
   epochs_target: 500
-LiRA-cora-GCN:
+LiRA-chameleon-GAT:
   attack: "lira"
-  dataset: "cora"
-  model: "GCN"
+  dataset: "chameleon"
+  model: "GAT"
   epochs_target: 500
   num_shadow_models: 128
-RMIA-cora-GCN:
+RMIA-chameleon-GAT:
   attack: "rmia"
-  dataset: "cora"
-  model: "GCN"
+  dataset: "chameleon"
+  model: "GAT"
   epochs_target: 500
   num_shadow_models: 128
   rmia_offline_interp_param: 0.1
