@@ -11,8 +11,7 @@ import torch
 import torch.nn.functional as F
 from torchmetrics import Accuracy
 from statistics import mean, stdev
-
-
+import shutil
 
 class MembershipInferenceExperiment:
 
@@ -21,6 +20,41 @@ class MembershipInferenceExperiment:
         self.dataset = datasetup.parse_dataset(root=self.config.datadir, name=self.config.dataset)
         self.criterion = Accuracy(task="multiclass", num_classes=self.dataset.num_classes).to(self.config.device)
         print(utils.GraphInfo(self.dataset))
+
+    def visualize_embedding_distribution(self):
+        config = self.config
+        dataset = datasetup.sample_subgraph(self.dataset, self.dataset.x.shape[0])
+        target_model = self.train_target_model(dataset)
+        target_model.eval()
+        query_nodes = torch.arange(0, dataset.x.shape[0])
+        savedir = f'{config.savedir}/embeddings'
+        try:
+            shutil.rmtree(savedir)
+        except FileNotFoundError:
+            pass
+        for query_hops in 0, 2:
+            savepath = f'{savedir}/emb_scatter_2D_{query_hops}hops.png'
+            with torch.inference_mode():
+                embs = evaluation.k_hop_query(
+                    model=target_model,
+                    dataset=dataset,
+                    query_nodes=query_nodes,
+                    num_hops=query_hops,
+                )
+                hinge = utils.hinge_loss(embs, dataset.y)
+                utils.plot_embedding_2D_scatter(embs=embs, mask=dataset.train_mask, savepath=savepath)
+                for label in range(dataset.num_classes):
+                    label_mask = dataset.y == label
+                    savepath = f'{savedir}/hinge_hist_class{label}_{query_hops}hops.png'
+                    utils.plot_hinge_histogram(hinge, label_mask=label_mask, train_mask=dataset.train_mask, savepath=savepath)
+                    mean_in = hinge[dataset.train_mask & label_mask].mean()
+                    mean_out = hinge[~dataset.train_mask & label_mask].mean()
+                    std_in = hinge[dataset.train_mask & label_mask].std()
+                    std_out = hinge[~dataset.train_mask & label_mask].std()
+                    means = [mean_in, mean_out]
+                    stds = [std_in, std_out]
+                    savepath = f'{savedir}/gaussians_class{label}_{query_hops}hops.png'
+                    utils.plot_fitted_gaussians(means, stds, savepath=savepath)
 
     def train_target_model(self, dataset, plot_training_results=True):
         config = self.config
@@ -78,7 +112,6 @@ class MembershipInferenceExperiment:
         train_scores, test_scores = [], []
         aurocs = []
         best_auroc = 0
-        best_roc = None
         fprs, tprs = [], []
         for i in range(config.experiments):
             print(f'Running experiment {i + 1}/{config.experiments}.')
@@ -169,14 +202,16 @@ class MembershipInferenceExperiment:
         roc_df = pd.DataFrame({f'{config.name}_fpr': fpr, f'{config.name}_tpr': tpr}) # TODO: save fprs and tprs.
         if config.make_plots:
             savepath = f'{config.savedir}/{config.name}_roc_loglog.png'
-            utils.plot_multi_roc_loglog(fprs, tprs, test_scores, savepath=savepath)
+            utils.plot_multi_roc_loglog(fprs, tprs, train_scores, test_scores, savepath=savepath)
         return stat_df, roc_df
 
 
 def main(config):
     config['dataset'] = config['dataset'].lower()
     config['device'] = 'cuda' if torch.cuda.is_available() else 'cpu'
-    return MembershipInferenceExperiment(config).run()
+    mie = MembershipInferenceExperiment(config)
+    # mie.visualize_embedding_distribution()
+    return mie.run()
 
 if __name__ == '__main__':
     torch.random.manual_seed(0)
@@ -186,12 +221,12 @@ if __name__ == '__main__':
     parser.add_argument("--split", default="sampled", type=str)
     parser.add_argument("--model", default="GCN", type=str)
     parser.add_argument("--batch-size", default=32, type=int)
-    parser.add_argument("--epochs-target", default=500, type=int)
+    parser.add_argument("--epochs-target", default=1000, type=int)
     parser.add_argument("--epochs-attack", default=100, type=int)
     parser.add_argument("--grid-search", action=argparse.BooleanOptionalAction)
-    parser.add_argument("--lr", default=1e-3, type=float)
-    parser.add_argument("--weight-decay", default=0.0, type=float)
-    parser.add_argument("--dropout", default=0.2, type=float)
+    parser.add_argument("--lr", default=1e-2, type=float)
+    parser.add_argument("--weight-decay", default=1e-4, type=float)
+    parser.add_argument("--dropout", default=0.5, type=float)
     parser.add_argument("--early-stopping", action=argparse.BooleanOptionalAction)
     parser.add_argument("--hidden-dim-target", default=32, type=int)
     parser.add_argument("--hidden-dim-attack", default=[256, 64], type=lambda x: [*map(int, x.split(','))])

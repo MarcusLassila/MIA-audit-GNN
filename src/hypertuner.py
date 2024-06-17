@@ -3,6 +3,7 @@ import datasetup
 import trainer
 import utils
 
+import numpy as np
 import torch
 import torch.nn.functional as F
 from torch_geometric.data import Data
@@ -114,7 +115,8 @@ def rmia_offline_interp_param_search(
     best_auroc = 0.0
     opt_interp_param = 0.0
     aurocs = []
-    for interp_param in map(0.1.__mul__, range(0, 11)):
+    param_pool = np.arange(0.0, 1.0, 0.1)
+    for interp_param in param_pool:
         config.rmia_offline_interp_param = interp_param
         auroc = attacks.RMIA(
             target_model=target_model,
@@ -125,13 +127,13 @@ def rmia_offline_interp_param_search(
         if auroc > best_auroc:
             best_auroc = auroc
             opt_interp_param = interp_param
-    plt.plot([0.1 * x for x in range(0, 11)], aurocs)
+    plt.plot(param_pool, aurocs)
     plt.show()
     return opt_interp_param
 
 if __name__ == '__main__':
     interp_param = rmia_offline_interp_param_search(
-        dataset='flickr',
+        dataset='cora',
         model_type='GCN',
         datadir='./data',
     )

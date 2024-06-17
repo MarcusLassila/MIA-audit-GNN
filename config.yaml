@@ -1,29 +1,29 @@
 ---
-basic-shadow-chameleon-GAT:
+basic-shadow-pubmed-GCN:
   attack: "basic-shadow"
-  dataset: "chameleon"
+  dataset: "pubmed"
   split: "sampled"
-  model: "GAT"
+  model: "GCN"
   epochs_target: 500
   epochs_attack: 200
   hidden_dim_attack: [256, 64]
   batch_size: 32
-confidence-chameleon-GAT:
+confidence-pubmed-GCN:
   attack: "confidence"
-  dataset: "chameleon"
+  dataset: "pubmed"
   split: "sampled"
-  model: "GAT"
+  model: "GCN"
   epochs_target: 500
-LiRA-chameleon-GAT:
+LiRA-pubmed-GCN:
   attack: "lira"
-  dataset: "chameleon"
-  model: "GAT"
+  dataset: "pubmed"
+  model: "GCN"
   epochs_target: 500
   num_shadow_models: 128
-RMIA-chameleon-GAT:
+RMIA-pubmed-GCN:
   attack: "rmia"
-  dataset: "chameleon"
-  model: "GAT"
+  dataset: "pubmed"
+  model: "GCN"
   epochs_target: 500
   num_shadow_models: 128
-  rmia_offline_interp_param: 0.1
+  rmia_offline_interp_param: 0.6

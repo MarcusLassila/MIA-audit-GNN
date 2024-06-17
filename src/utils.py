@@ -5,6 +5,8 @@ import pandas as pd
 import scipy.stats as stats
 import matplotlib.pyplot as plt
 import torch
+from sklearn.decomposition import PCA
+from sklearn.manifold import TSNE
 from pathlib import Path
 from time import perf_counter
 
@@ -93,6 +95,15 @@ def plot_training_results(res, name, savedir):
     plt.savefig(f"{savedir}/training_results_{name}.png")
     plt.close()
 
+def savefig_or_show(savepath=None):
+    if savepath:
+        savedir = '/'.join(savepath.split('/')[:-1])
+        Path(savedir).mkdir(parents=True, exist_ok=True)
+        plt.savefig(savepath)
+    else:
+        plt.show()
+    plt.close()
+
 def plot_roc_loglog(fpr, tpr, title=None, savepath=None):
     plt.figure(figsize=(8, 8))
     plt.loglog(fpr, tpr)
@@ -102,18 +113,12 @@ def plot_roc_loglog(fpr, tpr, title=None, savepath=None):
     plt.xlabel('FPR')
     plt.ylabel('TPR')
     plt.title(title)
-    if savepath:
-        savedir = '/'.join(savepath.split('/')[:-1])
-        Path(savedir).mkdir(parents=True, exist_ok=True)
-        plt.savefig(savepath)
-    else:
-        plt.show()
-    plt.close()
+    savefig_or_show(savepath)
 
-def plot_multi_roc_loglog(fprs, tprs, test_accs, title=None, savepath=None):
+def plot_multi_roc_loglog(fprs, tprs, train_accs, test_accs, title=None, savepath=None):
     plt.figure(figsize=(8, 8))
-    for fpr, tpr, acc in zip(fprs, tprs, test_accs):
-        plt.loglog(fpr, tpr, label=f'acc: {acc:.4f}')
+    for fpr, tpr, train_acc, test_acc in zip(fprs, tprs, train_accs, test_accs):
+        plt.loglog(fpr, tpr, label=f'Train acc: {train_acc:.4f} | Test acc: {test_acc:.4f}')
     plt.xlim(1e-4, 1)
     plt.ylim(1e-4, 1)
     plt.grid(True)
@@ -121,13 +126,7 @@ def plot_multi_roc_loglog(fprs, tprs, test_accs, title=None, savepath=None):
     plt.ylabel('TPR')
     plt.legend()
     plt.title(title)
-    if savepath:
-        savedir = '/'.join(savepath.split('/')[:-1])
-        Path(savedir).mkdir(parents=True, exist_ok=True)
-        plt.savefig(savepath)
-    else:
-        plt.show()
-    plt.close()
+    savefig_or_show(savepath)
 
 def plot_roc_csv(filepath, savedir=None):
     df = pd.read_csv(filepath, sep=',')
@@ -145,10 +144,47 @@ def plot_histogram_and_fitted_gaussian(x, mean, std, bins=10, savepath=None):
     xs = np.linspace(xmin, xmax)
     ys = stats.norm.pdf(xs, loc=mean, scale=std)
     plt.plot(xs, ys, label='Gaussian fit')
-    if savepath:
-        savedir = '/'.join(savepath.split('/')[:-1])
-        Path(savedir).mkdir(parents=True, exist_ok=True)
-        plt.savefig(savepath)
-    else:
-        plt.show()
-    plt.close()
+    savefig_or_show(savepath)
+
+def plot_fitted_gaussians(means, stds, savepath=None):
+    plt.figure(figsize=(8, 8))
+    xs = np.linspace(-15, 20)
+    for i, (mean, std) in enumerate(zip(means, stds)):
+        ys = stats.norm.pdf(xs, loc=mean, scale=std)
+        plt.plot(xs, ys, label=f'{i}')
+    plt.legend()
+    plt.grid(True)
+    savefig_or_show(savepath)
+
+def plot_embedding_2D_scatter(embs, mask, savepath=None):
+    length = mask.shape[0]
+    trunc_length = 3000
+    if length > trunc_length:
+        rand_index = torch.randint(low=0, high=length-1, size=(trunc_length,))
+        embs = embs[rand_index]
+        mask = mask[rand_index]
+    x = TSNE(n_components=2).fit_transform(embs)
+    plt.figure(figsize=(8, 8))
+    plt.scatter(x[mask, 0], x[mask, 1], c='blue', marker='o')
+    plt.scatter(x[~mask, 0], x[~mask, 1], c='red', marker='x')
+    plt.title('2D representation of node embedding using TSNE')
+    plt.grid(True)
+    savefig_or_show(savepath)
+
+def plot_embedding_hist(embs, mask, savepath=None):
+    x = PCA(n_components=1).fit_transform(embs)
+    bins = 50
+    plt.figure(figsize=(8, 8))
+    plt.hist(x=x[mask], bins=bins)
+    plt.hist(x=x[~mask], bins=bins)
+    plt.grid(True)
+    savefig_or_show(savepath)
+
+def plot_hinge_histogram(hinge, label_mask, train_mask, savepath=None):
+    plt.figure(figsize=(8, 8))
+    bins = 50
+    plt.hist(hinge[train_mask & label_mask], bins=bins)
+    plt.hist(hinge[~train_mask & label_mask], bins=bins)
+    plt.xlim(-5, 15)
+    plt.grid(True)
+    savefig_or_show(savepath)
