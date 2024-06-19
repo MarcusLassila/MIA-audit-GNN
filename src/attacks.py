@@ -9,6 +9,7 @@ from scipy.stats import norm
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from torch_geometric.nn import MLP
 from torch.utils.data import DataLoader
 from torchmetrics import Accuracy
 from tqdm.auto import tqdm
@@ -26,7 +27,8 @@ class BasicShadowAttack:
             num_classes=shadow_dataset.num_classes,
             dropout=config.dropout,
         )
-        self.attack_model = models.MLP(in_dim=shadow_dataset.num_classes, hidden_dims=config.hidden_dim_attack)
+        dims = [shadow_dataset.num_classes, *config.hidden_dim_attack, 2]
+        self.attack_model = MLP(channel_list=dims, dropout=0.0)
         self.shadow_dataset = shadow_dataset
         self.config = config
         self.plot_training_results = True

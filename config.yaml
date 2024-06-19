@@ -1,29 +1,29 @@
 ---
-basic-shadow-pubmed-GCN:
+basic-shadow-cora-GCN:
   attack: "basic-shadow"
-  dataset: "pubmed"
+  dataset: "cora"
   split: "sampled"
   model: "GCN"
   epochs_target: 500
   epochs_attack: 200
   hidden_dim_attack: [256, 64]
   batch_size: 32
-confidence-pubmed-GCN:
+confidence-cora-GCN:
   attack: "confidence"
-  dataset: "pubmed"
+  dataset: "cora"
   split: "sampled"
   model: "GCN"
   epochs_target: 500
-LiRA-pubmed-GCN:
+LiRA-cora-GCN:
   attack: "lira"
-  dataset: "pubmed"
+  dataset: "cora"
   model: "GCN"
   epochs_target: 500
   num_shadow_models: 128
-RMIA-pubmed-GCN:
+RMIA-cora-GCN:
   attack: "rmia"
-  dataset: "pubmed"
+  dataset: "cora"
   model: "GCN"
   epochs_target: 500
   num_shadow_models: 128
-  rmia_offline_interp_param: 0.6
+  rmia_offline_interp_param: 0.1

@@ -66,7 +66,8 @@ def train_gnn(model, dataset, config: TrainConfig, use_tqdm=True):
             early_stopping_counter += 1
             if early_stopping_counter == EARLY_STOPPING_THRESHOLD:
                 break
-    model = best_model
+    if config.early_stopping:
+        model = best_model
     return res
 
 def train_step(model, data_loader, optimizer, loss_fn, criterion, device):

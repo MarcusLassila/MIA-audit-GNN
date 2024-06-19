@@ -75,9 +75,9 @@ class MembershipInferenceExperiment:
 
         target_model = utils.fresh_model(
             model_type=self.config.model,
-            num_features=self.dataset.num_features,
+            num_features=dataset.num_features,
             hidden_dim=self.config.hidden_dim_target,
-            num_classes=self.dataset.num_classes,
+            num_classes=dataset.num_classes,
             dropout=dropout,
         )
 
@@ -210,7 +210,7 @@ def main(config):
     config['dataset'] = config['dataset'].lower()
     config['device'] = 'cuda' if torch.cuda.is_available() else 'cpu'
     mie = MembershipInferenceExperiment(config)
-    # mie.visualize_embedding_distribution()
+    mie.visualize_embedding_distribution()
     return mie.run()
 
 if __name__ == '__main__':
@@ -221,7 +221,7 @@ if __name__ == '__main__':
     parser.add_argument("--split", default="sampled", type=str)
     parser.add_argument("--model", default="GCN", type=str)
     parser.add_argument("--batch-size", default=32, type=int)
-    parser.add_argument("--epochs-target", default=1000, type=int)
+    parser.add_argument("--epochs-target", default=500, type=int)
     parser.add_argument("--epochs-attack", default=100, type=int)
     parser.add_argument("--grid-search", action=argparse.BooleanOptionalAction)
     parser.add_argument("--lr", default=1e-2, type=float)

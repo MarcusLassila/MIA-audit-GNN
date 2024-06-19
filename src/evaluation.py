@@ -1,7 +1,7 @@
 import utils
 
 import torch
-from torch_geometric.utils import k_hop_subgraph
+from torch_geometric.utils import k_hop_subgraph, subgraph, mask_to_index
 from sklearn.metrics import roc_curve, roc_auc_score
 
 def bc_evaluation(preds, labels):
@@ -16,10 +16,12 @@ def bc_evaluation(preds, labels):
         'roc': (fpr, tpr),
     }
 
-def k_hop_query(model, dataset, query_nodes, num_hops=0):
+def k_hop_query(model, dataset, query_nodes, num_hops=0, use_ideal_neighborhood=False):
     '''
     Queries the model for each node in in query_nodes,
     using the local subgraph definded by the "num_hops"-hop neigborhood.
+    When use_ideal_neighborhood flag is set, the local k-hop query is restricted to
+    the nodes having the same training membership status as the center node.
 
     Output: Matrix of size "number of query nodes" times "number of classes",
             consisting of logits/predictions for each query node.
@@ -34,10 +36,19 @@ def k_hop_query(model, dataset, query_nodes, num_hops=0):
         # Can we speed this up?
         predictions = []
         for v in query_nodes:
+            if use_ideal_neighborhood:
+                mask = dataset.train_mask if dataset.train_mask[v] else ~dataset.train_mask
+                edge_index, _ = subgraph(
+                    subset=mask_to_index(mask),
+                    edge_index=dataset.edge_index,
+                    num_nodes=dataset.x.shape[0]
+                )
+            else:
+                edge_index = dataset.edge_index
             node_index, edge_index, v_idx, _ = k_hop_subgraph(
                 node_idx=v.item(),
                 num_hops=num_hops,
-                edge_index=dataset.edge_index,
+                edge_index=edge_index,
                 relabel_nodes=True,
                 num_nodes=dataset.x.shape[0],
             )

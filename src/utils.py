@@ -5,8 +5,10 @@ import pandas as pd
 import scipy.stats as stats
 import matplotlib.pyplot as plt
 import torch
+import torch_geometric.nn as gnn
 from sklearn.decomposition import PCA
 from sklearn.manifold import TSNE
+from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
 from pathlib import Path
 from time import perf_counter
 
@@ -43,6 +45,8 @@ class GraphInfo:
         return s
 
 def fresh_model(model_type, num_features, hidden_dim, num_classes, dropout=0.0):
+    if model_type == 'GCNConv':
+        return gnn.GCNConv(in_channels=num_features, out_channels=num_classes)
     try:
         model = getattr(models, model_type)(
             in_dim=num_features,
@@ -148,9 +152,9 @@ def plot_histogram_and_fitted_gaussian(x, mean, std, bins=10, savepath=None):
 
 def plot_fitted_gaussians(means, stds, savepath=None):
     plt.figure(figsize=(8, 8))
-    xs = np.linspace(-15, 20)
+    xs = np.linspace(-50, 50)
     for i, (mean, std) in enumerate(zip(means, stds)):
-        ys = stats.norm.pdf(xs, loc=mean, scale=std)
+        ys = stats.norm.pdf(xs, loc=mean, scale=std+1e-6)
         plt.plot(xs, ys, label=f'{i}')
     plt.legend()
     plt.grid(True)
@@ -167,12 +171,11 @@ def plot_embedding_2D_scatter(embs, mask, savepath=None):
     plt.figure(figsize=(8, 8))
     plt.scatter(x[mask, 0], x[mask, 1], c='blue', marker='o')
     plt.scatter(x[~mask, 0], x[~mask, 1], c='red', marker='x')
-    plt.title('2D representation of node embedding using TSNE')
     plt.grid(True)
     savefig_or_show(savepath)
 
 def plot_embedding_hist(embs, mask, savepath=None):
-    x = PCA(n_components=1).fit_transform(embs)
+    x = LinearDiscriminantAnalysis(n_components=1).fit_transform(X=embs, y=mask.long())
     bins = 50
     plt.figure(figsize=(8, 8))
     plt.hist(x=x[mask], bins=bins)
@@ -182,9 +185,8 @@ def plot_embedding_hist(embs, mask, savepath=None):
 
 def plot_hinge_histogram(hinge, label_mask, train_mask, savepath=None):
     plt.figure(figsize=(8, 8))
-    bins = 50
+    bins = min(50, 2 * len({x.item() for x in hinge}))
     plt.hist(hinge[train_mask & label_mask], bins=bins)
     plt.hist(hinge[~train_mask & label_mask], bins=bins)
-    plt.xlim(-5, 15)
     plt.grid(True)
     savefig_or_show(savepath)

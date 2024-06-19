@@ -52,19 +52,5 @@ class GIN(TwoLayerGNN):
 
     def __init__(self, in_dim, hidden_dim, out_dim, dropout=0.0):
         super(GIN, self).__init__(dropout=dropout)
-        self.conv1 = gnn.GINConv(MLP(in_dim, (hidden_dim,), hidden_dim))
-        self.conv2 = gnn.GINConv(MLP(hidden_dim, (hidden_dim,), out_dim))
-
-class MLP(nn.Module):
-
-    def __init__(self, in_dim, hidden_dims, out_dim=2):
-        super(MLP, self).__init__()
-        dims = [in_dim, *hidden_dims, out_dim]
-        self.layers = nn.ModuleList([nn.Linear(x, y) for x, y in zip(dims, dims[1:])])
-    
-    def forward(self, x):
-        for layer in self.layers[:-1]:
-            x = layer(x)
-            x = F.relu(x)
-        x = self.layers[-1](x)
-        return x
+        self.conv1 = gnn.GINConv(gnn.MLP(channel_list=[in_dim, hidden_dim, hidden_dim]))
+        self.conv2 = gnn.GINConv(gnn.MLP(channel_list=[hidden_dim, hidden_dim, out_dim]))
