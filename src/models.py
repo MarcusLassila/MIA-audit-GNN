@@ -1,6 +1,8 @@
 import torch.nn as nn
 import torch.nn.functional as F
 import torch_geometric.nn as gnn
+from torch_geometric.utils import add_self_loops
+from torch_scatter import scatter
 
 class TwoLayerGNN(nn.Module):
     ''' Base class for the different GNN architectures to inherit common implementations from. '''
@@ -54,3 +56,25 @@ class GIN(TwoLayerGNN):
         super(GIN, self).__init__(dropout=dropout)
         self.conv1 = gnn.GINConv(gnn.MLP(channel_list=[in_dim, hidden_dim, hidden_dim]))
         self.conv2 = gnn.GINConv(gnn.MLP(channel_list=[hidden_dim, hidden_dim, out_dim]))
+
+class DecoupledGCN(nn.Module):
+
+    def __init__(self, in_dim, hidden_dim, out_dim, dropout=0.0, num_propagations=2):
+        super(DecoupledGCN, self).__init__()
+        self.num_propagations = num_propagations
+        self.mlp = gnn.MLP(
+            in_channels=in_dim,
+            hidden_channels=hidden_dim,
+            out_channels=out_dim,
+            num_layers=1,
+            dropout=dropout,
+        )
+
+    def forward(self, x, edge_index):
+        x = self.mlp(x)
+        edge_index, _ = add_self_loops(edge_index, num_nodes=x.shape[0])
+        for _ in range(self.num_propagations - 1):
+            x = x[edge_index[1]]
+            x = scatter(x, edge_index[0], dim=0, reduce='mean')
+        x = scatter(x[edge_index[1]], edge_index[0], dim=0, reduce='mean')
+        return x

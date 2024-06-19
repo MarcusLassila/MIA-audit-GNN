@@ -16,7 +16,7 @@ Alternatively, run "src/run_mia.py" which only run one MIA simulation experiment
 * --split: How to split the dataset into target/shadow datasets.
     * "sampled": randomly sample subgraphs consisting of 50% of the nodes for target and shadow model. Overlap allowed.
     * "disjoint": randomly split the graph into two disjoint halves, one for the target and the other for the shadow model.
-* --model: GCN, SGC, GraphSAGE, GAT or GIN (case sensitive).
+* --model: GCN, DecoupledGCN, GCNConv (single layer), SGC, GraphSAGE, GAT or GIN (case sensitive).
 * --epochs_target: Number of epochs to train target and shadow model.
 * --epochs-attack: Number of epochs to train the attack model.
 * --batch-size: Size of mini-batches.
