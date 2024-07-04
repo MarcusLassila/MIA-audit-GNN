@@ -14,7 +14,7 @@ def main():
     Path('./results').mkdir(parents=True, exist_ok=True)
     stat_frames = []
     roc_frames = []
-    static_params = {
+    default_params = {
         'datadir': './data',
         'savedir': './results',
         'early_stopping': True,
@@ -27,7 +27,7 @@ def main():
         'make_plots': True,
     }
     for _, params in config.items():
-        params.update(**static_params)
+        params = default_params | params
         add_name(params)
         print()
         print(f'Running MIA.')
@@ -37,8 +37,8 @@ def main():
         stat_df, roc_df = run_mia.main(params)
         stat_frames.append(stat_df)
         roc_frames.append(roc_df)
-    pd.concat(stat_frames).to_csv(f'{static_params["savedir"]}/statistics.csv', sep=',')
-    pd.concat(roc_frames, axis=1).to_csv(f'{static_params["savedir"]}/rocs.csv', sep=',', index=False)
+    pd.concat(stat_frames).to_csv(f'{default_params["savedir"]}/statistics.csv', sep=',')
+    pd.concat(roc_frames, axis=1).to_csv(f'{default_params["savedir"]}/rocs.csv', sep=',', index=False)
 
 if __name__ == "__main__":
     main()

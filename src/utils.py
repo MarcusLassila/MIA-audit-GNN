@@ -164,11 +164,12 @@ def plot_fitted_gaussians(means, stds, savepath=None):
 
 def plot_embedding_2D_scatter(embs, y, train_mask, savepath=None):
     length = train_mask.shape[0]
-    trunc_length = 3000
+    trunc_length = 500
     if length > trunc_length:
         rand_index = torch.randint(low=0, high=length-1, size=(trunc_length,))
         embs = embs[rand_index]
-        mask = mask[rand_index]
+        y = y[rand_index]
+        train_mask = train_mask[rand_index]
     if embs.shape[1] > 2:
         x = TSNE(n_components=2).fit_transform(embs)
     else:
