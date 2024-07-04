@@ -11,7 +11,6 @@ import torch
 import torch.nn.functional as F
 from torchmetrics import Accuracy
 from statistics import mean, stdev
-import shutil
 
 class MembershipInferenceExperiment:
 
@@ -24,29 +23,27 @@ class MembershipInferenceExperiment:
     def visualize_embedding_distribution(self):
         config = self.config
         dataset = datasetup.sample_subgraph(self.dataset, self.dataset.x.shape[0])
+        savepath = f'{config.savedir}/embeddings/features.png'
+        utils.plot_embedding_2D_scatter(dataset.x, dataset.y, dataset.train_mask, savepath=savepath)
         target_model = self.train_target_model(dataset)
         target_model.eval()
         query_nodes = torch.arange(0, dataset.x.shape[0])
         savedir = f'{config.savedir}/embeddings'
-        try:
-            shutil.rmtree(savedir)
-        except FileNotFoundError:
-            pass
-        for query_hops in 0, 2:
-            savepath = f'{savedir}/emb_scatter_2D_{query_hops}hops.png'
-            with torch.inference_mode():
-                embs = evaluation.k_hop_query(
-                    model=target_model,
-                    dataset=dataset,
-                    query_nodes=query_nodes,
-                    num_hops=query_hops,
-                )
-                hinge = utils.hinge_loss(embs, dataset.y)
-                utils.plot_embedding_2D_scatter(embs=embs, y=dataset.y, train_mask=dataset.train_mask, savepath=savepath)
-                for label in range(dataset.num_classes):
-                    label_mask = dataset.y == label
-                    savepath = f'{savedir}/hinge_hist_class{label}_{query_hops}hops.png'
-                    utils.plot_hinge_histogram(hinge, label_mask=label_mask, train_mask=dataset.train_mask, savepath=savepath)
+        query_hops = config.query_hops
+        savepath = f'{savedir}/emb_scatter_2D_{query_hops}hops_{config.name}.png'
+        with torch.inference_mode():
+            embs = evaluation.k_hop_query(
+                model=target_model,
+                dataset=dataset,
+                query_nodes=query_nodes,
+                num_hops=query_hops,
+            )
+            hinge = utils.hinge_loss(embs, dataset.y)
+            utils.plot_embedding_2D_scatter(embs=embs, y=dataset.y, train_mask=dataset.train_mask, savepath=savepath)
+            for label in range(dataset.num_classes):
+                label_mask = dataset.y == label
+                savepath = f'{savedir}/hinge_hist_class{label}_{config.name}.png'
+                utils.plot_hinge_histogram(hinge, label_mask=label_mask, train_mask=dataset.train_mask, savepath=savepath)
 
     def train_target_model(self, dataset, plot_training_results=True):
         config = self.config
@@ -68,7 +65,7 @@ class MembershipInferenceExperiment:
         target_model = utils.fresh_model(
             model_type=self.config.model,
             num_features=dataset.num_features,
-            hidden_dim=self.config.hidden_dim_target,
+            hidden_dims=self.config.hidden_dim_target,
             num_classes=dataset.num_classes,
             dropout=dropout,
         )
@@ -220,7 +217,7 @@ if __name__ == '__main__':
     parser.add_argument("--weight-decay", default=1e-4, type=float)
     parser.add_argument("--dropout", default=0.5, type=float)
     parser.add_argument("--early-stopping", action=argparse.BooleanOptionalAction)
-    parser.add_argument("--hidden-dim-target", default=32, type=int)
+    parser.add_argument("--hidden-dim-target", default=[32], type=lambda x: [*map(int, x.split(','))])
     parser.add_argument("--hidden-dim-attack", default=[256, 64], type=lambda x: [*map(int, x.split(','))])
     parser.add_argument("--query-hops", default=0, type=int)
     parser.add_argument("--experiments", default=1, type=int)

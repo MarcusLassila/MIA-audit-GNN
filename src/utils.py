@@ -46,18 +46,18 @@ class GraphInfo:
         )
         return s
 
-def fresh_model(model_type, num_features, hidden_dim, num_classes, dropout=0.0):
-    if model_type == 'GCNConv':
-        return gnn.GCNConv(in_channels=num_features, out_channels=num_classes)
+def fresh_model(model_type, num_features, hidden_dims, num_classes, dropout=0.0):
+    if model_type == 'MLP':
+        return gnn.MLP(channel_list=[num_features, *hidden_dims, num_classes], dropout=dropout)
     try:
         model = getattr(models, model_type)(
             in_dim=num_features,
-            hidden_dim=hidden_dim,
+            hidden_dims=hidden_dims,
             out_dim=num_classes,
             dropout=dropout,
         )
     except AttributeError:
-        raise AttributeError(f'Unsupported model {model_type}. Supported models are GCN, SGC, GraphSAGE, GAT and GIN.')
+        raise AttributeError(f'Unsupported model {model_type}. Supported models are MLP, GCN, SGC, GraphSAGE, GAT and GIN.')
     return model
 
 def hinge_loss(pred, target):

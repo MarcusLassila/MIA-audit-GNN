@@ -44,7 +44,7 @@ def grid_search(
         model = utils.fresh_model(
             model_type=model_type,
             num_features=dataset.num_features,
-            hidden_dim=hidden_dim,
+            hidden_dims=[hidden_dim],
             num_classes=dataset.num_classes,
             dropout=dropout,
         )
@@ -91,7 +91,7 @@ def rmia_offline_interp_param_search(
     target_model = utils.fresh_model(
         model_type=model_type,
         num_features=dataset.num_features,
-        hidden_dim=config.hidden_dim_target,
+        hidden_dims=config.hidden_dim_target,
         num_classes=dataset.num_classes,
         dropout=config.dropout,
     )

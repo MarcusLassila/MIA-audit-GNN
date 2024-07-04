@@ -25,8 +25,6 @@ def main():
         'dropout': 0.5,
         'experiments': 5,
         'make_plots': True,
-        'hidden_dim_target': 32,
-        'query_hops': 0,
     }
     for _, params in config.items():
         params.update(**static_params)

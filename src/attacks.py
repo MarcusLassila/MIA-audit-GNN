@@ -23,7 +23,7 @@ class BasicShadowAttack:
         self.shadow_model = utils.fresh_model(
             model_type=config.model,
             num_features=shadow_dataset.num_features,
-            hidden_dim=config.hidden_dim_target,
+            hidden_dims=config.hidden_dim_target,
             num_classes=shadow_dataset.num_classes,
             dropout=config.dropout,
         )
@@ -153,7 +153,7 @@ class LiRA:
             shadow_model = utils.fresh_model(
                 model_type=config.model,
                 num_features=shadow_dataset.num_features,
-                hidden_dim=config.hidden_dim_target,
+                hidden_dims=config.hidden_dim_target,
                 num_classes=shadow_dataset.num_classes,
                 dropout=config.dropout,
             )
@@ -259,7 +259,7 @@ class RMIA:
             shadow_model = utils.fresh_model(
                 model_type=config.model,
                 num_features=shadow_dataset.num_features,
-                hidden_dim=config.hidden_dim_target,
+                hidden_dims=config.hidden_dim_target,
                 num_classes=shadow_dataset.num_classes,
                 dropout=config.dropout,
             )

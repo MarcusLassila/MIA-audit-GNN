@@ -1,29 +1,41 @@
 ---
-basic-shadow-cora-GCN:
-  attack: "basic-shadow"
+LiRA-cora-MLP:
+  attack: "lira"
   dataset: "cora"
-  split: "sampled"
-  model: "GCN"
+  model: "MLP"
   epochs_target: 500
-  epochs_attack: 200
-  hidden_dim_attack: [256, 64]
-  batch_size: 32
-confidence-cora-GCN:
-  attack: "confidence"
-  dataset: "cora"
-  split: "sampled"
-  model: "GCN"
-  epochs_target: 500
-LiRA-cora-GCN:
+  hidden_dim_target: [32]
+  num_shadow_models: 128
+  query_hops: 0
+LiRA-cora-GCN1:
   attack: "lira"
   dataset: "cora"
   model: "GCN"
   epochs_target: 500
+  hidden_dim_target: []
   num_shadow_models: 128
-RMIA-cora-GCN:
-  attack: "rmia"
+  query_hops: 1
+LiRA-cora-GCN2:
+  attack: "lira"
   dataset: "cora"
   model: "GCN"
   epochs_target: 500
+  hidden_dim_target: [32]
   num_shadow_models: 128
-  rmia_offline_interp_param: 0.1
+  query_hops: 2
+LiRA-cora-GCN3:
+  attack: "lira"
+  dataset: "cora"
+  model: "GCN"
+  epochs_target: 500
+  hidden_dim_target: [32, 16]
+  num_shadow_models: 128
+  query_hops: 3
+LiRA-cora-GCN4:
+  attack: "lira"
+  dataset: "cora"
+  model: "GCN"
+  epochs_target: 500
+  hidden_dim_target: [32, 16, 8]
+  num_shadow_models: 128
+  query_hops: 4

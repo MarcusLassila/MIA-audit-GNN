@@ -4,58 +4,68 @@ import torch_geometric.nn as gnn
 from torch_geometric.utils import add_self_loops
 from torch_scatter import scatter
 
-class TwoLayerGNN(nn.Module):
+class BaseGNN(nn.Module):
     ''' Base class for the different GNN architectures to inherit common implementations from. '''
 
     def __init__(self, dropout=0.0):
-        super(TwoLayerGNN, self).__init__()
+        super(BaseGNN, self).__init__()
         self.dropout = dropout
 
     def reset_parameters(self):
-        self.conv1.reset_parameters()
-        self.conv2.reset_parameters()
+        for conv in self.convs:
+            conv.reset_parameters()
 
     def forward(self, x, edge_index):
-        x = self.conv1(x, edge_index)
-        x = F.relu(x)
-        x = F.dropout(input=x, p=self.dropout, training=self.training)
-        x = self.conv2(x, edge_index)
+        for conv in self.convs[:-1]:
+            x = conv(x, edge_index)
+            x = F.relu(x)
+            x = F.dropout(input=x, p=self.dropout, training=self.training)
+        x = self.convs[-1](x, edge_index)
         return x
 
-class GCN(TwoLayerGNN):
+class GCN(BaseGNN):
 
-    def __init__(self, in_dim, hidden_dim, out_dim, dropout=0.0):
+    def __init__(self, in_dim, hidden_dims, out_dim, dropout=0.0):
         super(GCN, self).__init__(dropout=dropout)
-        self.conv1 = gnn.GCNConv(in_dim, hidden_dim)
-        self.conv2 = gnn.GCNConv(hidden_dim, out_dim)
+        channel_list = [in_dim, *hidden_dims, out_dim]
+        self.convs = nn.ModuleList([
+            gnn.GCNConv(in_c, out_c) for in_c, out_c in zip(channel_list, channel_list[1:])
+        ])
 
-class SGC(TwoLayerGNN):
+class SGC(BaseGNN):
 
-    def __init__(self, in_dim, hidden_dim, out_dim, dropout=0.0):
+    def __init__(self, in_dim, hidden_dims, out_dim, dropout=0.0):
         super(SGC, self).__init__(dropout=dropout)
-        self.conv1 = gnn.SGConv(in_dim, hidden_dim, K=2, cached=False)
-        self.conv2 = gnn.SGConv(hidden_dim, out_dim, K=2, cached=False)
+        channel_list = [in_dim, *hidden_dims, out_dim]
+        self.convs = nn.ModuleList([
+            gnn.SGConv(in_c, out_c, K=2, cached=False) for in_c, out_c in zip(channel_list, channel_list[1:])
+        ])
 
-class GraphSAGE(TwoLayerGNN):
+class GraphSAGE(BaseGNN):
 
-    def __init__(self, in_dim, hidden_dim, out_dim, dropout=0.0):
+    def __init__(self, in_dim, hidden_dims, out_dim, dropout=0.0):
         super(GraphSAGE, self).__init__(dropout=dropout)
-        self.conv1 = gnn.SAGEConv(in_dim, hidden_dim)
-        self.conv2 = gnn.SAGEConv(hidden_dim, out_dim)
+        channel_list = [in_dim, *hidden_dims, out_dim]
+        self.convs = nn.ModuleList([
+            gnn.SAGEConv(in_c, out_c) for in_c, out_c in zip(channel_list, channel_list[1:])
+        ])
 
-class GAT(TwoLayerGNN):
+class GAT(BaseGNN):
 
-    def __init__(self, in_dim, hidden_dim, out_dim, heads=(8, 1), dropout=0.0):
+    def __init__(self, in_dim, hidden_dims, out_dim, heads, dropout=0.0):
         super(GAT, self).__init__(dropout=dropout)
-        self.conv1 = gnn.GATConv(in_dim, hidden_dim, heads=heads[0], dropout=dropout)
-        self.conv2 = gnn.GATConv(hidden_dim * heads[0], out_dim, heads=heads[1], dropout=dropout, concat=False)
+        channel_list = [in_dim, *hidden_dims, out_dim]
+        for i, in_c, out_c, heads_prev, heads_curr in zip(range(len(channel_list)), channel_list, channel_list[1:], [1, *heads], heads):
+            self.convs.append(gnn.GATConv(in_c * heads_prev, out_c, heads=heads_curr, concat=i+1<len(channel_list)))
 
-class GIN(TwoLayerGNN):
+class GIN(BaseGNN):
 
-    def __init__(self, in_dim, hidden_dim, out_dim, dropout=0.0):
+    def __init__(self, in_dim, hidden_dims, out_dim, dropout=0.0):
         super(GIN, self).__init__(dropout=dropout)
-        self.conv1 = gnn.GINConv(gnn.MLP(channel_list=[in_dim, hidden_dim, hidden_dim]))
-        self.conv2 = gnn.GINConv(gnn.MLP(channel_list=[hidden_dim, hidden_dim, out_dim]))
+        channel_list = [in_dim, *hidden_dims, out_dim]
+        self.convs = nn.ModuleList([
+            gnn.MLP(channel_list=[in_c, out_c, out_c]) for in_c, out_c in zip(channel_list, channel_list[1:])
+        ])
 
 class DecoupledGCN(nn.Module):
 
