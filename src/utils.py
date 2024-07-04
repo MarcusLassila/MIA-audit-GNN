@@ -4,6 +4,7 @@ import numpy as np
 import pandas as pd
 import scipy.stats as stats
 import matplotlib.pyplot as plt
+import matplotlib.colors
 import torch
 import torch_geometric.nn as gnn
 from sklearn.decomposition import PCA
@@ -11,6 +12,7 @@ from sklearn.manifold import TSNE
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
 from pathlib import Path
 from time import perf_counter
+from itertools import cycle
 
 class Config:
 
@@ -160,17 +162,26 @@ def plot_fitted_gaussians(means, stds, savepath=None):
     plt.grid(True)
     savefig_or_show(savepath)
 
-def plot_embedding_2D_scatter(embs, mask, savepath=None):
-    length = mask.shape[0]
+def plot_embedding_2D_scatter(embs, y, train_mask, savepath=None):
+    length = train_mask.shape[0]
     trunc_length = 3000
     if length > trunc_length:
         rand_index = torch.randint(low=0, high=length-1, size=(trunc_length,))
         embs = embs[rand_index]
         mask = mask[rand_index]
-    x = TSNE(n_components=2).fit_transform(embs)
+    if embs.shape[1] > 2:
+        x = TSNE(n_components=2).fit_transform(embs)
+    else:
+        x = embs
     plt.figure(figsize=(8, 8))
-    plt.scatter(x[mask, 0], x[mask, 1], c='blue', marker='o')
-    plt.scatter(x[~mask, 0], x[~mask, 1], c='red', marker='x')
+    colors = cycle(
+        ['blue', 'red', 'green', 'orange', 'purple', 'brown', 'yellow', 'cyan',
+         'violet', 'grey', 'navy', 'deeppink', 'lawngreen', 'gold', 'teal']
+    )
+    for label in torch.unique(y):
+        label_mask = y == label
+        plt.scatter(x[train_mask & label_mask, 0], x[train_mask & label_mask, 1], c=next(colors), marker='o')
+        plt.scatter(x[~train_mask & label_mask, 0], x[~train_mask & label_mask, 1], c=next(colors), marker='x')
     plt.grid(True)
     savefig_or_show(savepath)
 

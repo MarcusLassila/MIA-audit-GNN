@@ -42,19 +42,11 @@ class MembershipInferenceExperiment:
                     num_hops=query_hops,
                 )
                 hinge = utils.hinge_loss(embs, dataset.y)
-                utils.plot_embedding_2D_scatter(embs=embs, mask=dataset.train_mask, savepath=savepath)
+                utils.plot_embedding_2D_scatter(embs=embs, y=dataset.y, train_mask=dataset.train_mask, savepath=savepath)
                 for label in range(dataset.num_classes):
                     label_mask = dataset.y == label
                     savepath = f'{savedir}/hinge_hist_class{label}_{query_hops}hops.png'
                     utils.plot_hinge_histogram(hinge, label_mask=label_mask, train_mask=dataset.train_mask, savepath=savepath)
-                    mean_in = hinge[dataset.train_mask & label_mask].mean()
-                    mean_out = hinge[~dataset.train_mask & label_mask].mean()
-                    std_in = hinge[dataset.train_mask & label_mask].std()
-                    std_out = hinge[~dataset.train_mask & label_mask].std()
-                    means = [mean_in, mean_out]
-                    stds = [std_in, std_out]
-                    savepath = f'{savedir}/gaussians_class{label}_{query_hops}hops.png'
-                    utils.plot_fitted_gaussians(means, stds, savepath=savepath)
 
     def train_target_model(self, dataset, plot_training_results=True):
         config = self.config

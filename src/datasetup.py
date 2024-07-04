@@ -27,7 +27,7 @@ def create_attack_dataset(shadow_dataset, shadow_model):
     test_dataset = AttackDataset(test_X, test_y)
     return train_dataset, test_dataset
 
-def extract_subgraph(dataset, node_index, train_frac=0.5, val_frac=0.2):
+def extract_subgraph(dataset, node_index, train_frac=0.5, val_frac=0.2, simplify_dataset=False):
     '''
     Constructs a subgraph of dataset consisting of the nodes indexed in node_index with the edges linking them.
     Masks for training/validation/testing are constructed uniformly random with the specified proportions.
@@ -48,7 +48,7 @@ def extract_subgraph(dataset, node_index, train_frac=0.5, val_frac=0.2):
     train_mask = index_to_mask(train_index, num_nodes)
     val_mask = index_to_mask(val_index, num_nodes)
     test_mask = index_to_mask(test_index, num_nodes)
-    return Data(
+    data = Data(
         x=dataset.x[node_index],
         edge_index=edge_index,
         y=dataset.y[node_index],
@@ -59,6 +59,10 @@ def extract_subgraph(dataset, node_index, train_frac=0.5, val_frac=0.2):
         num_features=dataset.num_features,
         name=dataset.name,
     )
+    if simplify_dataset:
+        return simplified_dataset(data)
+    else:
+        return data
 
 def sample_subgraph(dataset, num_nodes, train_frac=0.5, val_frac=0.2, keep_class_proportions=True):
     '''
@@ -136,3 +140,34 @@ def parse_dataset(root, name):
         case _:
             raise ValueError("Unsupported dataset!")
     return dataset
+
+def simplified_dataset(dataset, num_features=4, noise_std=0.1):
+    '''
+    Combine classes into two new classes and replaces feature vectors according to
+    ______|  Class 0  |  Class 1  |
+    Train | [1,0,0,0] | [0,1,0,0] |
+    Test  | [0,0,1,0] | [0,0,0,1] |
+    ______|___________|___________|
+    Gaussian noise is added to the feature vectors with mean=0 and std=noise_std.
+    '''
+    a = (dataset.num_classes + 1) // 2
+    b = num_features // 4
+    y = (dataset.y >= a).long()
+    x = torch.zeros(size=(dataset.x.shape[0], num_features))
+    label_mask = y == 0
+    x[dataset.train_mask & label_mask, :b] = 1.0
+    x[dataset.train_mask & ~label_mask, b: 2 * b] = 1.0
+    x[~dataset.train_mask & label_mask, 2 * b: 3 * b] = 1.0
+    x[~dataset.train_mask & ~label_mask, 3 * b:] = 1.0
+    x = x + torch.normal(mean=0.0, std=noise_std, size=x.shape)
+    return Data(
+        x=x,
+        edge_index=dataset.edge_index,
+        y=y,
+        train_mask=dataset.train_mask,
+        val_mask=dataset.val_mask,
+        test_mask=dataset.test_mask,
+        num_classes=2,
+        num_features=num_features,
+        name=dataset.name,
+    )
