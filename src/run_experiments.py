@@ -18,7 +18,7 @@ def main():
         'datadir': './data',
         'savedir': './results',
         'early_stopping': True,
-        'grid_search': False,
+        'grid_search': True,
         'optimizer': 'Adam',
         'lr': 0.01,
         'weight_decay': 1e-4,

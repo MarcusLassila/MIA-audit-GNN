@@ -8,6 +8,15 @@ from typing import Callable, Union
 
 EARLY_STOPPING_THRESHOLD = 30 # Number of consecutive epochs with worse than the best seen validation set loss before early stopping.
 
+def check_inductive_split(graph):
+    for a, b in graph.edge_index.T:
+        assert (
+            graph.train_mask[a] == graph.train_mask[b]
+            and graph.val_mask[a] == graph.val_mask[b]
+            and graph.test_mask[a] == graph.test_mask[b]
+        )
+    tqdm.write('Verified inductive split.')
+
 def looper(iterable, use_tqdm, desc=""):
     return tqdm(iterable, desc=desc) if use_tqdm else iterable
 
@@ -41,6 +50,7 @@ def valid_step_gnn(model, dataset, loss_fn, criterion):
     return loss.item() / dataset.val_mask.sum().item(), score.item()
 
 def train_gnn(model, dataset, config: TrainConfig, use_tqdm=True):
+    # check_inductive_split(dataset)
     model.to(config.device)
     dataset.to(config.device)
     optimizer = config.optimizer(model.parameters(), lr=config.lr, weight_decay=config.weight_decay)
