@@ -24,7 +24,8 @@ class MembershipInferenceExperiment:
         config = self.config
         dataset = datasetup.sample_subgraph(self.dataset, self.dataset.x.shape[0])
         savepath = f'{config.savedir}/embeddings/features.png'
-        utils.plot_embedding_2D_scatter(dataset.x, dataset.y, dataset.train_mask, savepath=savepath)
+        train_mask = ~dataset.test_mask
+        utils.plot_embedding_2D_scatter(dataset.x, dataset.y, train_mask, savepath=savepath)
         target_model = self.train_target_model(dataset)
         target_model.eval()
         query_nodes = torch.arange(0, dataset.x.shape[0])
@@ -39,11 +40,11 @@ class MembershipInferenceExperiment:
                 num_hops=query_hops,
             )
             hinge = utils.hinge_loss(embs, dataset.y)
-            utils.plot_embedding_2D_scatter(embs=embs, y=dataset.y, train_mask=dataset.train_mask, savepath=savepath)
+            utils.plot_embedding_2D_scatter(embs=embs, y=dataset.y, train_mask=train_mask, savepath=savepath)
             for label in range(dataset.num_classes):
                 label_mask = dataset.y == label
                 savepath = f'{savedir}/hinge_hist_class{label}_{config.name}.png'
-                utils.plot_hinge_histogram(hinge, label_mask=label_mask, train_mask=dataset.train_mask, savepath=savepath)
+                utils.plot_hinge_histogram(hinge, label_mask=label_mask, train_mask=train_mask, savepath=savepath)
 
     def train_target_model(self, dataset, plot_training_results=True):
         config = self.config
@@ -205,7 +206,7 @@ def main(config):
 if __name__ == '__main__':
     torch.random.manual_seed(0)
     parser = argparse.ArgumentParser()
-    parser.add_argument("--attack", default="basic-shadow", type=str)
+    parser.add_argument("--attack", default="confidence", type=str)
     parser.add_argument("--dataset", default="cora", type=str)
     parser.add_argument("--split", default="sampled", type=str)
     parser.add_argument("--model", default="GCN", type=str)

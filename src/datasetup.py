@@ -155,10 +155,11 @@ def simplified_dataset(dataset, num_features=4, noise_std=0.1):
     y = (dataset.y >= a).long()
     x = torch.zeros(size=(dataset.x.shape[0], num_features))
     label_mask = y == 0
-    x[dataset.train_mask & label_mask, :b] = 1.0
-    x[dataset.train_mask & ~label_mask, b: 2 * b] = 1.0
-    x[~dataset.train_mask & label_mask, 2 * b: 3 * b] = 1.0
-    x[~dataset.train_mask & ~label_mask, 3 * b:] = 1.0
+    train_mask = ~dataset.test_mask
+    x[train_mask & label_mask, :b] = 1.0
+    x[train_mask & ~label_mask, b: 2 * b] = 1.0
+    x[~train_mask & label_mask, 2 * b: 3 * b] = 1.0
+    x[~train_mask & ~label_mask, 3 * b:] = 1.0
     x = x + torch.normal(mean=0.0, std=noise_std, size=x.shape)
     return Data(
         x=x,

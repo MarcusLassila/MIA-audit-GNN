@@ -8,18 +8,16 @@ from typing import Callable, Union
 
 EARLY_STOPPING_THRESHOLD = 30 # Number of consecutive epochs with worse than the best seen validation set loss before early stopping.
 
-ArrayType = Union[np.ndarray, torch.tensor]
-
 def looper(iterable, use_tqdm, desc=""):
     return tqdm(iterable, desc=desc) if use_tqdm else iterable
 
 @dataclass
 class TrainConfig:
-    criterion: Callable[[ArrayType, ArrayType], float]
+    criterion: Callable[[Union[np.ndarray, torch.tensor], Union[np.ndarray, torch.tensor]], float]
     device: Union[str, torch.device]
     epochs: int
     early_stopping: bool
-    loss_fn: Callable[[ArrayType, ArrayType], float]
+    loss_fn: Callable[[Union[np.ndarray, torch.tensor], Union[np.ndarray, torch.tensor]], float]
     lr: float
     weight_decay: float
     optimizer: torch.optim.Optimizer
