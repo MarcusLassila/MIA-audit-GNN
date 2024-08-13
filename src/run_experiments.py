@@ -25,6 +25,7 @@ def main():
         'dropout': 0.5,
         'experiments': 5,
         'make_plots': True,
+        'transductive': False,
     }
     for _, params in config.items():
         params = default_params | params
