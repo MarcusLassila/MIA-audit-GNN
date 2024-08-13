@@ -18,12 +18,12 @@ def grid_search(
     epochs: int,
     early_stopping: bool,
     optimizer: str,
-    hidden_dim: int,
+    hidden_dim: list,
 ):
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
     criterion = Accuracy(task="multiclass", num_classes=dataset.num_classes).to(device)
     grid = {
-        'lr': [5e-4, 1e-3, 5e-3, 1e-2],
+        'lr': [5e-4, 1e-3, 5e-3, 1e-2, 5e-2],
         'weight_decay': [1e-5, 5e-5, 1e-4, 5e-4],
         'dropout': [0.0, 0.25, 0.5],
     }
@@ -44,7 +44,7 @@ def grid_search(
         model = utils.fresh_model(
             model_type=model_type,
             num_features=dataset.num_features,
-            hidden_dims=[hidden_dim],
+            hidden_dims=hidden_dim,
             num_classes=dataset.num_classes,
             dropout=dropout,
         )

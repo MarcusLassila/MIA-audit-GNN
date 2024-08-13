@@ -27,7 +27,17 @@ def create_attack_dataset(shadow_dataset, shadow_model):
     test_dataset = AttackDataset(test_X, test_y)
     return train_dataset, test_dataset
 
-def extract_subgraph(dataset, node_index, train_frac=0.5, val_frac=0.2, simplify_dataset=False):
+def remove_train_val_test_interconnections(graph):
+    mask = []
+    for a, b in graph.edge_index.T:
+        mask.append(
+            graph.train_mask[a] == graph.train_mask[b]
+            and graph.val_mask[a] == graph.val_mask[b]
+            and graph.test_mask[a] == graph.test_mask[b]
+        )
+    graph.edge_index = graph.edge_index.T[mask].T
+
+def extract_subgraph(dataset, node_index, train_frac=0.5, val_frac=0.2, simplify_dataset=False, inductive_split=True):
     '''
     Constructs a subgraph of dataset consisting of the nodes indexed in node_index with the edges linking them.
     Masks for training/validation/testing are constructed uniformly random with the specified proportions.
@@ -59,6 +69,8 @@ def extract_subgraph(dataset, node_index, train_frac=0.5, val_frac=0.2, simplify
         num_features=dataset.num_features,
         name=dataset.name,
     )
+    if inductive_split:
+        remove_train_val_test_interconnections(data)
     if simplify_dataset:
         return simplified_dataset(data)
     else:
@@ -141,7 +153,7 @@ def parse_dataset(root, name):
             raise ValueError("Unsupported dataset!")
     return dataset
 
-def simplified_dataset(dataset, num_features=4, noise_std=0.1):
+def simplified_dataset(dataset, num_features=4, noise_std=0.0):
     '''
     Combine classes into two new classes and replaces feature vectors according to
     ______|  Class 0  |  Class 1  |
