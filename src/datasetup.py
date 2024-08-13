@@ -41,7 +41,7 @@ def remove_train_val_test_interconnections(graph):
         )
     graph.edge_index = graph.edge_index.T[mask].T
 
-def extract_subgraph(dataset, node_index, train_frac=0.5, val_frac=0.2):
+def extract_subgraph(dataset, node_index, train_frac=0.4, val_frac=0.2):
     '''
     Constructs a subgraph of dataset consisting of the nodes indexed in node_index with the edges linking them.
     Masks for training/validation/testing are constructed uniformly random with the specified proportions.
@@ -80,7 +80,7 @@ def extract_subgraph(dataset, node_index, train_frac=0.5, val_frac=0.2):
     else:
         return data
 
-def sample_subgraph(dataset, num_nodes, train_frac=0.5, val_frac=0.2, keep_class_proportions=True):
+def sample_subgraph(dataset, num_nodes, train_frac=0.4, val_frac=0.2, keep_class_proportions=True):
     '''
     Sample a subgraph by uniformly sample a number of nodes from the graph dataset.
     Masks for training/validation/testing are created uniformly at random with the specified proportions.
@@ -157,7 +157,7 @@ def parse_dataset(root, name):
             raise ValueError("Unsupported dataset!")
     return dataset
 
-def simplified_dataset(dataset, num_features=4, noise_std=0.0):
+def simplified_dataset(dataset, num_features=4, noise_std=0.1):
     '''
     Combine classes into two new classes and replaces feature vectors according to
     ______|  Class 0  |  Class 1  |
