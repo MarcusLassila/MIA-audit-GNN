@@ -199,16 +199,18 @@ class MembershipInferenceExperiment:
 def main(config):
     config['dataset'] = config['dataset'].lower()
     config['device'] = 'cuda' if torch.cuda.is_available() else 'cpu'
+    datasetup.global_variables['transductive'] = config['transductive'] or False
     mie = MembershipInferenceExperiment(config)
     mie.visualize_embedding_distribution()
     return mie.run()
 
 if __name__ == '__main__':
-    torch.random.manual_seed(0)
+    torch.random.manual_seed(1)
     parser = argparse.ArgumentParser()
     parser.add_argument("--attack", default="confidence", type=str)
     parser.add_argument("--dataset", default="cora", type=str)
     parser.add_argument("--split", default="sampled", type=str)
+    parser.add_argument("--transductive", action=argparse.BooleanOptionalAction)
     parser.add_argument("--model", default="GCN", type=str)
     parser.add_argument("--batch-size", default=32, type=int)
     parser.add_argument("--epochs-target", default=500, type=int)

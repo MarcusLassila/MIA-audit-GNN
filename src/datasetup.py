@@ -4,6 +4,10 @@ from torch_geometric.data import Data
 from torch_geometric.utils import index_to_mask, subgraph
 from sklearn.model_selection import train_test_split
 
+global_variables = {
+    'transductive': False,
+    'simplified_dataset': False,
+}
 
 class AttackDataset(torch.utils.data.Dataset):
     
@@ -37,7 +41,7 @@ def remove_train_val_test_interconnections(graph):
         )
     graph.edge_index = graph.edge_index.T[mask].T
 
-def extract_subgraph(dataset, node_index, train_frac=0.5, val_frac=0.2, simplify_dataset=False, inductive_split=True):
+def extract_subgraph(dataset, node_index, train_frac=0.5, val_frac=0.2):
     '''
     Constructs a subgraph of dataset consisting of the nodes indexed in node_index with the edges linking them.
     Masks for training/validation/testing are constructed uniformly random with the specified proportions.
@@ -69,9 +73,9 @@ def extract_subgraph(dataset, node_index, train_frac=0.5, val_frac=0.2, simplify
         num_features=dataset.num_features,
         name=dataset.name,
     )
-    if inductive_split:
+    if not global_variables['transductive']:
         remove_train_val_test_interconnections(data)
-    if simplify_dataset:
+    if global_variables['simplified_dataset']:
         return simplified_dataset(data)
     else:
         return data
