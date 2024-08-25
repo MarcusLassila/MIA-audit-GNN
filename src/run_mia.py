@@ -18,8 +18,7 @@ class MembershipInferenceExperiment:
         self.config = utils.Config(config)
         self.dataset = datasetup.parse_dataset(root=self.config.datadir, name=self.config.dataset)
         self.criterion = Accuracy(task="multiclass", num_classes=self.dataset.num_classes).to(self.config.device)
-        if not self.config.simplified_dataset:
-            print(utils.GraphInfo(self.dataset))
+        print(utils.GraphInfo(self.dataset))
 
     def visualize_embedding_distribution(self):
         config = self.config
@@ -201,7 +200,6 @@ def main(config):
     config['dataset'] = config['dataset'].lower()
     config['device'] = 'cuda' if torch.cuda.is_available() else 'cpu'
     datasetup.global_variables['transductive'] = config['transductive']
-    datasetup.global_variables['simplified_dataset'] = config['simplified_dataset']
     mie = MembershipInferenceExperiment(config)
     mie.visualize_embedding_distribution()
     return mie.run()
@@ -213,7 +211,6 @@ if __name__ == '__main__':
     parser.add_argument("--dataset", default="cora", type=str)
     parser.add_argument("--split", default="sampled", type=str)
     parser.add_argument("--transductive", action=argparse.BooleanOptionalAction)
-    parser.add_argument("--simplified-dataset", action=argparse.BooleanOptionalAction)
     parser.add_argument("--model", default="GCN", type=str)
     parser.add_argument("--batch-size", default=32, type=int)
     parser.add_argument("--epochs-target", default=500, type=int)
