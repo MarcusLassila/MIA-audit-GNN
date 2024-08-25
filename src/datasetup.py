@@ -130,7 +130,7 @@ def target_shadow_split(dataset, split="sampled", target_frac=0.5, shadow_frac=0
         raise ValueError(f"Unsupported split: {split}")
     return target_set, shadow_set
 
-def parse_dataset(root, name):
+def parse_dataset(root, name, sbm_parameters=None):
     match name:
         case "cora":
             dataset = torch_geometric.datasets.Planetoid(root=root, name="Cora")
@@ -146,6 +146,24 @@ def parse_dataset(root, name):
         case "flickr":
             dataset = torch_geometric.datasets.Flickr(root=root)
             dataset.name = "Flickr"
+        case "sbm":
+            if sbm_parameters:
+                block_sizes, edge_probs, num_channels = sbm_parameters
+            else:
+                block_sizes = torch.tensor([500, 500], dtype=torch.long)
+                edge_probs = torch.tensor([
+                    [0.3, 0.1],
+                    [0.1, 0.3],
+                ])
+                num_channels = 4
+            dataset = torch_geometric.datasets.StochasticBlockModelDataset(
+                root=root,
+                block_sizes=block_sizes,
+                edge_probs=edge_probs,
+                num_channels=num_channels,
+                force_reload=False,
+            )
+            dataset.name = "SBM"
         case _:
             raise ValueError("Unsupported dataset!")
     return dataset
