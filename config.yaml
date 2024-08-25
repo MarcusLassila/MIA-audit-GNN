@@ -1,21 +1,5 @@
 ---
-LiRA-cora-MLP:
-  attack: "lira"
-  dataset: "cora"
-  model: "MLP"
-  epochs_target: 500
-  hidden_dim_target: [32]
-  num_shadow_models: 128
-  query_hops: 0
-LiRA-cora-GCN1:
-  attack: "lira"
-  dataset: "cora"
-  model: "GCN"
-  epochs_target: 500
-  hidden_dim_target: []
-  num_shadow_models: 128
-  query_hops: 1
-LiRA-cora-GCN2:
+LiRA-cora-GCN-transductive:
   attack: "lira"
   dataset: "cora"
   model: "GCN"
@@ -23,19 +7,13 @@ LiRA-cora-GCN2:
   hidden_dim_target: [32]
   num_shadow_models: 128
   query_hops: 2
-LiRA-cora-GCN3:
+  transductive: true
+LiRA-cora-GCN-inductive:
   attack: "lira"
   dataset: "cora"
   model: "GCN"
   epochs_target: 500
-  hidden_dim_target: [32, 16]
+  hidden_dim_target: [32]
   num_shadow_models: 128
-  query_hops: 3
-LiRA-cora-GCN4:
-  attack: "lira"
-  dataset: "cora"
-  model: "GCN"
-  epochs_target: 500
-  hidden_dim_target: [32, 16, 8]
-  num_shadow_models: 128
-  query_hops: 4
+  query_hops: 2
+  transductive: false

@@ -57,6 +57,7 @@ class MembershipInferenceExperiment:
                 early_stopping=self.config.early_stopping,
                 optimizer=self.config.optimizer,
                 hidden_dim=self.config.hidden_dim_target,
+                transductive=config.transductive,
             )
             print(f'Grid search results: {opt_hyperparams}')
             lr, weight_decay, dropout = opt_hyperparams.values()
@@ -85,6 +86,7 @@ class MembershipInferenceExperiment:
             model=target_model,
             dataset=dataset,
             config=train_config,
+            inductive_split=not config.transductive
         )
         evaluation.evaluate_graph_training(
             model=target_model,
@@ -199,7 +201,6 @@ class MembershipInferenceExperiment:
 def main(config):
     config['dataset'] = config['dataset'].lower()
     config['device'] = 'cuda' if torch.cuda.is_available() else 'cpu'
-    datasetup.global_variables['transductive'] = config['transductive']
     mie = MembershipInferenceExperiment(config)
     mie.visualize_embedding_distribution()
     return mie.run()

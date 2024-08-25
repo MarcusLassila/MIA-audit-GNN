@@ -19,6 +19,7 @@ def grid_search(
     early_stopping: bool,
     optimizer: str,
     hidden_dim: list,
+    transductive: bool,
 ):
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
     criterion = Accuracy(task="multiclass", num_classes=dataset.num_classes).to(device)
@@ -53,6 +54,7 @@ def grid_search(
             dataset=dataset,
             config=train_config,
             use_tqdm=False,
+            inductive_split=not transductive,
         )['valid_loss'])
         if valid_loss < min_valid_loss:
             min_valid_loss = valid_loss
@@ -87,6 +89,7 @@ def rmia_offline_interp_param_search(
         'hidden_dim_target': 32,
         'query_hops': 0,
         'num_shadow_models': 8,
+        'transductive': False,
     })
     target_model = utils.fresh_model(
         model_type=model_type,
@@ -110,6 +113,7 @@ def rmia_offline_interp_param_search(
         model=target_model,
         dataset=target_samples,
         config=train_config,
+        inductive_split=not config.transductive,
     )
 
     best_auroc = 0.0

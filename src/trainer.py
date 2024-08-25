@@ -15,7 +15,6 @@ def check_inductive_split(graph):
             and graph.val_mask[a] == graph.val_mask[b]
             and graph.test_mask[a] == graph.test_mask[b]
         )
-    tqdm.write('Verified inductive split.')
 
 def looper(iterable, use_tqdm, desc=""):
     return tqdm(iterable, desc=desc) if use_tqdm else iterable
@@ -49,8 +48,11 @@ def valid_step_gnn(model, dataset, loss_fn, criterion):
         score = criterion(out[dataset.val_mask].argmax(dim=1), dataset.y[dataset.val_mask])
     return loss.item() / dataset.val_mask.sum().item(), score.item()
 
-def train_gnn(model, dataset, config: TrainConfig, use_tqdm=True):
-    # check_inductive_split(dataset)
+def train_gnn(model, dataset, config: TrainConfig, use_tqdm=True, inductive_split=True):
+    if inductive_split:
+        dataset = dataset.clone()
+        dataset.edge_index = dataset.edge_index[:, dataset.inductive_mask]
+        check_inductive_split(dataset)
     model.to(config.device)
     dataset.to(config.device)
     optimizer = config.optimizer(model.parameters(), lr=config.lr, weight_decay=config.weight_decay)

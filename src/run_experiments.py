@@ -6,7 +6,13 @@ import pandas as pd
 from pathlib import Path
 
 def add_name(params):
-    params['name'] = '-'.join([params['attack'], params['dataset'], params['model'], f"{params['query_hops']}hop"])
+    params['name'] = '-'.join([
+        params['attack'],
+        params['dataset'],
+        params['model'],
+        'transductive' if params['transductive'] else 'inductive',
+        f"{params['query_hops']}hop"
+    ])
 
 def main():
     with open("config.yaml", "r") as file:
@@ -18,7 +24,7 @@ def main():
         'datadir': './data',
         'savedir': './results',
         'early_stopping': True,
-        'grid_search': True,
+        'grid_search': False,
         'optimizer': 'Adam',
         'lr': 0.01,
         'weight_decay': 1e-4,

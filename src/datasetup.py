@@ -4,9 +4,6 @@ from torch_geometric.data import Data
 from torch_geometric.utils import index_to_mask, subgraph
 from sklearn.model_selection import train_test_split
 
-global_variables = {
-    'transductive': False,
-}
 
 class AttackDataset(torch.utils.data.Dataset):
     
@@ -30,7 +27,7 @@ def create_attack_dataset(shadow_dataset, shadow_model):
     test_dataset = AttackDataset(test_X, test_y)
     return train_dataset, test_dataset
 
-def remove_train_val_test_interconnections(graph):
+def train_split_interconnection_mask(graph):
     mask = []
     for a, b in graph.edge_index.T:
         mask.append(
@@ -38,7 +35,7 @@ def remove_train_val_test_interconnections(graph):
             and graph.val_mask[a] == graph.val_mask[b]
             and graph.test_mask[a] == graph.test_mask[b]
         )
-    graph.edge_index = graph.edge_index.T[mask].T
+    return torch.tensor(mask, dtype=torch.bool)
 
 def extract_subgraph(dataset, node_index, train_frac=0.4, val_frac=0.2):
     '''
@@ -72,8 +69,8 @@ def extract_subgraph(dataset, node_index, train_frac=0.4, val_frac=0.2):
         num_features=dataset.num_features,
         name=dataset.name,
     )
-    if not global_variables['transductive']:
-        remove_train_val_test_interconnections(data)
+    inductive_mask = train_split_interconnection_mask(data)
+    data.inductive_mask = inductive_mask
     return data
 
 def sample_subgraph(dataset, num_nodes, train_frac=0.4, val_frac=0.2, keep_class_proportions=True):

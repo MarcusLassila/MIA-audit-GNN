@@ -1,6 +1,5 @@
 import datasetup
 import evaluation
-import models
 import trainer
 import utils
 
@@ -52,6 +51,7 @@ class BasicShadowAttack:
             model=self.shadow_model,
             dataset=self.shadow_dataset,
             config=train_config,
+            inductive_split=not config.transductive,
         )
         evaluation.evaluate_graph_training(
             model=self.shadow_model,
@@ -162,6 +162,7 @@ class LiRA:
                 dataset=shadow_dataset,
                 config=train_config,
                 use_tqdm=False,
+                inductive_split=not config.transductive,
             )
             self.shadow_models.append(shadow_model)
     
@@ -268,6 +269,7 @@ class RMIA:
                 dataset=shadow_dataset,
                 config=train_config,
                 use_tqdm=False,
+                inductive_split=not config.transductive,
             )
             self.out_models.append(shadow_model)
 
