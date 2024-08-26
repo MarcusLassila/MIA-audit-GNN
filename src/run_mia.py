@@ -108,10 +108,10 @@ class MembershipInferenceExperiment:
         for i in range(config.experiments):
             print(f'Running experiment {i + 1}/{config.experiments}.')
 
-            if config.attack == "basic-shadow":
+            if config.attack == "basic-mlp":
                 target_dataset, shadow_dataset = datasetup.target_shadow_split(dataset, split=config.split)
                 target_model = self.train_target_model(target_dataset)
-                metrics = attacks.BasicShadowAttack(
+                metrics = attacks.BasicMLPAttack(
                     target_model=target_model,
                     shadow_dataset=shadow_dataset,
                     config=config,

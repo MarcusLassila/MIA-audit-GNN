@@ -14,8 +14,8 @@ from torchmetrics import Accuracy
 from tqdm.auto import tqdm
 
 
-class BasicShadowAttack:
-    
+class BasicMLPAttack:
+
     def __init__(self, target_model, shadow_dataset, config):
         target_model.eval()
         self.target_model = target_model

@@ -8,7 +8,7 @@ Specify attack settings in config.yaml and run "src/run_experiments.py". CSV fil
 Alternatively, run "src/run_mia.py" which only run one MIA simulation experiment and can be customized with the following flags:
 
 * --attack: Type of attack to use.
-    * "shadow": The black-box shadow model attack used in "Membership Inference Attack on Graph Neural Networks", "Quantifying Privacy Leakage in Graph Embedding" and "Node-Level Membership Inference Attacks Against Graph Neural Networks".
+    * "basic-mlp": The black-box shadow model attack used in "Membership Inference Attack on Graph Neural Networks", "Quantifying Privacy Leakage in Graph Embedding" and "Node-Level Membership Inference Attacks Against Graph Neural Networks".
     * "confidence": The confidence attack in "Quantifying Privacy Leakage in Graph Embedding", which thresholds the confidence values from the target model for a membership prediction.
     * "lira": The offline version of LiRA from "Membership Inference Attacks From First Principles".
     * "rmia": The attack from "Low-Cost High-Power Membership Inference Attacks" (only offline version currently).
