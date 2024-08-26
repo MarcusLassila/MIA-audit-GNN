@@ -25,7 +25,8 @@ def stochastic_block_model(root):
         block_sizes=block_sizes,
         edge_probs=edge_probs,
         num_channels=3,
-        force_reload=True,
+        force_reload=False,
+        class_sep=0.5
     )
     dataset.name = "SBM"
     return dataset
