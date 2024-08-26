@@ -70,15 +70,17 @@ def sample_subgraph(dataset, num_nodes, train_frac=0.4, val_frac=0.2, keep_class
     total_num_nodes = dataset.x.shape[0]
     assert 0 < num_nodes <= total_num_nodes
     node_frac = num_nodes / total_num_nodes
-    randomized_index = torch.randperm(total_num_nodes)
     if keep_class_proportions:
         node_index = []
         for c in range(dataset.num_classes):
-            idx = (dataset.y[randomized_index] == c).nonzero().squeeze(dim=1)
-            n = int(len(idx) * node_frac)
-            node_index.append(idx[:n])
+            index = (dataset.y == c).nonzero().squeeze()
+            perm_mask = torch.randperm(index.shape[0])
+            index = index[perm_mask]
+            n = int(index.shape[0] * node_frac)
+            node_index.append(index[:n])
         node_index = torch.cat(node_index)
     else:
+        randomized_index = torch.randperm(total_num_nodes)
         node_index = randomized_index[:num_nodes]
     return extract_subgraph(dataset, node_index, train_frac=train_frac, val_frac=val_frac)
 
