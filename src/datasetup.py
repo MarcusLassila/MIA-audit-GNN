@@ -17,8 +17,8 @@ def create_attack_dataset(shadow_dataset, shadow_model):
 def stochastic_block_model(root):
     block_sizes = [1000, 1000]
     edge_probs = [
-        [0.021, 0.007],
-        [0.007, 0.021],
+        [0.015, 0.005],
+        [0.005, 0.015],
     ]
     dataset = torch_geometric.datasets.StochasticBlockModelDataset(
         root=root,
@@ -108,13 +108,13 @@ def disjoint_split(dataset, balance=0.5):
     '''
     node_index_A = []
     node_index_B = []
-    num_nodes = dataset.x.shape[0]
-    randomized_index = torch.randperm(num_nodes)
     for c in range(dataset.num_classes):
-        idx = (dataset.y[randomized_index] == c).nonzero().squeeze(dim=1)
-        n = int(len(idx) * balance)
-        node_index_A.append(idx[:n])
-        node_index_B.append(idx[n:])
+        index = (dataset.y == c).nonzero().squeeze()
+        perm_mask = torch.randperm(index.shape[0])
+        index = index[perm_mask]
+        n = int(index.shape[0] * balance)
+        node_index_A.append(index[:n])
+        node_index_B.append(index[n:])
     node_index_A = torch.cat(node_index_A)
     node_index_B = torch.cat(node_index_B)
     return node_index_A, node_index_B

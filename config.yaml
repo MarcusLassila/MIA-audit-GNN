@@ -1,16 +1,34 @@
 ---
-LiRA-cora-GCN-transductive:
-  attack: "lira"
-  dataset: "cora"
+Conf-sbm-GCN-0hop:
+  attack: "confidence"
+  dataset: "sbm"
+  model: "GCN"
+  epochs_target: 500
+  hidden_dim_target: [32]
+  num_shadow_models: 128
+  query_hops: 0
+  transductive: false
+Conf-sbm-GCN-2hop:
+  attack: "confidence"
+  dataset: "sbm"
   model: "GCN"
   epochs_target: 500
   hidden_dim_target: [32]
   num_shadow_models: 128
   query_hops: 2
-  transductive: true
-LiRA-cora-GCN-inductive:
+  transductive: false
+LiRA-sbm-GCN-0hop:
   attack: "lira"
-  dataset: "cora"
+  dataset: "sbm"
+  model: "GCN"
+  epochs_target: 500
+  hidden_dim_target: [32]
+  num_shadow_models: 128
+  query_hops: 0
+  transductive: false
+LiRA-sbm-GCN-2hop:
+  attack: "lira"
+  dataset: "sbm"
   model: "GCN"
   epochs_target: 500
   hidden_dim_target: [32]
