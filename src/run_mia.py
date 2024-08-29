@@ -40,6 +40,7 @@ class MembershipInferenceExperiment:
                 query_nodes=query_nodes,
                 num_hops=query_hops,
             ).cpu()
+            dataset.to('cpu')
             hinge = utils.hinge_loss(embs, dataset.y)
             utils.plot_embedding_2D_scatter(embs=embs, y=dataset.y, train_mask=train_mask, savepath=savepath)
             for label in range(dataset.num_classes):
