@@ -207,7 +207,7 @@ def main(config):
     config['dataset'] = config['dataset'].lower()
     config['device'] = 'cuda' if torch.cuda.is_available() else 'cpu'
     mie = MembershipInferenceExperiment(config)
-    mie.visualize_embedding_distribution()
+    # mie.visualize_embedding_distribution()
     return mie.run()
 
 if __name__ == '__main__':
