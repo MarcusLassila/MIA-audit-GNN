@@ -49,12 +49,12 @@ def valid_step_gnn(model, dataset, loss_fn, criterion):
     return loss.item() / dataset.val_mask.sum().item(), score.item()
 
 def train_gnn(model, dataset, config: TrainConfig, use_tqdm=True, inductive_split=True):
+    model.to(config.device)
+    dataset.to(config.device)
     if inductive_split:
         dataset = dataset.clone()
         dataset.edge_index = dataset.edge_index[:, dataset.inductive_mask]
         check_inductive_split(dataset)
-    model.to(config.device)
-    dataset.to(config.device)
     optimizer = config.optimizer(model.parameters(), lr=config.lr, weight_decay=config.weight_decay)
     loss_fn, criterion = config.loss_fn, config.criterion
     res = defaultdict(list)
