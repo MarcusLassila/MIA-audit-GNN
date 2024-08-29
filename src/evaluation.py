@@ -31,8 +31,7 @@ def k_hop_query(model, dataset, query_nodes, num_hops=0, use_ideal_neighborhood=
         query_nodes = torch.tensor(query_nodes, dtype=torch.int64)
     if num_hops == 0:
         with torch.inference_mode():
-            empty_edge_index = torch.tensor([[],[]], dtype=torch.int64)
-            empty_edge_index.to(device=dataset.edge_index.device)
+            empty_edge_index = torch.tensor([[],[]], dtype=torch.int64).to(dataset.edge_index.device)
             predictions = model(dataset.x[query_nodes], empty_edge_index)
     else:
         # Can we speed this up?
