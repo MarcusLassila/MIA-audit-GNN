@@ -164,14 +164,14 @@ class MembershipInferenceExperiment:
             metrics = dict(target_scores, **metrics)
 
             fpr, tpr = metrics['roc']
-            tpr_at_1_percent_fpr = utils.tpr_at_fixed_fpr(fpr, tpr, 0.01)
+            tpr_at_fixed_fpr = utils.tpr_at_fixed_fpr(fpr, tpr, config.target_fpr)
 
             scores['fprs'].append(fpr)
             scores['tprs'].append(tpr)
             scores['train_scores'].append(metrics['train_score'])
             scores['test_scores'].append(metrics['test_score'])
             scores['auroc'].append(metrics['auroc'])
-            scores['tprs_at_fixed_fpr'].append(tpr_at_1_percent_fpr)
+            scores['tprs_at_fixed_fpr'].append(tpr_at_fixed_fpr)
             if best_auroc < metrics['auroc']:
                 best_auroc = metrics['auroc']
 
@@ -229,6 +229,7 @@ if __name__ == '__main__':
     parser.add_argument("--hidden-dim-attack", default=[256, 64], type=lambda x: [*map(int, x.split(','))])
     parser.add_argument("--query-hops", default=0, type=int)
     parser.add_argument("--experiments", default=1, type=int)
+    parser.add_argument("--target-fpr", default=0.01, type=float)
     parser.add_argument("--optimizer", default="Adam", type=str)
     parser.add_argument("--num-shadow-models", default=128, type=int)
     parser.add_argument("--rmia-offline-interp-param", default=0.1, type=float)

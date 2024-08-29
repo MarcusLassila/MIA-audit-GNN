@@ -41,7 +41,7 @@ def train_split_interconnection_mask(graph):
         )
     return torch.tensor(mask, dtype=torch.bool)
 
-def extract_subgraph(dataset, node_index, train_frac=0.4, val_frac=0.2):
+def extract_subgraph(dataset, node_index, train_frac=0.5, val_frac=0.2):
     '''
     Constructs a subgraph of dataset consisting of the nodes indexed in node_index with the edges linking them.
     Masks for training/validation/testing are constructed uniformly random with the specified proportions.
@@ -77,7 +77,7 @@ def extract_subgraph(dataset, node_index, train_frac=0.4, val_frac=0.2):
     data.inductive_mask = inductive_mask
     return data
 
-def sample_subgraph(dataset, num_nodes, train_frac=0.4, val_frac=0.2, keep_class_proportions=True):
+def sample_subgraph(dataset, num_nodes, train_frac=0.5, val_frac=0.2, keep_class_proportions=True):
     '''
     Sample a subgraph by uniformly sample a number of nodes from the graph dataset.
     Masks for training/validation/testing are created uniformly at random with the specified proportions.

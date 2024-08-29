@@ -16,7 +16,7 @@ def bc_evaluation(preds, labels):
         'roc': (fpr, tpr),
     }
 
-def k_hop_query(model, dataset, query_nodes, num_hops=0, use_ideal_neighborhood=False):
+def k_hop_query(model, dataset, query_nodes, num_hops=0, use_ideal_neighborhood=True):
     '''
     Queries the model for each node in in query_nodes,
     using the local subgraph definded by the "num_hops"-hop neigborhood.
@@ -37,12 +37,7 @@ def k_hop_query(model, dataset, query_nodes, num_hops=0, use_ideal_neighborhood=
         predictions = []
         for v in query_nodes:
             if use_ideal_neighborhood:
-                mask = dataset.train_mask if dataset.train_mask[v] else ~dataset.train_mask
-                edge_index, _ = subgraph(
-                    subset=mask_to_index(mask),
-                    edge_index=dataset.edge_index,
-                    num_nodes=dataset.x.shape[0]
-                )
+                edge_index = edge_index[:, dataset.inductive_mask]
             else:
                 edge_index = dataset.edge_index
             node_index, edge_index, v_idx, _ = k_hop_subgraph(

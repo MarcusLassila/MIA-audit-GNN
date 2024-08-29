@@ -12,7 +12,7 @@ from sklearn.manifold import TSNE
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
 from pathlib import Path
 from time import perf_counter
-from itertools import cycle
+from itertools import cycle, islice
 
 class Config:
 
@@ -133,7 +133,7 @@ def plot_roc_loglog(fpr, tpr, title=None, savepath=None):
 
 def plot_multi_roc_loglog(fprs, tprs, train_accs, test_accs, title=None, savepath=None):
     plt.figure(figsize=(8, 8))
-    for fpr, tpr, train_acc, test_acc in zip(fprs, tprs, train_accs, test_accs):
+    for fpr, tpr, train_acc, test_acc in islice(zip(fprs, tprs, train_accs, test_accs), 6):
         plt.loglog(fpr, tpr, label=f'Train acc: {train_acc:.4f} | Test acc: {test_acc:.4f}')
     plt.xlim(1e-4, 1)
     plt.ylim(1e-4, 1)

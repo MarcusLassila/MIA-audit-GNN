@@ -1,37 +1,21 @@
 ---
-Conf-sbm-GCN-0hop:
-  attack: "confidence"
-  dataset: "sbm"
+LiRA-cora-GCN-0hop:
+  attack: "lira"
+  dataset: "cora"
   model: "GCN"
   epochs_target: 500
   hidden_dim_target: [32]
   num_shadow_models: 128
   query_hops: 0
   transductive: false
-Conf-sbm-GCN-2hop:
-  attack: "confidence"
-  dataset: "sbm"
+  target_fpr: 0.005
+LiRA-cora-GCN-2hop:
+  attack: "lira"
+  dataset: "cora"
   model: "GCN"
   epochs_target: 500
   hidden_dim_target: [32]
   num_shadow_models: 128
   query_hops: 2
   transductive: false
-LiRA-sbm-GCN-0hop:
-  attack: "lira"
-  dataset: "sbm"
-  model: "GCN"
-  epochs_target: 500
-  hidden_dim_target: [32]
-  num_shadow_models: 128
-  query_hops: 0
-  transductive: false
-LiRA-sbm-GCN-2hop:
-  attack: "lira"
-  dataset: "sbm"
-  model: "GCN"
-  epochs_target: 500
-  hidden_dim_target: [32]
-  num_shadow_models: 128
-  query_hops: 2
-  transductive: false
+  target_fpr: 0.005

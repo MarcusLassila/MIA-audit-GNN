@@ -29,7 +29,8 @@ def main():
         'lr': 0.01,
         'weight_decay': 1e-4,
         'dropout': 0.5,
-        'experiments': 5,
+        'experiments': 10,
+        'target_fpr': 0.01,
         'make_plots': True,
         'transductive': False,
     }
