@@ -3,7 +3,7 @@ LiRA-flickr-GCN-0hop:
   attack: "lira"
   dataset: "flickr"
   model: "GCN"
-  epochs_target: 500
+  epochs_target: 2000
   hidden_dim_target: [64]
   num_shadow_models: 128
   query_hops: 0
@@ -13,7 +13,7 @@ LiRA-flickr-GCN-2hop:
   attack: "lira"
   dataset: "flickr"
   model: "GCN"
-  epochs_target: 500
+  epochs_target: 2000
   hidden_dim_target: [64]
   num_shadow_models: 128
   query_hops: 2
