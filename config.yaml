@@ -1,21 +1,21 @@
 ---
-LiRA-cora-GCN-0hop:
+LiRA-flickr-GCN-0hop:
   attack: "lira"
-  dataset: "cora"
+  dataset: "flickr"
   model: "GCN"
   epochs_target: 500
-  hidden_dim_target: [32]
+  hidden_dim_target: [64]
   num_shadow_models: 128
   query_hops: 0
   transductive: false
-  target_fpr: 0.005
-LiRA-cora-GCN-2hop:
+  target_fpr: 0.001
+LiRA-flickr-GCN-2hop:
   attack: "lira"
-  dataset: "cora"
+  dataset: "flickr"
   model: "GCN"
   epochs_target: 500
-  hidden_dim_target: [32]
+  hidden_dim_target: [64]
   num_shadow_models: 128
   query_hops: 2
   transductive: false
-  target_fpr: 0.005
+  target_fpr: 0.001

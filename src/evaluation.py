@@ -38,7 +38,7 @@ def k_hop_query(model, dataset, query_nodes, num_hops=0, use_ideal_neighborhood=
         predictions = []
         for v in query_nodes:
             if use_ideal_neighborhood:
-                edge_index = edge_index[:, dataset.inductive_mask]
+                edge_index = dataset.edge_index[:, dataset.inductive_mask]
             else:
                 edge_index = dataset.edge_index
             node_index, edge_index, v_idx, _ = k_hop_subgraph(
