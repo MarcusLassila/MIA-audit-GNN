@@ -74,6 +74,16 @@ def measure_execution_time(callable):
         return ret
     return wrapper
 
+def tpr_at_fixed_fpr(fpr, tpr, target_fpr):
+    idx = np.argmax(fpr >= target_fpr)
+    if fpr[idx] != target_fpr:
+        x0, x1 = fpr[idx - 1], fpr[idx]
+        y0, y1 = tpr[idx - 1], tpr[idx]
+        slope = (y1 - y0) / (x1 - x0)
+        return slope * (target_fpr - x0) + y0
+    else:
+        return tpr[idx]
+
 def plot_training_results(res, name, savedir):
     epochs = np.array([*range(len(res['train_loss']))])
     plt.figure(figsize=(15, 15))

@@ -15,18 +15,18 @@ def create_attack_dataset(shadow_dataset, shadow_model):
     return train_dataset, test_dataset
 
 def stochastic_block_model(root):
-    block_sizes = [1000, 1000]
-    edge_probs = [
-        [0.015, 0.005],
-        [0.005, 0.015],
-    ]
+    block_sizes = [200, 200]
+    edge_probs = torch.tensor([
+        [1.0, 0.25],
+        [0.25, 1.0],
+    ]) * 0.1
     dataset = torch_geometric.datasets.StochasticBlockModelDataset(
         root=root,
         block_sizes=block_sizes,
         edge_probs=edge_probs,
         num_channels=3,
         force_reload=False,
-        class_sep=0.5
+        class_sep=0.5,
     )
     dataset.name = "SBM"
     return dataset

@@ -11,6 +11,7 @@ import torch
 import torch.nn.functional as F
 from torchmetrics import Accuracy
 from statistics import mean, stdev
+from collections import defaultdict
 
 class MembershipInferenceExperiment:
 
@@ -101,10 +102,8 @@ class MembershipInferenceExperiment:
     def run(self):
         config = self.config
         dataset = self.dataset
-        train_scores, test_scores = [], []
-        aurocs = []
+        scores = defaultdict(list)
         best_auroc = 0
-        fprs, tprs = [], []
         for i in range(config.experiments):
             print(f'Running experiment {i + 1}/{config.experiments}.')
 
@@ -165,36 +164,41 @@ class MembershipInferenceExperiment:
             metrics = dict(target_scores, **metrics)
 
             fpr, tpr = metrics['roc']
-            fprs.append(fpr)
-            tprs.append(tpr)
+            tpr_at_1_percent_fpr = utils.tpr_at_fixed_fpr(fpr, tpr, 0.01)
+
+            scores['fprs'].append(fpr)
+            scores['tprs'].append(tpr)
+            scores['train_scores'].append(metrics['train_score'])
+            scores['test_scores'].append(metrics['test_score'])
+            scores['auroc'].append(metrics['auroc'])
+            scores['tprs_at_fixed_fpr'].append(tpr_at_1_percent_fpr)
             if best_auroc < metrics['auroc']:
                 best_auroc = metrics['auroc']
 
-            train_scores.append(metrics['train_score'])
-            test_scores.append(metrics['test_score'])
-            aurocs.append(metrics['auroc'])
-
         if config.experiments > 1:
             stats = {
-                'train_acc_mean': [mean(train_scores)],
-                'train_acc_stdev': [stdev(train_scores)],
-                'test_acc_mean': [mean(test_scores)],
-                'test_acc_stdev': [stdev(test_scores)],
-                'auroc_mean': [mean(aurocs)],
-                'auroc_stdev': [stdev(aurocs)],
+                'train_acc_mean': [mean(scores['train_scores'])],
+                'train_acc_stdev': [stdev(scores['train_scores'])],
+                'test_acc_mean': [mean(scores['test_scores'])],
+                'test_acc_stdev': [stdev(scores['test_scores'])],
+                'auroc_mean': [mean(scores['auroc'])],
+                'auroc_stdev': [stdev(scores['auroc'])],
+                'tpr_at_fixed_fpr_mean': [mean(scores['tprs_at_fixed_fpr'])],
+                'tpr_at_fixed_fpr_stdev': [stdev(scores['tprs_at_fixed_fpr'])]
             }
         else:
             stats = {
-                'train_acc': train_scores,
-                'test_acc': test_scores,
-                'auroc': aurocs,
+                'train_acc': scores['train_scores'],
+                'test_acc': scores['test_scores'],
+                'auroc': scores['auroc'],
+                'tpr_at_fixed_fpr': scores['tprs_at_fixed_fpr'],
             }
 
         stat_df = pd.DataFrame(stats, index=[config.name])
         roc_df = pd.DataFrame({f'{config.name}_fpr': fpr, f'{config.name}_tpr': tpr}) # TODO: save fprs and tprs.
         if config.make_plots:
             savepath = f'{config.savedir}/{config.name}_roc_loglog.png'
-            utils.plot_multi_roc_loglog(fprs, tprs, train_scores, test_scores, savepath=savepath)
+            utils.plot_multi_roc_loglog(scores['fprs'], scores['tprs'], scores['train_scores'], scores['test_scores'], savepath=savepath)
         return stat_df, roc_df
 
 
