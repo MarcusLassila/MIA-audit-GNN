@@ -179,21 +179,21 @@ class MembershipInferenceExperiment:
 
         if config.experiments > 1:
             stats = {
-                'train_acc_mean': [mean(scores['train_scores'])],
-                'train_acc_stdev': [stdev(scores['train_scores'])],
-                'test_acc_mean': [mean(scores['test_scores'])],
-                'test_acc_stdev': [stdev(scores['test_scores'])],
-                'auroc_mean': [mean(scores['auroc'])],
-                'auroc_stdev': [stdev(scores['auroc'])],
-                'tpr_at_fixed_fpr_mean': [mean(scores['tprs_at_fixed_fpr'])],
-                'tpr_at_fixed_fpr_stdev': [stdev(scores['tprs_at_fixed_fpr'])]
+                'train_acc_mean': [f"{mean(scores['train_scores']):.4f}"],
+                'train_acc_std': [f"{stdev(scores['train_scores']):.4f}"],
+                'test_acc_mean': [f"{mean(scores['test_scores']):.4f}"],
+                'test_acc_std': [f"{stdev(scores['test_scores']):.4f}"],
+                'auroc_mean': [f"{mean(scores['auroc']):.4f}"],
+                'auroc_std': [f"{stdev(scores['auroc']):.4f}"],
+                'tpr_fix_fpr_mean': [f"{mean(scores['tprs_at_fixed_fpr']):.4f}"],
+                'tpr_fix_fpr_std': [f"{stdev(scores['tprs_at_fixed_fpr']):.4f}"]
             }
         else:
             stats = {
                 'train_acc': scores['train_scores'],
                 'test_acc': scores['test_scores'],
                 'auroc': scores['auroc'],
-                'tpr_at_fixed_fpr': scores['tprs_at_fixed_fpr'],
+                'tpr_fix_fpr': scores['tprs_at_fixed_fpr'],
             }
 
         stat_df = pd.DataFrame(stats, index=[config.name])

@@ -7,10 +7,9 @@ from pathlib import Path
 
 def add_name(params):
     params['name'] = '-'.join([
-        params['attack'],
+        params['attack'][:4],
         params['dataset'],
         params['model'],
-        'transductive' if params['transductive'] else 'inductive',
         f"{params['query_hops']}hop",
         'II' if params['inductive_inference'] or not bool(params['query_hops']) else 'TI',
     ])
@@ -30,7 +29,7 @@ def main():
         'lr': 0.01,
         'weight_decay': 1e-4,
         'dropout': 0.5,
-        'experiments': 10,
+        'experiments': 200,
         'target_fpr': 0.01,
         'make_plots': True,
         'transductive': False,
