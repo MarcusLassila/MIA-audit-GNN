@@ -11,7 +11,8 @@ def add_name(params):
         params['dataset'],
         params['model'],
         'transductive' if params['transductive'] else 'inductive',
-        f"{params['query_hops']}hop"
+        f"{params['query_hops']}hop",
+        'II' if params['inductive_inference'] or not bool(params['query_hops']) else 'TI',
     ])
 
 def main():
@@ -33,6 +34,7 @@ def main():
         'target_fpr': 0.01,
         'make_plots': True,
         'transductive': False,
+        'inductive_inference': True,
     }
     for _, params in config.items():
         params = default_params | params

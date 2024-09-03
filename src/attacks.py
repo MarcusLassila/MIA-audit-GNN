@@ -93,6 +93,7 @@ class BasicMLPAttack:
                 dataset=target_samples,
                 query_nodes=[*range(num_target_samples)],
                 num_hops=config.query_hops,
+                inductive_split=config.inductive_inference,
             )
             logits = self.attack_model(preds)[:,1]
             labels = target_samples.train_mask.long()
@@ -114,6 +115,7 @@ class ConfidenceAttack:
                 dataset=target_samples,
                 query_nodes=[*range(num_target_samples)],
                 num_hops=config.query_hops,
+                inductive_split=config.inductive_inference,
             )
             row_idx = np.arange(num_target_samples)
             confidences = F.softmax(preds, dim=1)[row_idx, target_samples.y]
@@ -179,6 +181,7 @@ class LiRA:
                     dataset=target_samples,
                     query_nodes=[*range(num_target_samples)],
                     num_hops=config.query_hops,
+                    inductive_split=config.inductive_inference,
                 )
                 # Approximate logits of confidence values using the hinge loss.
                 hinges.append(utils.hinge_loss(preds, target_samples.y))
@@ -207,6 +210,7 @@ class LiRA:
                 dataset=target_samples,
                 query_nodes=[*range(num_target_samples)],
                 num_hops=config.query_hops,
+                inductive_split=config.inductive_inference,
             )
             target_hinges = utils.hinge_loss(preds, target_samples.y)
 
@@ -286,6 +290,7 @@ class RMIA:
                     dataset=dataset,
                     query_nodes=[*range(num_target_nodes)],
                     num_hops=config.query_hops,
+                    inductive_split=config.inductive_inference,
                 )
                 out_confidences.append(F.softmax(preds, dim=1)[row_idx, dataset.y])
         out_confidences = torch.stack(out_confidences)
@@ -298,6 +303,7 @@ class RMIA:
                 dataset=dataset,
                 query_nodes=[*range(num_target_nodes)],
                 num_hops=config.query_hops,
+                inductive_split=config.inductive_inference,
             )
             target_confidence = F.softmax(preds, dim=1)[row_idx, dataset.y] 
         assert pr.shape == target_confidence.shape == torch.Size([num_target_nodes])

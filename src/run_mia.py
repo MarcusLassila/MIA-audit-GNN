@@ -39,6 +39,7 @@ class MembershipInferenceExperiment:
                 dataset=dataset,
                 query_nodes=query_nodes,
                 num_hops=query_hops,
+                inductive_split=config.inductive_inference,
             ).cpu()
             dataset.to('cpu')
             hinge = utils.hinge_loss(embs, dataset.y)
@@ -217,6 +218,7 @@ if __name__ == '__main__':
     parser.add_argument("--dataset", default="cora", type=str)
     parser.add_argument("--split", default="sampled", type=str)
     parser.add_argument("--transductive", action=argparse.BooleanOptionalAction)
+    parser.add_argument("--inductive-inference", action=argparse.BooleanOptionalAction)
     parser.add_argument("--model", default="GCN", type=str)
     parser.add_argument("--batch-size", default=32, type=int)
     parser.add_argument("--epochs-target", default=500, type=int)

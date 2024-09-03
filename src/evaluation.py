@@ -16,11 +16,11 @@ def bc_evaluation(preds, labels):
         'roc': (fpr, tpr),
     }
 
-def k_hop_query(model, dataset, query_nodes, num_hops=0, use_ideal_neighborhood=True):
+def k_hop_query(model, dataset, query_nodes, num_hops=0, inductive_split=False):
     '''
     Queries the model for each node in in query_nodes,
     using the local subgraph definded by the "num_hops"-hop neigborhood.
-    When use_ideal_neighborhood flag is set, the local k-hop query is restricted to
+    When inductive_split flag is set, the local k-hop query is restricted to
     the nodes having the same training membership status as the center node.
 
     Output: Matrix of size "number of query nodes" times "number of classes",
@@ -37,7 +37,7 @@ def k_hop_query(model, dataset, query_nodes, num_hops=0, use_ideal_neighborhood=
         # Can we speed this up?
         predictions = []
         for v in query_nodes:
-            if use_ideal_neighborhood:
+            if inductive_split:
                 edge_index = dataset.edge_index[:, dataset.inductive_mask]
             else:
                 edge_index = dataset.edge_index
