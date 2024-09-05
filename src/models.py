@@ -31,6 +31,7 @@ class GCN(BaseGNN):
         self.convs = nn.ModuleList([
             gnn.GCNConv(in_c, out_c) for in_c, out_c in zip(channel_list, channel_list[1:])
         ])
+        self.num_propagations = len(self.convs)
 
 class SGC(BaseGNN):
 
@@ -40,6 +41,7 @@ class SGC(BaseGNN):
         self.convs = nn.ModuleList([
             gnn.SGConv(in_c, out_c, K=2, cached=False) for in_c, out_c in zip(channel_list, channel_list[1:])
         ])
+        self.num_propagations = len(self.convs)
 
 class GraphSAGE(BaseGNN):
 
@@ -49,14 +51,17 @@ class GraphSAGE(BaseGNN):
         self.convs = nn.ModuleList([
             gnn.SAGEConv(in_c, out_c) for in_c, out_c in zip(channel_list, channel_list[1:])
         ])
+        self.num_propagations = len(self.convs)
 
 class GAT(BaseGNN):
 
-    def __init__(self, in_dim, hidden_dims, out_dim, heads, dropout=0.0):
+    def __init__(self, in_dim, hidden_dims, out_dim, heads=(2,1), dropout=0.0):
         super(GAT, self).__init__(dropout=dropout)
         channel_list = [in_dim, *hidden_dims, out_dim]
+        self.convs = nn.ModuleList([])
         for i, in_c, out_c, heads_prev, heads_curr in zip(range(len(channel_list)), channel_list, channel_list[1:], [1, *heads], heads):
             self.convs.append(gnn.GATConv(in_c * heads_prev, out_c, heads=heads_curr, concat=i+1<len(channel_list)))
+        self.num_propagations = len(self.convs)
 
 class GIN(BaseGNN):
 
@@ -66,6 +71,7 @@ class GIN(BaseGNN):
         self.convs = nn.ModuleList([
             gnn.MLP(channel_list=[in_c, out_c, out_c]) for in_c, out_c in zip(channel_list, channel_list[1:])
         ])
+        self.num_propagations = len(self.convs)
 
 class DecoupledGCN(nn.Module):
 

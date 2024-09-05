@@ -1,7 +1,7 @@
 import utils
 
 import torch
-from torch_geometric.utils import k_hop_subgraph, subgraph, mask_to_index
+from torch_geometric.utils import k_hop_subgraph
 from sklearn.metrics import roc_curve, roc_auc_score
 
 def bc_evaluation(preds, labels):
@@ -29,28 +29,27 @@ def k_hop_query(model, dataset, query_nodes, num_hops=0, inductive_split=False):
     model.eval()
     if not torch.is_tensor(query_nodes):
         query_nodes = torch.tensor(query_nodes, dtype=torch.int64)
-    if num_hops == 0:
-        with torch.inference_mode():
+    with torch.inference_mode():
+        if num_hops == 0:
             empty_edge_index = torch.tensor([[],[]], dtype=torch.int64).to(dataset.edge_index.device)
             predictions = model(dataset.x[query_nodes], empty_edge_index)
-    else:
-        # Can we speed this up?
-        predictions = []
-        for v in query_nodes:
-            if inductive_split:
-                edge_index = dataset.edge_index[:, dataset.inductive_mask]
-            else:
-                edge_index = dataset.edge_index
-            node_index, edge_index, v_idx, _ = k_hop_subgraph(
-                node_idx=v.item(),
-                num_hops=num_hops,
-                edge_index=edge_index,
-                relabel_nodes=True,
-                num_nodes=dataset.x.shape[0],
-            )
-            pred = model(dataset.x[node_index], edge_index)[v_idx].squeeze()
-            predictions.append(pred)
-        predictions = torch.stack(predictions)
+        elif num_hops == model.num_propagations:
+            edge_index = dataset.edge_index[:, dataset.inductive_mask] if inductive_split else dataset.edge_index
+            predictions = model(dataset.x[query_nodes], edge_index)
+        else:
+            edge_index = dataset.edge_index[:, dataset.inductive_mask] if inductive_split else dataset.edge_index
+            predictions = []
+            for v in query_nodes:
+                node_index, edge_index, v_idx, _ = k_hop_subgraph(
+                    node_idx=v.item(),
+                    num_hops=num_hops,
+                    edge_index=edge_index,
+                    relabel_nodes=True,
+                    num_nodes=dataset.x.shape[0],
+                )
+                pred = model(dataset.x[node_index], edge_index)[v_idx].squeeze()
+                predictions.append(pred)
+            predictions = torch.stack(predictions)
     assert predictions.shape == torch.Size([len(query_nodes), dataset.num_classes])
     return predictions
 
