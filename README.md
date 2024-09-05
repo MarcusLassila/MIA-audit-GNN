@@ -29,7 +29,7 @@ Alternatively, run "src/run_mia.py" which only run one MIA simulation experiment
 * --hidden-dim-target: Dimension of the hidden layer of the 2-layer GNN target/shadow model.
 * --hidden-dim-attack: Dimensions of the hidden layers in the MLP. Input is given as a comma separeted list, e.g. 128,64,32.
 * --rmia-offline-interp-param: Hyperparamter for interpolation of "in models" from "out models".
-* --query-hops: The size of the k-hop neighborhood to query the target model when creating features for the attack model.
+* --query-hops: List of the k-hops to use during inference in the attacks.
 * --experiments: Number of times to repeat the whole attack experiment (including retraining target model) and average results over.
 * --optimizer: Will call getattr(torch.optim, optimizer) so it better exist in torch.optim.
 * --num-shadow-models: For LiRA.

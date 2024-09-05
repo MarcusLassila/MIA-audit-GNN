@@ -84,7 +84,7 @@ class BasicMLPAttack:
             config=train_config,
         )
     
-    def run_attack(self, target_samples):
+    def run_attack(self, target_samples, num_hops=0):
         config = self.config
         num_target_samples = target_samples.x.shape[0]
         with torch.inference_mode():
@@ -92,7 +92,7 @@ class BasicMLPAttack:
                 model=self.target_model,
                 dataset=target_samples,
                 query_nodes=[*range(num_target_samples)],
-                num_hops=config.query_hops,
+                num_hops=num_hops,
                 inductive_split=config.inductive_inference,
             )
             logits = self.attack_model(preds)[:,1]
@@ -106,7 +106,7 @@ class ConfidenceAttack:
         self.target_model = target_model
         self.config = config
     
-    def run_attack(self, target_samples):
+    def run_attack(self, target_samples, num_hops=0):
         config = self.config
         num_target_samples = target_samples.x.shape[0]
         with torch.inference_mode():
@@ -114,7 +114,7 @@ class ConfidenceAttack:
                 model=self.target_model,
                 dataset=target_samples,
                 query_nodes=[*range(num_target_samples)],
-                num_hops=config.query_hops,
+                num_hops=num_hops,
                 inductive_split=config.inductive_inference,
             )
             row_idx = np.arange(num_target_samples)
@@ -168,7 +168,7 @@ class LiRA:
             )
             self.shadow_models.append(shadow_model)
     
-    def get_mean_and_std(self, target_samples):
+    def get_mean_and_std(self, target_samples, num_hops):
         config = self.config
         hinges = []
         num_target_samples = target_samples.x.shape[0]
@@ -180,7 +180,7 @@ class LiRA:
                     model=shadow_model,
                     dataset=target_samples,
                     query_nodes=[*range(num_target_samples)],
-                    num_hops=config.query_hops,
+                    num_hops=num_hops,
                     inductive_split=config.inductive_inference,
                 )
                 # Approximate logits of confidence values using the hinge loss.
@@ -199,17 +199,17 @@ class LiRA:
             )
         return means, stds
 
-    def run_attack(self, target_samples):
+    def run_attack(self, target_samples, num_hops=0):
         config = self.config
         target_samples.to(config.device)
         num_target_samples = target_samples.x.shape[0]
-        means, stds = self.get_mean_and_std(target_samples)
+        means, stds = self.get_mean_and_std(target_samples, num_hops)
         with torch.inference_mode():
             preds = evaluation.k_hop_query(
                 model=self.target_model,
                 dataset=target_samples,
                 query_nodes=[*range(num_target_samples)],
-                num_hops=config.query_hops,
+                num_hops=num_hops,
                 inductive_split=config.inductive_inference,
             )
             target_hinges = utils.hinge_loss(preds, target_samples.y)
@@ -277,7 +277,7 @@ class RMIA:
             )
             self.out_models.append(shadow_model)
 
-    def ratio(self, dataset):
+    def ratio(self, dataset, num_hops):
         config = self.config
         num_target_nodes = dataset.x.shape[0]
         row_idx = np.arange(num_target_nodes)
@@ -289,7 +289,7 @@ class RMIA:
                     model=shadow_model,
                     dataset=dataset,
                     query_nodes=[*range(num_target_nodes)],
-                    num_hops=config.query_hops,
+                    num_hops=num_hops,
                     inductive_split=config.inductive_inference,
                 )
                 out_confidences.append(F.softmax(preds, dim=1)[row_idx, dataset.y])
@@ -302,16 +302,16 @@ class RMIA:
                 model=self.target_model,
                 dataset=dataset,
                 query_nodes=[*range(num_target_nodes)],
-                num_hops=config.query_hops,
+                num_hops=num_hops,
                 inductive_split=config.inductive_inference,
             )
             target_confidence = F.softmax(preds, dim=1)[row_idx, dataset.y] 
         assert pr.shape == target_confidence.shape == torch.Size([num_target_nodes])
         return target_confidence / pr
 
-    def score(self, target_samples):
-        ratioX = self.ratio(target_samples)
-        ratioZ = self.ratio(self.population)
+    def score(self, target_samples, num_hops):
+        ratioX = self.ratio(target_samples, num_hops)
+        ratioZ = self.ratio(self.population, num_hops)
         thresholds = ratioZ * self.gamma
         count = torch.zeros_like(ratioX)
         for i, x in enumerate(ratioX):
@@ -319,9 +319,9 @@ class RMIA:
         sizeZ = thresholds.shape[0]
         return count / sizeZ
     
-    def run_attack(self, target_samples):
+    def run_attack(self, target_samples, num_hops=0):
         target_samples.to(self.config.device)
         self.population.to(self.config.device)
-        preds = self.score(target_samples)
+        preds = self.score(target_samples, num_hops)
         labels = target_samples.train_mask.long()
         return evaluation.bc_evaluation(preds=preds, labels=labels) # Beta parameter is sweeped when computing roc/auroc.

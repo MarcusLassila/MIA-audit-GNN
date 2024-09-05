@@ -10,8 +10,7 @@ def add_name(params):
         params['attack'][:4],
         params['dataset'],
         params['model'],
-        f"{params['query_hops']}hop",
-        'II' if params['inductive_inference'] or not bool(params['query_hops']) else 'TI',
+        'II' if params['inductive_inference'] else 'TI',
     ])
 
 def main():
@@ -19,7 +18,6 @@ def main():
         config = yaml.safe_load(file)
     Path('./results').mkdir(parents=True, exist_ok=True)
     stat_frames = []
-    roc_frames = []
     default_params = {
         'datadir': './data',
         'savedir': './results',
@@ -29,7 +27,7 @@ def main():
         'lr': 0.01,
         'weight_decay': 1e-4,
         'dropout': 0.5,
-        'experiments': 200,
+        'experiments': 10,
         'target_fpr': 0.01,
         'make_plots': True,
         'transductive': False,
@@ -43,11 +41,9 @@ def main():
         for k, v in params.items():
             print(f'{k}: {v}')
         print()
-        stat_df, roc_df = run_mia.main(params)
+        stat_df = run_mia.main(params)
         stat_frames.append(stat_df)
-        roc_frames.append(roc_df)
     pd.concat(stat_frames).to_csv(f'{default_params["savedir"]}/statistics.csv', sep=',')
-    pd.concat(roc_frames, axis=1).to_csv(f'{default_params["savedir"]}/rocs.csv', sep=',', index=False)
 
 if __name__ == "__main__":
     main()

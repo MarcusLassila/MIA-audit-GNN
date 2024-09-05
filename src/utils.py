@@ -131,10 +131,11 @@ def plot_roc_loglog(fpr, tpr, title=None, savepath=None):
     plt.title(title)
     savefig_or_show(savepath)
 
-def plot_multi_roc_loglog(fprs, tprs, train_accs, test_accs, title=None, savepath=None):
+def plot_multi_roc_loglog(fprs_list, tprs_list, query_hops, title=None, savepath=None):
     plt.figure(figsize=(8, 8))
-    for fpr, tpr, train_acc, test_acc in islice(zip(fprs, tprs, train_accs, test_accs), 6):
-        plt.loglog(fpr, tpr, label=f'Train acc: {train_acc:.4f} | Test acc: {test_acc:.4f}')
+    for fprs, tprs, num_hops in zip(fprs_list, tprs_list, query_hops):
+        for fpr, tpr in islice(zip(fprs, tprs), 5):
+            plt.loglog(fpr, tpr, label=f'{num_hops}-hop')
     plt.xlim(1e-4, 1)
     plt.ylim(1e-4, 1)
     plt.grid(True)

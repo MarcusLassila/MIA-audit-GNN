@@ -105,49 +105,58 @@ class MembershipInferenceExperiment:
         config = self.config
         dataset = self.dataset
         scores = defaultdict(list)
-        best_auroc = 0
         for i in range(config.experiments):
             print(f'Running experiment {i + 1}/{config.experiments}.')
 
             if config.attack == "basic-mlp":
                 target_dataset, shadow_dataset = datasetup.target_shadow_split(dataset, split=config.split)
                 target_model = self.train_target_model(target_dataset)
-                metrics = attacks.BasicMLPAttack(
+                attacker = attacks.BasicMLPAttack(
                     target_model=target_model,
                     shadow_dataset=shadow_dataset,
                     config=config,
-                ).run_attack(target_samples=target_dataset)
+                )
 
             elif config.attack == "confidence":
                 target_dataset = datasetup.sample_subgraph(dataset, num_nodes=dataset.x.shape[0]//2)
                 target_model = self.train_target_model(target_dataset)
-                metrics = attacks.ConfidenceAttack(
+                attacker = attacks.ConfidenceAttack(
                     target_model=target_model,
                     config=config,
-                ).run_attack(target_samples=target_dataset)
+                )
 
             elif config.attack == "lira":
                 # In offline LiRA, the shadow models are trained on datasets that does not contain the target sample.
                 # Therefore we make a disjoint split and train shadow models on one part, and attack samples of the other part.
                 target_dataset, population = datasetup.target_shadow_split(dataset, split="disjoint", target_frac=0.5, shadow_frac=0.5)
                 target_model = self.train_target_model(target_dataset)
-                metrics = attacks.LiRA(
+                attacker = attacks.LiRA(
                     target_model=target_model,
                     population=population,
                     config=config,
-                ).run_attack(target_samples=target_dataset)
+                )
                 
             elif config.attack == "rmia":
                 target_dataset, population = datasetup.target_shadow_split(dataset, split="disjoint", target_frac=0.5, shadow_frac=0.5)
                 target_model = self.train_target_model(target_dataset)
-                metrics = attacks.RMIA(
+                attacker = attacks.RMIA(
                     target_model=target_model,
                     population=population,
                     config=config,
-                ).run_attack(target_samples=target_dataset)
+                )
 
             else:
                 raise AttributeError(f"No attack named {config.attack}")
+
+            # Run attack using the specified set of k-hop neighborhood queries.
+            for num_hops in config.query_hops:
+                metrics = attacker.run_attack(target_samples=target_dataset, num_hops=num_hops)
+                fpr, tpr = metrics['roc']
+                tpr_at_fixed_fpr = utils.tpr_at_fixed_fpr(fpr, tpr, config.target_fpr)
+                scores[f'fprs_{num_hops}'].append(fpr)
+                scores[f'tprs_{num_hops}'].append(tpr)
+                scores[f'auroc_{num_hops}'].append(metrics['auroc'])
+                scores[f'tprs_at_fixed_fpr_{num_hops}'].append(tpr_at_fixed_fpr)
 
             target_scores = {
                 'train_score': evaluation.evaluate_graph_model(
@@ -163,19 +172,9 @@ class MembershipInferenceExperiment:
                     criterion=self.criterion,
                 ),
             }
-            metrics = dict(target_scores, **metrics)
 
-            fpr, tpr = metrics['roc']
-            tpr_at_fixed_fpr = utils.tpr_at_fixed_fpr(fpr, tpr, config.target_fpr)
-
-            scores['fprs'].append(fpr)
-            scores['tprs'].append(tpr)
-            scores['train_scores'].append(metrics['train_score'])
-            scores['test_scores'].append(metrics['test_score'])
-            scores['auroc'].append(metrics['auroc'])
-            scores['tprs_at_fixed_fpr'].append(tpr_at_fixed_fpr)
-            if best_auroc < metrics['auroc']:
-                best_auroc = metrics['auroc']
+            scores['train_scores'].append(target_scores['train_score'])
+            scores['test_scores'].append(target_scores['test_score'])
 
         if config.experiments > 1:
             stats = {
@@ -183,25 +182,28 @@ class MembershipInferenceExperiment:
                 'train_acc_std': [f"{stdev(scores['train_scores']):.4f}"],
                 'test_acc_mean': [f"{mean(scores['test_scores']):.4f}"],
                 'test_acc_std': [f"{stdev(scores['test_scores']):.4f}"],
-                'auroc_mean': [f"{mean(scores['auroc']):.4f}"],
-                'auroc_std': [f"{stdev(scores['auroc']):.4f}"],
-                'tpr_fix_fpr_mean': [f"{mean(scores['tprs_at_fixed_fpr']):.4f}"],
-                'tpr_fix_fpr_std': [f"{stdev(scores['tprs_at_fixed_fpr']):.4f}"]
             }
+            for num_hops in config.query_hops:
+                stats[f'auroc_{num_hops}_mean'] = [f"{mean(scores[f'auroc_{num_hops}']):.4f}"]
+                stats[f'auroc_{num_hops}_std'] = [f"{stdev(scores[f'auroc_{num_hops}']):.4f}"]
+                stats[f'tpr_{config.target_fpr:.2}_fpr_{num_hops}_mean'] = [f"{mean(scores[f'tprs_at_fixed_fpr_{num_hops}']):.4f}"]
+                stats[f'tpr_{config.target_fpr:.2}_fpr_{num_hops}_std'] = [f"{stdev(scores[f'tprs_at_fixed_fpr_{num_hops}']):.4f}"]
         else:
             stats = {
                 'train_acc': scores['train_scores'],
                 'test_acc': scores['test_scores'],
-                'auroc': scores['auroc'],
-                'tpr_fix_fpr': scores['tprs_at_fixed_fpr'],
             }
+            for num_hops in config.query_hops:
+                stats[f'auroc_{num_hops}'] = scores[f'auroc_{num_hops}']
+                stats[f'tpr_{config.target_fpr:.2}_fpr_{num_hops}'] = scores[f'tprs_at_fixed_fpr_{num_hops}']
 
         stat_df = pd.DataFrame(stats, index=[config.name])
-        roc_df = pd.DataFrame({f'{config.name}_fpr': fpr, f'{config.name}_tpr': tpr}) # TODO: save fprs and tprs.
         if config.make_plots:
             savepath = f'{config.savedir}/{config.name}_roc_loglog.png'
-            utils.plot_multi_roc_loglog(scores['fprs'], scores['tprs'], scores['train_scores'], scores['test_scores'], savepath=savepath)
-        return stat_df, roc_df
+            fprs_list = [scores[f'fprs_{num_hops}'] for num_hops in config.query_hops]
+            tprs_list = [scores[f'tprs_{num_hops}'] for num_hops in config.query_hops]
+            utils.plot_multi_roc_loglog(fprs_list, tprs_list, config.query_hops, savepath=savepath)
+        return stat_df
 
 
 def main(config):
@@ -230,7 +232,7 @@ if __name__ == '__main__':
     parser.add_argument("--early-stopping", action=argparse.BooleanOptionalAction)
     parser.add_argument("--hidden-dim-target", default=[32], type=lambda x: [*map(int, x.split(','))])
     parser.add_argument("--hidden-dim-attack", default=[256, 64], type=lambda x: [*map(int, x.split(','))])
-    parser.add_argument("--query-hops", default=0, type=int)
+    parser.add_argument("--query-hops", default=[0], type=lambda x: [*map(int, x.split(','))])
     parser.add_argument("--experiments", default=1, type=int)
     parser.add_argument("--target-fpr", default=0.01, type=float)
     parser.add_argument("--optimizer", default="Adam", type=str)
@@ -245,7 +247,6 @@ if __name__ == '__main__':
     print('Running MIA experiment.')
     print(utils.Config(config))
     print()
-    stat_df, roc_df = main(config)
+    stat_df = main(config)
     print('Attack statistics:')
     print(stat_df)
-    roc_df.to_csv(f'{args.savedir}/roc_{args.name}.csv', index=False)
