@@ -31,17 +31,39 @@ def stochastic_block_model(root):
     dataset.name = "SBM"
     return dataset
 
-def train_split_interconnection_mask(graph):
+def train_split_interconnection_mask(dataset):
     mask = []
-    for a, b in graph.edge_index.T:
+    for a, b in dataset.edge_index.T:
         mask.append(
-            graph.train_mask[a] == graph.train_mask[b]
-            and graph.val_mask[a] == graph.val_mask[b]
-            and graph.test_mask[a] == graph.test_mask[b]
+            dataset.train_mask[a] == dataset.train_mask[b]
+            and dataset.val_mask[a] == dataset.val_mask[b]
+            and dataset.test_mask[a] == dataset.test_mask[b]
         )
     return torch.tensor(mask, dtype=torch.bool)
 
-def extract_subgraph(dataset, node_index, train_frac=0.5, val_frac=0.2):
+def masked_subgraph(graph, mask):
+    '''
+    Return the subgraph specified by the mask, keeping train, val, test and inductive masks of original graph.
+    '''
+    edge_index, _ = subgraph(
+        subset=mask,
+        edge_index=graph.edge_index,
+        relabel_nodes=True,
+    )
+    data = Data(
+        x=graph.x[mask],
+        edge_index=edge_index,
+        y=graph.y[mask],
+        train_mask=graph.train_mask[mask],
+        val_mask=graph.val_mask[mask],
+        test_mask=graph.test_mask[mask],
+        num_classes=graph.num_classes,
+        num_features=graph.num_features,
+    )
+    data.inductive_mask = train_split_interconnection_mask(data)
+    return data
+
+def extract_subgraph(dataset, node_index, train_frac=0.4, val_frac=0.2):
     '''
     Constructs a subgraph of dataset consisting of the nodes indexed in node_index with the edges linking them.
     Masks for training/validation/testing are constructed uniformly random with the specified proportions.
@@ -73,11 +95,10 @@ def extract_subgraph(dataset, node_index, train_frac=0.5, val_frac=0.2):
         num_features=dataset.num_features,
         name=dataset.name,
     )
-    inductive_mask = train_split_interconnection_mask(data)
-    data.inductive_mask = inductive_mask
+    data.inductive_mask = train_split_interconnection_mask(data)
     return data
 
-def sample_subgraph(dataset, num_nodes, train_frac=0.5, val_frac=0.2, keep_class_proportions=True):
+def sample_subgraph(dataset, num_nodes, train_frac=0.4, val_frac=0.2, keep_class_proportions=True):
     '''
     Sample a subgraph by uniformly sample a number of nodes from the graph dataset.
     Masks for training/validation/testing are created uniformly at random with the specified proportions.

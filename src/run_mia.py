@@ -148,9 +148,12 @@ class MembershipInferenceExperiment:
             else:
                 raise AttributeError(f"No attack named {config.attack}")
 
+            # Remove validation mask from target samples
+            target_samples = datasetup.masked_subgraph(target_dataset, ~target_dataset.val_mask)
+
             # Run attack using the specified set of k-hop neighborhood queries.
             for num_hops in config.query_hops:
-                metrics = attacker.run_attack(target_samples=target_dataset, num_hops=num_hops)
+                metrics = attacker.run_attack(target_samples=target_samples, num_hops=num_hops)
                 fpr, tpr = metrics['roc']
                 tpr_at_fixed_fpr = utils.tpr_at_fixed_fpr(fpr, tpr, config.target_fpr)
                 scores[f'fprs_{num_hops}'].append(fpr)
