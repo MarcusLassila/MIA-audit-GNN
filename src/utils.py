@@ -13,6 +13,9 @@ from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
 from pathlib import Path
 from time import perf_counter
 from itertools import cycle, islice
+import io
+from contextlib import redirect_stdout, redirect_stderr
+
 
 class Config:
 
@@ -73,6 +76,12 @@ def measure_execution_time(callable):
         print(f"Callable '{callable.__name__}' executed in {t1 - t0:.3f} seconds.")
         return ret
     return wrapper
+
+def execute_silently(callable, *args, **kwargs):
+    null_stream = io.StringIO()
+    with redirect_stdout(null_stream), redirect_stderr(null_stream):
+        res = callable(*args, **kwargs)
+    return res
 
 def tpr_at_fixed_fpr(fpr, tpr, target_fpr):
     idx = np.argmax(fpr >= target_fpr)
