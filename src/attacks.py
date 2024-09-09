@@ -95,8 +95,7 @@ class BasicMLPAttack:
                 inductive_split=inductive_inference,
             )
             logits = self.attack_model(preds)[:,1]
-            labels = target_samples.train_mask.long()
-        return evaluation.bc_evaluation(logits, labels)
+        return logits
 
 class ConfidenceAttack:
     
@@ -116,9 +115,8 @@ class ConfidenceAttack:
                 inductive_split=inductive_inference,
             )
             row_idx = np.arange(num_target_samples)
-            confidences = F.softmax(preds, dim=1)[row_idx, target_samples.y]
-            labels = target_samples.train_mask.long()
-        return evaluation.bc_evaluation(confidences, labels)
+            confidences = preds[row_idx, target_samples.y] # Unnormalized for numerical stability
+        return confidences
 
 class LiRA:
     '''
@@ -219,11 +217,7 @@ class LiRA:
             loc=means.cpu().numpy(),
             scale=stds.cpu().numpy() + LiRA.EPS,
         )
-        truth = target_samples.train_mask.long().cpu().numpy()
-        return evaluation.bc_evaluation(
-            preds=preds,
-            labels=truth,
-        )
+        return preds
 
 class RMIA:
     '''
@@ -319,5 +313,4 @@ class RMIA:
         target_samples.to(self.config.device)
         self.population.to(self.config.device)
         preds = self.score(target_samples, num_hops, inductive_inference)
-        labels = target_samples.train_mask.long()
-        return evaluation.bc_evaluation(preds=preds, labels=labels) # Beta parameter is sweeped when computing roc/auroc.
+        return preds

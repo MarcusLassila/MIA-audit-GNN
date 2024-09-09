@@ -1,20 +1,31 @@
-import datasetup
 import utils
 
+import numpy as np
 import torch
 from torch_geometric.utils import k_hop_subgraph
 from sklearn.metrics import roc_curve, roc_auc_score
+from math import comb
 
-def bc_evaluation(preds, labels):
+def inclusions(list_of_sets):
+    res = [set() for _ in range(comb(len(list_of_sets)))]
+    # TODO: Implement
+    return res
+
+def bc_evaluation(preds, truth, target_fpr):
     if torch.is_tensor(preds):
         preds = preds.cpu().numpy()
-    if torch.is_tensor(labels):
-        labels = labels.cpu().numpy()
-    auroc = roc_auc_score(y_true=labels, y_score=preds)
-    fpr, tpr, _ = roc_curve(y_true=labels, y_score=preds)
+    if torch.is_tensor(truth):
+        truth = truth.cpu().numpy()
+    auroc = roc_auc_score(y_true=truth, y_score=preds)
+    fpr, tpr, thresholds = roc_curve(y_true=truth, y_score=preds)
+    tpr_fixed_fpr, threshold = utils.tpr_at_fixed_fpr(fpr, tpr, target_fpr, thresholds)
+    hard_preds = (preds >= threshold).astype(np.int64)
+    true_positives = (hard_preds & truth).nonzero()[0]
     return {
         'auroc': auroc,
         'roc': (fpr, tpr),
+        'tpr_fixed_fpr': tpr_fixed_fpr,
+        'TP_fixed_fpr': true_positives,
     }
 
 def k_hop_query(model, dataset, query_nodes, num_hops=0, inductive_split=False):
@@ -35,10 +46,10 @@ def k_hop_query(model, dataset, query_nodes, num_hops=0, inductive_split=False):
             empty_edge_index = torch.tensor([[],[]], dtype=torch.int64).to(dataset.edge_index.device)
             predictions = model(dataset.x[query_nodes], empty_edge_index)
         elif num_hops == model.num_propagations:
-            edge_index = dataset.edge_index[:, dataset.inductive_mask] if inductive_split else dataset.edge_index[:, datasetup.random_edge_mask(dataset)]
+            edge_index = dataset.edge_index[:, dataset.inductive_mask] if inductive_split else dataset.edge_index[:, dataset.random_edge_mask]
             predictions = model(dataset.x[query_nodes], edge_index)
         else:
-            edge_index = dataset.edge_index[:, dataset.inductive_mask] if inductive_split else dataset.edge_index[:, datasetup.random_edge_mask(dataset)]
+            edge_index = dataset.edge_index[:, dataset.inductive_mask] if inductive_split else dataset.edge_index[:, dataset.random_edge_mask]
             predictions = []
             for v in query_nodes:
                 node_index, edge_index, v_idx, _ = k_hop_subgraph(

@@ -148,27 +148,34 @@ class MembershipInferenceExperiment:
             # Remove validation mask from target samples
             target_samples = datasetup.masked_subgraph(target_dataset, ~target_dataset.val_mask)
 
+            true_positives = []
             # Run attack using the specified set of k-hop neighborhood queries.
             for num_hops in config.query_hops:
                 if num_hops == 0:
-                    metrics = attacker.run_attack(target_samples=target_samples, num_hops=num_hops)
+                    preds = attacker.run_attack(target_samples=target_samples, num_hops=num_hops)
+                    truth = target_samples.train_mask.long()
+                    metrics = evaluation.bc_evaluation(preds, truth, config.target_fpr)
                     fpr, tpr = metrics['roc']
-                    tpr_at_fixed_fpr = utils.tpr_at_fixed_fpr(fpr, tpr, config.target_fpr)
+                    true_positives.append(metrics['TP_fixed_fpr'])
                     scores[f'fprs_{num_hops}'].append(fpr)
                     scores[f'tprs_{num_hops}'].append(tpr)
                     scores[f'auroc_{num_hops}'].append(metrics['auroc'])
-                    scores[f'tprs_at_fixed_fpr_{num_hops}'].append(tpr_at_fixed_fpr)
+                    scores[f'tprs_at_fixed_fpr_{num_hops}'].append(metrics['tpr_fixed_fpr'])
                 else:
                     flags_IITI = (True, False) if config.inductive_inference is None else (config.inductive_inference,)
                     for flag in flags_IITI:
-                        metrics = attacker.run_attack(target_samples=target_samples, num_hops=num_hops, inductive_inference=flag)
+                        preds = attacker.run_attack(target_samples=target_samples, num_hops=num_hops, inductive_inference=flag)
+                        truth = target_samples.train_mask.long()
+                        metrics = evaluation.bc_evaluation(preds, truth, config.target_fpr)
+                        true_positives.append(metrics['TP_fixed_fpr'])
                         fpr, tpr = metrics['roc']
-                        tpr_at_fixed_fpr = utils.tpr_at_fixed_fpr(fpr, tpr, config.target_fpr)
                         suffix = 'II' if flag else 'TI'
                         scores[f'fprs_{num_hops}_{suffix}'].append(fpr)
                         scores[f'tprs_{num_hops}_{suffix}'].append(tpr)
                         scores[f'auroc_{num_hops}_{suffix}'].append(metrics['auroc'])
-                        scores[f'tprs_at_fixed_fpr_{num_hops}_{suffix}'].append(tpr_at_fixed_fpr)
+                        scores[f'tprs_at_fixed_fpr_{num_hops}_{suffix}'].append(metrics['tpr_fixed_fpr'])
+
+            inclusions = evaluation.inclusions(true_positives)
 
             target_scores = {
                 'train_score': evaluation.evaluate_graph_model(

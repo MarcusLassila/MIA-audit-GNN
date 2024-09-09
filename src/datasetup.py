@@ -46,6 +46,7 @@ def masked_subgraph(graph, mask):
         num_features=graph.num_features,
     )
     data.inductive_mask = train_split_interconnection_mask(data)
+    data.random_edge_mask = random_edge_mask(data)
     return data
 
 def train_val_test_masks(num_nodes, train_frac, val_frac, stratify=None):
@@ -76,12 +77,11 @@ def train_val_test_masks(num_nodes, train_frac, val_frac, stratify=None):
     return train_mask, val_mask, test_mask
 
 def random_edge_mask(dataset):
-    train_mask, val_mask, test_mask = train_val_test_masks(dataset.x.shape[0], 0.4, 0.2, stratify=dataset.y)
+    train_mask, _, test_mask = train_val_test_masks(dataset.x.shape[0], train_frac=0.5, val_frac=0.0, stratify=dataset.y)
     mask = []
     for a, b in dataset.edge_index.T:
         mask.append(
             train_mask[a] == train_mask[b]
-            and val_mask[a] == val_mask[b]
             and test_mask[a] == test_mask[b]
         )
     return torch.tensor(mask, dtype=torch.bool)

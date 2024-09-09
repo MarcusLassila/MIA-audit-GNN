@@ -83,15 +83,15 @@ def execute_silently(callable, *args, **kwargs):
         res = callable(*args, **kwargs)
     return res
 
-def tpr_at_fixed_fpr(fpr, tpr, target_fpr):
+def tpr_at_fixed_fpr(fpr, tpr, target_fpr, thresholds):
     idx = np.argmax(fpr >= target_fpr)
     if fpr[idx] != target_fpr:
         x0, x1 = fpr[idx - 1], fpr[idx]
         y0, y1 = tpr[idx - 1], tpr[idx]
         slope = (y1 - y0) / (x1 - x0)
-        return slope * (target_fpr - x0) + y0
+        return slope * (target_fpr - x0) + y0, thresholds[idx - 1]
     else:
-        return tpr[idx]
+        return tpr[idx], thresholds[idx]
 
 def plot_training_results(res, name, savedir):
     epochs = np.array([*range(len(res['train_loss']))])
