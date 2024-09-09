@@ -108,58 +108,67 @@ class MembershipInferenceExperiment:
         for i in range(config.experiments):
             print(f'Running experiment {i + 1}/{config.experiments}.')
 
-            if config.attack == "basic-mlp":
-                target_dataset, shadow_dataset = datasetup.target_shadow_split(dataset, split=config.split)
-                target_model = self.train_target_model(target_dataset)
-                attacker = attacks.BasicMLPAttack(
-                    target_model=target_model,
-                    shadow_dataset=shadow_dataset,
-                    config=config,
-                )
-
-            elif config.attack == "confidence":
-                target_dataset = datasetup.sample_subgraph(dataset, num_nodes=dataset.x.shape[0]//2)
-                target_model = self.train_target_model(target_dataset)
-                attacker = attacks.ConfidenceAttack(
-                    target_model=target_model,
-                    config=config,
-                )
-
-            elif config.attack == "lira":
-                # In offline LiRA, the shadow models are trained on datasets that does not contain the target sample.
-                # Therefore we make a disjoint split and train shadow models on one part, and attack samples of the other part.
-                target_dataset, population = datasetup.target_shadow_split(dataset, split="disjoint", target_frac=0.5, shadow_frac=0.5)
-                target_model = self.train_target_model(target_dataset)
-                attacker = attacks.LiRA(
-                    target_model=target_model,
-                    population=population,
-                    config=config,
-                )
-                
-            elif config.attack == "rmia":
-                target_dataset, population = datasetup.target_shadow_split(dataset, split="disjoint", target_frac=0.5, shadow_frac=0.5)
-                target_model = self.train_target_model(target_dataset)
-                attacker = attacks.RMIA(
-                    target_model=target_model,
-                    population=population,
-                    config=config,
-                )
-
-            else:
-                raise AttributeError(f"No attack named {config.attack}")
+            match config.attack:
+                case "basic-mlp":
+                    target_dataset, shadow_dataset = datasetup.target_shadow_split(dataset, split=config.split)
+                    target_model = self.train_target_model(target_dataset)
+                    attacker = attacks.BasicMLPAttack(
+                        target_model=target_model,
+                        shadow_dataset=shadow_dataset,
+                        config=config,
+                    )
+                case "confidence":
+                    target_dataset = datasetup.sample_subgraph(dataset, num_nodes=dataset.x.shape[0]//2)
+                    target_model = self.train_target_model(target_dataset)
+                    attacker = attacks.ConfidenceAttack(
+                        target_model=target_model,
+                        config=config,
+                    )
+                case "lira":
+                    # In offline LiRA, the shadow models are trained on datasets that does not contain the target sample.
+                    # Therefore we make a disjoint split and train shadow models on one part, and attack samples of the other part.
+                    target_dataset, population = datasetup.target_shadow_split(dataset, split="disjoint", target_frac=0.5, shadow_frac=0.5)
+                    target_model = self.train_target_model(target_dataset)
+                    attacker = attacks.LiRA(
+                        target_model=target_model,
+                        population=population,
+                        config=config,
+                    )
+                case "rmia":
+                    target_dataset, population = datasetup.target_shadow_split(dataset, split="disjoint", target_frac=0.5, shadow_frac=0.5)
+                    target_model = self.train_target_model(target_dataset)
+                    attacker = attacks.RMIA(
+                        target_model=target_model,
+                        population=population,
+                        config=config,
+                    )
+                case _:
+                    raise AttributeError(f"No attack named {config.attack}")
 
             # Remove validation mask from target samples
             target_samples = datasetup.masked_subgraph(target_dataset, ~target_dataset.val_mask)
 
             # Run attack using the specified set of k-hop neighborhood queries.
             for num_hops in config.query_hops:
-                metrics = attacker.run_attack(target_samples=target_samples, num_hops=num_hops)
-                fpr, tpr = metrics['roc']
-                tpr_at_fixed_fpr = utils.tpr_at_fixed_fpr(fpr, tpr, config.target_fpr)
-                scores[f'fprs_{num_hops}'].append(fpr)
-                scores[f'tprs_{num_hops}'].append(tpr)
-                scores[f'auroc_{num_hops}'].append(metrics['auroc'])
-                scores[f'tprs_at_fixed_fpr_{num_hops}'].append(tpr_at_fixed_fpr)
+                if num_hops == 0:
+                    metrics = attacker.run_attack(target_samples=target_samples, num_hops=num_hops)
+                    fpr, tpr = metrics['roc']
+                    tpr_at_fixed_fpr = utils.tpr_at_fixed_fpr(fpr, tpr, config.target_fpr)
+                    scores[f'fprs_{num_hops}'].append(fpr)
+                    scores[f'tprs_{num_hops}'].append(tpr)
+                    scores[f'auroc_{num_hops}'].append(metrics['auroc'])
+                    scores[f'tprs_at_fixed_fpr_{num_hops}'].append(tpr_at_fixed_fpr)
+                else:
+                    flags_IITI = (True, False) if config.inductive_inference is None else (config.inductive_inference,)
+                    for flag in flags_IITI:
+                        metrics = attacker.run_attack(target_samples=target_samples, num_hops=num_hops, inductive_inference=flag)
+                        fpr, tpr = metrics['roc']
+                        tpr_at_fixed_fpr = utils.tpr_at_fixed_fpr(fpr, tpr, config.target_fpr)
+                        suffix = 'II' if flag else 'TI'
+                        scores[f'fprs_{num_hops}_{suffix}'].append(fpr)
+                        scores[f'tprs_{num_hops}_{suffix}'].append(tpr)
+                        scores[f'auroc_{num_hops}_{suffix}'].append(metrics['auroc'])
+                        scores[f'tprs_at_fixed_fpr_{num_hops}_{suffix}'].append(tpr_at_fixed_fpr)
 
             target_scores = {
                 'train_score': evaluation.evaluate_graph_model(
@@ -187,25 +196,49 @@ class MembershipInferenceExperiment:
                 'test_acc_std': [f"{stdev(scores['test_scores']):.4f}"],
             }
             for num_hops in config.query_hops:
-                stats[f'auroc_{num_hops}_mean'] = [f"{mean(scores[f'auroc_{num_hops}']):.4f}"]
-                stats[f'auroc_{num_hops}_std'] = [f"{stdev(scores[f'auroc_{num_hops}']):.4f}"]
-                stats[f'tpr_{config.target_fpr:.2}_fpr_{num_hops}_mean'] = [f"{mean(scores[f'tprs_at_fixed_fpr_{num_hops}']):.4f}"]
-                stats[f'tpr_{config.target_fpr:.2}_fpr_{num_hops}_std'] = [f"{stdev(scores[f'tprs_at_fixed_fpr_{num_hops}']):.4f}"]
-        else:
+                if num_hops == 0:
+                    stats[f'auroc_{num_hops}_mean'] = [f"{mean(scores[f'auroc_{num_hops}']):.4f}"]
+                    stats[f'auroc_{num_hops}_std'] = [f"{stdev(scores[f'auroc_{num_hops}']):.4f}"]
+                    stats[f'tpr_{config.target_fpr:.2}_fpr_{num_hops}_mean'] = [f"{mean(scores[f'tprs_at_fixed_fpr_{num_hops}']):.4f}"]
+                    stats[f'tpr_{config.target_fpr:.2}_fpr_{num_hops}_std'] = [f"{stdev(scores[f'tprs_at_fixed_fpr_{num_hops}']):.4f}"]
+                else:
+                    for flag in flags_IITI:
+                        suffix = 'II' if flag else 'TI'
+                        stats[f'auroc_{num_hops}_{suffix}_mean'] = [f"{mean(scores[f'auroc_{num_hops}_{suffix}']):.4f}"]
+                        stats[f'auroc_{num_hops}_{suffix}_std'] = [f"{stdev(scores[f'auroc_{num_hops}_{suffix}']):.4f}"]
+                        stats[f'tpr_{config.target_fpr:.2}_fpr_{num_hops}_{suffix}_mean'] = [f"{mean(scores[f'tprs_at_fixed_fpr_{num_hops}_{suffix}']):.4f}"]
+                        stats[f'tpr_{config.target_fpr:.2}_fpr_{num_hops}_{suffix}_std'] = [f"{stdev(scores[f'tprs_at_fixed_fpr_{num_hops}_{suffix}']):.4f}"]
+        else: # 1 experiment
             stats = {
                 'train_acc': scores['train_scores'],
                 'test_acc': scores['test_scores'],
             }
             for num_hops in config.query_hops:
-                stats[f'auroc_{num_hops}'] = scores[f'auroc_{num_hops}']
-                stats[f'tpr_{config.target_fpr:.2}_fpr_{num_hops}'] = scores[f'tprs_at_fixed_fpr_{num_hops}']
+                if num_hops == 0:
+                    stats[f'auroc_{num_hops}'] = scores[f'auroc_{num_hops}']
+                    stats[f'tpr_{config.target_fpr:.2}_fpr_{num_hops}'] = scores[f'tprs_at_fixed_fpr_{num_hops}']
+                else:
+                    for flag in flags_IITI:
+                        suffix = 'II' if flag else 'TI'
+                        stats[f'auroc_{num_hops}_{suffix}'] = scores[f'auroc_{num_hops}_{suffix}']
+                        stats[f'tpr_{config.target_fpr:.2}_fpr_{num_hops}_{suffix}'] = scores[f'tprs_at_fixed_fpr_{num_hops}_{suffix}']
 
         stat_df = pd.DataFrame(stats, index=[config.name])
         if config.make_plots:
             savepath = f'{config.savedir}/{config.name}_roc_loglog.png'
-            fprs_list = [scores[f'fprs_{num_hops}'] for num_hops in config.query_hops]
-            tprs_list = [scores[f'tprs_{num_hops}'] for num_hops in config.query_hops]
-            utils.plot_multi_roc_loglog(fprs_list, tprs_list, config.query_hops, savepath=savepath)
+            for num_hops in config.query_hops:
+                if num_hops == 0:
+                    savepath = f'{config.savedir}/{config.name}_{num_hops}_roc_loglog.png'
+                    fprs = scores[f'fprs_{num_hops}']
+                    tprs = scores[f'tprs_{num_hops}']
+                    utils.plot_multi_roc_loglog(fprs, tprs, savepath=savepath)
+                else:
+                    for flag in flags_IITI:
+                        suffix = 'II' if flag else 'TI'
+                        savepath = f'{config.savedir}/{config.name}_{num_hops}_{suffix}_roc_loglog.png'
+                        fprs = scores[f'fprs_{num_hops}_{suffix}']
+                        tprs = scores[f'tprs_{num_hops}_{suffix}']
+                        utils.plot_multi_roc_loglog(fprs, tprs, savepath=savepath)
         return stat_df
 
 

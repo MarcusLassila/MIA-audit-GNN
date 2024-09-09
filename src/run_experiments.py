@@ -10,7 +10,6 @@ def add_name(params):
         params['attack'][:4],
         params['dataset'],
         params['model'],
-        'II' if params['inductive_inference'] else 'TI',
     ])
 
 def main():
@@ -31,7 +30,7 @@ def main():
         'target_fpr': 0.01,
         'make_plots': True,
         'transductive': False,
-        'inductive_inference': True,
+        'inductive_inference': None,
     }
     for _, params in config.items():
         params = default_params | params

@@ -1,23 +1,23 @@
 ---
-Confidence-cora-GCN-2hop:
+confidence-cora-GCN:
   attack: "confidence"
   dataset: "cora"
   model: "GCN"
   epochs_target: 500
+  experiments: 200
   hidden_dim_target: [32]
   num_shadow_models: 128
-  query_hops: [0,2]
+  query_hops: [0, 2]
   transductive: false
-  inductive_inference: false
   target_fpr: 0.005
-Confidence-cora-GCN-2hop-inductive-inference:
-  attack: "confidence"
+lira-cora-GCN:
+  attack: "lira"
   dataset: "cora"
   model: "GCN"
   epochs_target: 500
+  experiments: 30
   hidden_dim_target: [32]
   num_shadow_models: 128
-  query_hops: [2]
+  query_hops: [0, 2]
   transductive: false
-  inductive_inference: true
   target_fpr: 0.005

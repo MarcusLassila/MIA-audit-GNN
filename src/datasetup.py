@@ -75,7 +75,16 @@ def train_val_test_masks(num_nodes, train_frac, val_frac, stratify=None):
             test_mask[index[num_train_nodes + num_val_nodes:]] = True
     return train_mask, val_mask, test_mask
 
-
+def random_edge_mask(dataset):
+    train_mask, val_mask, test_mask = train_val_test_masks(dataset.x.shape[0], 0.4, 0.2, stratify=dataset.y)
+    mask = []
+    for a, b in dataset.edge_index.T:
+        mask.append(
+            train_mask[a] == train_mask[b]
+            and val_mask[a] == val_mask[b]
+            and test_mask[a] == test_mask[b]
+        )
+    return torch.tensor(mask, dtype=torch.bool)
 
 def stochastic_block_model(root):
     block_sizes = [2000, 2000]
