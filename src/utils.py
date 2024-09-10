@@ -50,8 +50,6 @@ class GraphInfo:
         return s
 
 def fresh_model(model_type, num_features, hidden_dims, num_classes, dropout=0.0):
-    if model_type == 'MLP':
-        return gnn.MLP(channel_list=[num_features, *hidden_dims, num_classes], dropout=dropout)
     try:
         model = getattr(models, model_type)(
             in_dim=num_features,

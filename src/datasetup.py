@@ -91,13 +91,14 @@ def stochastic_block_model(root):
     edge_probs = torch.tensor([
         [1.0, 0.25],
         [0.25, 1.0],
-    ]) * 0.001
+    ]) * 0.005
+    num_features = 4
     dataset = utils.execute_silently(
         callable=torch_geometric.datasets.StochasticBlockModelDataset, 
         root=root,
         block_sizes=block_sizes,
         edge_probs=edge_probs,
-        num_channels=3,
+        num_channels=num_features,
         force_reload=True,
         class_sep=0.5,
     )
@@ -114,8 +115,8 @@ def stochastic_block_model(root):
         train_mask=train_mask,
         val_mask=val_mask,
         test_mask=test_mask,
-        num_classes=2,
-        num_features=3,
+        num_classes=len(block_sizes),
+        num_features=num_features,
     )
     data.inductive_mask = train_split_interconnection_mask(data)
     data.name = "SBM"

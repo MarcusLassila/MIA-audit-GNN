@@ -94,3 +94,10 @@ class DecoupledGCN(nn.Module):
             x = scatter(x, edge_index[0], dim=0, reduce='mean')
         x = scatter(x[edge_index[1]], edge_index[0], dim=0, reduce='mean')
         return x
+
+class MLP(gnn.MLP):
+
+    def __init__(self, in_dim, hidden_dims, out_dim, dropout=0.0):
+        channel_list = [in_dim, *hidden_dims, out_dim]
+        super(MLP, self).__init__(channel_list, dropout=dropout)
+        self.num_propagations = len(channel_list) - 1
