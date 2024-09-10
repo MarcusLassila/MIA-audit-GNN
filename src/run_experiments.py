@@ -40,7 +40,8 @@ def main():
         for k, v in params.items():
             print(f'{k}: {v}')
         print()
-        stat_df = run_mia.main(params)
+        stat_df, detection_df = run_mia.main(params)
+        detection_df.rename_axis(params['name']).to_csv(f'{default_params["savedir"]}/detection_counts_{params["name"]}.csv', sep=',')
         stat_frames.append(stat_df)
     pd.concat(stat_frames).to_csv(f'{default_params["savedir"]}/statistics.csv', sep=',')
 

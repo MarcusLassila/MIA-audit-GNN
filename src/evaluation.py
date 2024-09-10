@@ -4,11 +4,21 @@ import numpy as np
 import torch
 from torch_geometric.utils import k_hop_subgraph
 from sklearn.metrics import roc_curve, roc_auc_score
-from math import comb
+from itertools import combinations
 
 def inclusions(list_of_sets):
-    res = [set() for _ in range(comb(len(list_of_sets)))]
-    # TODO: Implement
+    n = len(list_of_sets)
+    res = []
+    for r in range(1, n + 1):
+        for idx in combinations(range(n), r):
+            incl = set()
+            excl = set()
+            for i in range(n):
+                if i in idx:
+                    incl.update(list_of_sets[i])
+                else:
+                    excl.update(list_of_sets[i])
+            res.append(len(incl - excl))
     return res
 
 def bc_evaluation(preds, truth, target_fpr):

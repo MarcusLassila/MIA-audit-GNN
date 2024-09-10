@@ -7,11 +7,13 @@ import utils
 
 import argparse
 import pandas as pd
+import numpy as np
 import torch
 import torch.nn.functional as F
 from torchmetrics import Accuracy
 from statistics import mean, stdev
 from collections import defaultdict
+from itertools import combinations
 
 class MembershipInferenceExperiment:
 
@@ -105,8 +107,8 @@ class MembershipInferenceExperiment:
         config = self.config
         dataset = self.dataset
         scores = defaultdict(list)
-        for i in range(config.experiments):
-            print(f'Running experiment {i + 1}/{config.experiments}.')
+        for i_experiment in range(config.experiments):
+            print(f'Running experiment {i_experiment + 1}/{config.experiments}.')
 
             match config.attack:
                 case "basic-mlp":
@@ -149,9 +151,11 @@ class MembershipInferenceExperiment:
             target_samples = datasetup.masked_subgraph(target_dataset, ~target_dataset.val_mask)
 
             true_positives = []
+            ids = [] # Used to label detection count dataframe
             # Run attack using the specified set of k-hop neighborhood queries.
             for num_hops in config.query_hops:
                 if num_hops == 0:
+                    ids.append('0')
                     preds = attacker.run_attack(target_samples=target_samples, num_hops=num_hops)
                     truth = target_samples.train_mask.long()
                     metrics = evaluation.bc_evaluation(preds, truth, config.target_fpr)
@@ -164,18 +168,20 @@ class MembershipInferenceExperiment:
                 else:
                     flags_IITI = (True, False) if config.inductive_inference is None else (config.inductive_inference,)
                     for flag in flags_IITI:
+                        suffix = 'II' if flag else 'TI'
+                        ids.append(f'{num_hops}-{suffix}')
                         preds = attacker.run_attack(target_samples=target_samples, num_hops=num_hops, inductive_inference=flag)
                         truth = target_samples.train_mask.long()
                         metrics = evaluation.bc_evaluation(preds, truth, config.target_fpr)
                         true_positives.append(metrics['TP_fixed_fpr'])
                         fpr, tpr = metrics['roc']
-                        suffix = 'II' if flag else 'TI'
                         scores[f'fprs_{num_hops}_{suffix}'].append(fpr)
                         scores[f'tprs_{num_hops}_{suffix}'].append(tpr)
                         scores[f'auroc_{num_hops}_{suffix}'].append(metrics['auroc'])
                         scores[f'tprs_at_fixed_fpr_{num_hops}_{suffix}'].append(metrics['tpr_fixed_fpr'])
 
-            inclusions = evaluation.inclusions(true_positives)
+            detection_counts = np.array(evaluation.inclusions(true_positives), dtype=np.int64)
+            scores['detection_count'].append(detection_counts)
 
             target_scores = {
                 'train_score': evaluation.evaluate_graph_model(
@@ -230,6 +236,19 @@ class MembershipInferenceExperiment:
                         stats[f'auroc_{num_hops}_{suffix}'] = scores[f'auroc_{num_hops}_{suffix}']
                         stats[f'tpr_{config.target_fpr:.2}_fpr_{num_hops}_{suffix}'] = scores[f'tprs_at_fixed_fpr_{num_hops}_{suffix}']
 
+        detection_counts = np.stack(scores['detection_count'])
+        detection_counts_mean = np.mean(detection_counts, axis=0)
+        detection_counts_std = np.std(detection_counts, axis=0)
+        table = {}
+        i = 0
+        for r in range(1, len(ids) + 1):
+            for idx in combinations(range(len(ids)), r):
+                key = '+'.join(ids[j] for j in idx)
+                table[key] = [f'{detection_counts_mean[i]:.4f}', f'{detection_counts_std[i]:.4f}']
+                i += 1
+
+        detection_df = pd.DataFrame(table, index=['mean', 'std'])
+        detection_df.to_csv('./results/detection_counts.csv')
         stat_df = pd.DataFrame(stats, index=[config.name])
         if config.make_plots:
             savepath = f'{config.savedir}/{config.name}_roc_loglog.png'
@@ -246,7 +265,7 @@ class MembershipInferenceExperiment:
                         fprs = scores[f'fprs_{num_hops}_{suffix}']
                         tprs = scores[f'tprs_{num_hops}_{suffix}']
                         utils.plot_multi_roc_loglog(fprs, tprs, savepath=savepath)
-        return stat_df
+        return stat_df, detection_df
 
 
 def main(config):
@@ -290,6 +309,7 @@ if __name__ == '__main__':
     print('Running MIA experiment.')
     print(utils.Config(config))
     print()
-    stat_df = main(config)
+    stat_df, detection_df = main(config)
     print('Attack statistics:')
     print(stat_df)
+    print(detection_df)

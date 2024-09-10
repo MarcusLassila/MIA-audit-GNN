@@ -4,7 +4,7 @@ confidence-cora-GCN:
   dataset: "cora"
   model: "GCN"
   epochs_target: 500
-  experiments: 200
+  experiments: 10
   hidden_dim_target: [32]
   num_shadow_models: 128
   query_hops: [0, 2]
@@ -15,7 +15,29 @@ lira-cora-GCN:
   dataset: "cora"
   model: "GCN"
   epochs_target: 500
-  experiments: 30
+  experiments: 10
+  hidden_dim_target: [32]
+  num_shadow_models: 128
+  query_hops: [0, 2]
+  transductive: false
+  target_fpr: 0.005
+confidence-sbm-GCN:
+  attack: "confidence"
+  dataset: "sbm"
+  model: "GCN"
+  epochs_target: 500
+  experiments: 10
+  hidden_dim_target: [32]
+  num_shadow_models: 128
+  query_hops: [0, 2]
+  transductive: false
+  target_fpr: 0.005
+lira-sbm-GCN:
+  attack: "lira"
+  dataset: "sbm"
+  model: "GCN"
+  epochs_target: 500
+  experiments: 10
   hidden_dim_target: [32]
   num_shadow_models: 128
   query_hops: [0, 2]
