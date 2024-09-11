@@ -167,8 +167,7 @@ class LiRA:
     def get_mean_and_std(self, target_samples, num_hops, inductive_inference):
         hinges = []
         num_target_samples = target_samples.x.shape[0]
-        desc=f"Computing confidence values from shadow models. {next(self.shadow_models[0].parameters()).device} device"
-        for shadow_model in tqdm(self.shadow_models, desc=desc):
+        for shadow_model in self.shadow_models:
             shadow_model.eval()
             with torch.inference_mode():
                 preds = evaluation.k_hop_query(
