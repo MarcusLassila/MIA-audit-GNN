@@ -6,8 +6,6 @@ from copy import deepcopy
 from dataclasses import dataclass
 from typing import Callable, Union
 
-EARLY_STOPPING_THRESHOLD = 30 # Number of consecutive epochs with worse than the best seen validation set loss before early stopping.
-
 def check_inductive_split(graph):
     for a, b in graph.edge_index.T:
         assert (
@@ -72,9 +70,9 @@ def train_gnn(model, dataset, config: TrainConfig, use_tqdm=True, inductive_spli
             min_loss = valid_loss
             best_model = deepcopy(model)
             early_stopping_counter = 0
-        elif config.early_stopping:
+        elif config.early_stopping > 0:
             early_stopping_counter += 1
-            if early_stopping_counter == EARLY_STOPPING_THRESHOLD:
+            if early_stopping_counter == config.early_stopping:
                 break
     if config.early_stopping:
         model = best_model
@@ -128,9 +126,9 @@ def train_mlp(model, train_loader, valid_loader, config: TrainConfig):
             min_loss = valid_loss
             best_model = deepcopy(model)
             early_stopping_counter = 0
-        elif config.early_stopping:
+        elif config.early_stopping > 0:
             early_stopping_counter += 1
-            if early_stopping_counter == EARLY_STOPPING_THRESHOLD:
+            if early_stopping_counter == config.early_stopping:
                 break
     model = best_model
     return res

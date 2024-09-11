@@ -291,7 +291,7 @@ if __name__ == '__main__':
     parser.add_argument("--lr", default=1e-2, type=float)
     parser.add_argument("--weight-decay", default=1e-4, type=float)
     parser.add_argument("--dropout", default=0.5, type=float)
-    parser.add_argument("--early-stopping", action=argparse.BooleanOptionalAction)
+    parser.add_argument("--early-stopping", default=30, type=int)
     parser.add_argument("--hidden-dim-target", default=[32], type=lambda x: [*map(int, x.split(','))])
     parser.add_argument("--hidden-dim-attack", default=[256, 64], type=lambda x: [*map(int, x.split(','))])
     parser.add_argument("--query-hops", default=[0], type=lambda x: [*map(int, x.split(','))])
@@ -312,4 +312,6 @@ if __name__ == '__main__':
     stat_df, detection_df = main(config)
     print('Attack statistics:')
     print(stat_df)
-    print(detection_df)
+    if len(detection_df.columns) > 1:
+        print('Node detection count set differences:')
+        print(detection_df)

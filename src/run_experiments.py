@@ -20,7 +20,7 @@ def main():
     default_params = {
         'datadir': './data',
         'savedir': './results',
-        'early_stopping': True,
+        'early_stopping': 30,
         'grid_search': False,
         'optimizer': 'Adam',
         'lr': 0.01,

@@ -4,9 +4,9 @@ import numpy as np
 import pandas as pd
 import scipy.stats as stats
 import matplotlib.pyplot as plt
-import matplotlib.colors
 import torch
-import torch_geometric.nn as gnn
+from torch_geometric.utils import to_networkx
+import networkx as nx
 from sklearn.decomposition import PCA
 from sklearn.manifold import TSNE
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
@@ -90,6 +90,14 @@ def tpr_at_fixed_fpr(fpr, tpr, target_fpr, thresholds):
         return slope * (target_fpr - x0) + y0, thresholds[idx - 1]
     else:
         return tpr[idx], thresholds[idx]
+
+def plot_graph(graph):
+    graph = to_networkx(graph)
+    plt.figure(figsize=(10,8))
+    nx.draw(graph, node_size=30, node_color='lightblue', with_labels=False, arrows=False, width=0.3, alpha=0.7)
+    plt.title(graph.name)
+    plt.show()
+    plt.clf()
 
 def plot_training_results(res, name, savedir):
     epochs = np.array([*range(len(res['train_loss']))])

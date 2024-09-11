@@ -25,7 +25,7 @@ Alternatively, run "src/run_mia.py" which only run one MIA simulation experiment
 * --lr: Learning rate when training target and shadow models.
 * --weight_decay: Weight decay (L2 penalty) to when training traget and shadow models.
 * --dropout: Dropout rate when training target and shadow model.
-* --early-stopping: Enable early stopping when training target, shadow and attack model.
+* --early-stopping: Number of successive epochs with no performance improvement on validation set before stopping the training. If <= 0 no early stopping is used. If 0 the model of the last training epoch will be used, otherwise the model with best validation set perfomance is used.
 * --hidden-dim-target: Dimension of the hidden layer of the 2-layer GNN target/shadow model.
 * --hidden-dim-attack: Dimensions of the hidden layers in the MLP. Input is given as a comma separeted list, e.g. 128,64,32.
 * --rmia-offline-interp-param: Hyperparamter for interpolation of "in models" from "out models".
