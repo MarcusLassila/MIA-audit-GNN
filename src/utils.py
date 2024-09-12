@@ -5,7 +5,7 @@ import pandas as pd
 import scipy.stats as stats
 import matplotlib.pyplot as plt
 import torch
-from torch_geometric.utils import to_networkx
+from torch_geometric.utils import to_networkx, remove_isolated_nodes
 import networkx as nx
 from sklearn.decomposition import PCA
 from sklearn.manifold import TSNE
@@ -75,6 +75,10 @@ def measure_execution_time(callable):
         return ret
     return wrapper
 
+def fraction_isolated_nodes(graph):
+    _, _, mask = remove_isolated_nodes(graph.edge_index, num_nodes=graph.x.shape[0])
+    return (~mask).float().mean().item()
+
 def execute_silently(callable, *args, **kwargs):
     null_stream = io.StringIO()
     with redirect_stdout(null_stream), redirect_stderr(null_stream):
@@ -97,7 +101,6 @@ def plot_graph(graph):
     nx.draw(graph, node_size=30, node_color='lightblue', with_labels=False, arrows=False, width=0.3, alpha=0.7)
     plt.title(graph.name)
     plt.show()
-    plt.clf()
 
 def plot_training_results(res, name, savedir):
     epochs = np.array([*range(len(res['train_loss']))])

@@ -4,9 +4,9 @@ import torch
 import torch_geometric
 from torch.utils.data import TensorDataset
 from torch_geometric.data import Data
-from torch_geometric.utils import subgraph
+from torch_geometric.utils import subgraph, index_to_mask, mask_to_index
 from sklearn.model_selection import train_test_split
-
+from collections import deque
 
 def create_attack_dataset(shadow_dataset, shadow_model):
     features = shadow_model(shadow_dataset.x, shadow_dataset.edge_index).cpu()
@@ -123,6 +123,53 @@ def stochastic_block_model(root):
     data.root = root
     return data
 
+def sample_nodes(total_num_nodes, num_sampled_nodes, stratify=None):
+    if stratify is None:
+        node_index = torch.randperm(total_num_nodes)[:num_sampled_nodes]
+    else:
+        node_index = []
+        node_frac = num_sampled_nodes / total_num_nodes
+        for c in torch.unique(stratify):
+            index = (stratify == c).nonzero().squeeze()
+            perm_index = torch.randperm(index.shape[0])
+            index = index[perm_index]
+            n = int(index.shape[0] * node_frac)
+            node_index.append(index[:n])
+        node_index = torch.cat(node_index)
+    return node_index
+
+def sample_nodes_v2(dataset, num_nodes, num_neighbors):
+    node_index = sample_nodes(dataset.x.shape[0], num_nodes, stratify=dataset.y)
+    node_index = node_index[torch.randperm(node_index.shape[0])]
+    edge_index = dataset.edge_index
+
+    def sample_local_neighborhood(central_node, visited):
+        queue = deque([(0, central_node.item())])
+        while queue:
+            i, u = queue.popleft()
+            if i >= len(num_neighbors):
+                break
+            if u in visited:
+                continue
+            visited.add(u)
+            edge_mask = edge_index[0] == u
+            neighbors = edge_index[1][edge_mask]
+            perm_mask = torch.randperm(min(num_neighbors[i], neighbors.shape[0]))
+            neighbors = neighbors[perm_mask]
+            for v in neighbors:
+                queue.append((i + 1, v.item()))
+
+    sampled_nodes = set()
+    for node in node_index:
+        if node in sampled_nodes:
+            continue
+        sample_local_neighborhood(node, sampled_nodes)
+        if len(sampled_nodes) >= num_nodes:
+            break
+
+    sampled_node_index = torch.tensor(list(sampled_nodes), dtype=torch.long)[:num_nodes]
+    return sampled_node_index
+
 def extract_subgraph(dataset, node_index, train_frac=0.4, val_frac=0.2):
     '''
     Constructs a subgraph of dataset consisting of the nodes indexed in node_index with the edges linking them.
@@ -157,7 +204,7 @@ def extract_subgraph(dataset, node_index, train_frac=0.4, val_frac=0.2):
     data.inductive_mask = train_split_interconnection_mask(data)
     return data
 
-def sample_subgraph(dataset, num_nodes, train_frac=0.4, val_frac=0.2, keep_class_proportions=True):
+def sample_subgraph(dataset, num_nodes, train_frac=0.4, val_frac=0.2, v2=True):
     '''
     Sample a subgraph by uniformly sample a number of nodes from the graph dataset.
     Masks for training/validation/testing are created uniformly at random with the specified proportions.
@@ -166,37 +213,24 @@ def sample_subgraph(dataset, num_nodes, train_frac=0.4, val_frac=0.2, keep_class
     '''
     total_num_nodes = dataset.x.shape[0]
     assert 0 < num_nodes <= total_num_nodes
-    node_frac = num_nodes / total_num_nodes
-    if keep_class_proportions:
-        node_index = []
-        for c in range(dataset.num_classes):
-            index = (dataset.y == c).nonzero().squeeze()
-            perm_index = torch.randperm(index.shape[0])
-            index = index[perm_index]
-            n = int(index.shape[0] * node_frac)
-            node_index.append(index[:n])
-        node_index = torch.cat(node_index)
+    if v2:
+        node_index = sample_nodes_v2(dataset, num_nodes, num_neighbors=[5, 5])
     else:
-        randomized_index = torch.randperm(total_num_nodes)
-        node_index = randomized_index[:num_nodes]
+        node_index = sample_nodes(total_num_nodes, num_nodes, stratify=dataset.y)
     return extract_subgraph(dataset, node_index, train_frac=train_frac, val_frac=val_frac)
 
-def disjoint_split(dataset, balance=0.5):
+def disjoint_node_split(dataset, balance=0.5, v2=False):
     '''
-    Split the graph dataset in two disjoint subgraphs.
-    The balance the fraction of nodes to use for the first subgraph, and the second subgraph gets the remaining nodes.
+    Split the nodes into two disjoint sets.
+    Return node index tensors for the two sets.
     '''
-    node_index_A = []
-    node_index_B = []
-    for c in range(dataset.num_classes):
-        index = (dataset.y == c).nonzero().squeeze()
-        perm_index = torch.randperm(index.shape[0])
-        index = index[perm_index]
-        n = int(index.shape[0] * balance)
-        node_index_A.append(index[:n])
-        node_index_B.append(index[n:])
-    node_index_A = torch.cat(node_index_A)
-    node_index_B = torch.cat(node_index_B)
+    total_num_nodes = dataset.x.shape[0]
+    num_nodes_A = int(total_num_nodes * balance)
+    if v2:
+        node_index_A = sample_nodes_v2(dataset, num_nodes_A, num_neighbors=[5, 5])
+    else:
+        node_index_A = sample_nodes(total_num_nodes, num_nodes_A, stratify=dataset.y)
+    node_index_B = mask_to_index(~index_to_mask(node_index_A, size=total_num_nodes))
     return node_index_A, node_index_B
 
 def target_shadow_split(dataset, split="sampled", target_frac=0.5, shadow_frac=0.5):
@@ -214,7 +248,7 @@ def target_shadow_split(dataset, split="sampled", target_frac=0.5, shadow_frac=0
         shadow_set = sample_subgraph(dataset, shadow_size)
     elif split == "disjoint":
         assert 0.0 < target_frac + shadow_frac <= 1.0
-        target_index, shadow_index = disjoint_split(dataset, balance=target_frac)
+        target_index, shadow_index = disjoint_node_split(dataset, balance=target_frac)
         target_set = extract_subgraph(dataset, target_index)
         shadow_set = extract_subgraph(dataset, shadow_index)
     else:

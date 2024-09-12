@@ -5,7 +5,6 @@ from torch_geometric.utils import add_self_loops
 from torch_scatter import scatter
 
 class BaseGNN(nn.Module):
-    ''' Base class for the different GNN architectures to inherit common implementations from. '''
 
     def __init__(self, dropout=0.0):
         super(BaseGNN, self).__init__()
