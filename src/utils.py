@@ -5,7 +5,7 @@ import pandas as pd
 import scipy.stats as stats
 import matplotlib.pyplot as plt
 import torch
-from torch_geometric.utils import to_networkx, remove_isolated_nodes
+from torch_geometric.utils import degree, to_networkx, remove_isolated_nodes
 import networkx as nx
 from sklearn.decomposition import PCA
 from sklearn.manifold import TSNE
@@ -37,6 +37,7 @@ class GraphInfo:
         for c in dataset.y:
             self.class_counts[c] += 1
         self.class_distr = self.class_counts / self.num_nodes
+        self.average_degree = average_degree(dataset)
 
     def __str__(self):
         s = (
@@ -46,6 +47,7 @@ class GraphInfo:
             f'#Features: {self.num_features}\n'
             f'#Classes: {self.num_classes}\n'
             f'#Class distribution: [{", ".join(f"{x:.4f}" for x in self.class_distr)}]\n'
+            f'Average degree: {self.average_degree:.4f}\n'
         )
         return s
 
@@ -74,6 +76,9 @@ def measure_execution_time(callable):
         print(f"Callable '{callable.__name__}' executed in {t1 - t0:.3f} seconds.")
         return ret
     return wrapper
+
+def average_degree(graph):
+    return degree(graph.edge_index[0], num_nodes=graph.x.shape[0], dtype=torch.float).mean().item()
 
 def fraction_isolated_nodes(graph):
     _, _, mask = remove_isolated_nodes(graph.edge_index, num_nodes=graph.x.shape[0])

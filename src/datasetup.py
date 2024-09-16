@@ -4,11 +4,12 @@ import torch
 import torch_geometric
 from torch.utils.data import TensorDataset
 from torch_geometric.data import Data
-from torch_geometric.utils import subgraph, index_to_mask, mask_to_index
+from torch_geometric.utils import degree, index_to_mask, mask_to_index, subgraph
 from sklearn.model_selection import train_test_split
 from collections import deque
 
 def create_attack_dataset(shadow_dataset, shadow_model):
+    # For basic-MLP attack
     features = shadow_model(shadow_dataset.x, shadow_dataset.edge_index).cpu()
     labels = shadow_dataset.train_mask.long().cpu()
     train_X, test_X, train_y, test_y = train_test_split(features, labels, test_size=0.2, stratify=labels)
@@ -123,6 +124,9 @@ def stochastic_block_model(root):
     data.root = root
     return data
 
+def node_index_complement(node_index, num_nodes):
+    return mask_to_index(~index_to_mask(node_index, size=num_nodes))
+
 def sample_nodes(total_num_nodes, num_sampled_nodes, stratify=None):
     if stratify is None:
         node_index = torch.randperm(total_num_nodes)[:num_sampled_nodes]
@@ -154,10 +158,10 @@ def sample_nodes_v2(dataset, num_nodes, num_neighbors):
             visited.add(u)
             edge_mask = edge_index[0] == u
             neighbors = edge_index[1][edge_mask]
-            perm_mask = torch.randperm(min(num_neighbors[i], neighbors.shape[0]))
+            perm_mask = torch.randperm(neighbors.shape[0])#[:num_neighbors[0]]
             neighbors = neighbors[perm_mask]
-            for v in neighbors:
-                queue.append((i + 1, v.item()))
+            for v in neighbors.tolist():
+                queue.append((i + 1, v))
 
     sampled_nodes = set()
     for node in node_index:
@@ -169,6 +173,58 @@ def sample_nodes_v2(dataset, num_nodes, num_neighbors):
 
     sampled_node_index = torch.tensor(list(sampled_nodes), dtype=torch.long)[:num_nodes]
     return sampled_node_index
+
+def random_walk(edge_index, available, path_length):
+    available_set = set(available)
+    visited = set()
+    start_node = available[-1]
+    queue = deque([start_node])
+    while queue:
+        u = queue.popleft()
+        if u in visited:
+            continue
+        visited.add(u)
+        available_set.remove(u)
+        if len(visited) == path_length:
+            break
+        edge_mask = edge_index[0] == u
+        neighbors = edge_index[1][edge_mask]
+        perm_mask = torch.randperm(neighbors.shape[0])
+        neighbors = neighbors[perm_mask]
+        for v in neighbors.tolist():
+            if v in available_set:
+                queue.append(v)
+
+    # edge_index, _ = subgraph(
+    #     subset=list(available_set),
+    #     edge_index=edge_index,
+    #     relabel_nodes=False,
+    #     num_nodes=num_nodes,
+    # )
+    # _, indices = degree(edge_index[0], num_nodes=num_nodes, dtype=torch.long).sort(descending=False)
+
+    # available = [x for x in indices.tolist() if x in available_set]
+    # assert sorted(available) == sorted(available_set)
+    available = [x for x in available if x in available_set]
+    return visited, available
+
+def alternating_random_walk_node_split(dataset):
+    total_num_nodes = dataset.x.shape[0]
+    edge_index = dataset.edge_index
+    _, indices = degree(edge_index[0], num_nodes=total_num_nodes, dtype=torch.long).sort(descending=True)
+    #indices = indices[torch.randperm(total_num_nodes)]
+    available = [x.item() for x in indices]
+
+    node_index_split = set(), set()
+    turn = 0
+    while available:
+        node_index, available = random_walk(edge_index, available, path_length=20)
+        node_index_split[turn].update(node_index)
+        turn ^= 1
+
+    node_index_A = torch.tensor(list(node_index_split[0]), dtype=torch.long)
+    node_index_B = torch.tensor(list(node_index_split[1]), dtype=torch.long)
+    return node_index_A, node_index_B
 
 def extract_subgraph(dataset, node_index, train_frac=0.4, val_frac=0.2):
     '''
@@ -219,7 +275,7 @@ def sample_subgraph(dataset, num_nodes, train_frac=0.4, val_frac=0.2, v2=True):
         node_index = sample_nodes(total_num_nodes, num_nodes, stratify=dataset.y)
     return extract_subgraph(dataset, node_index, train_frac=train_frac, val_frac=val_frac)
 
-def disjoint_node_split(dataset, balance=0.5, v2=False):
+def disjoint_node_split(dataset, balance=0.5, v2=True):
     '''
     Split the nodes into two disjoint sets.
     Return node index tensors for the two sets.
@@ -227,10 +283,10 @@ def disjoint_node_split(dataset, balance=0.5, v2=False):
     total_num_nodes = dataset.x.shape[0]
     num_nodes_A = int(total_num_nodes * balance)
     if v2:
-        node_index_A = sample_nodes_v2(dataset, num_nodes_A, num_neighbors=[5, 5])
+        node_index_A, node_index_B = alternating_random_walk_node_split(dataset) # sample_nodes_v2(dataset, num_nodes_A, num_neighbors=[5, 5])
     else:
         node_index_A = sample_nodes(total_num_nodes, num_nodes_A, stratify=dataset.y)
-    node_index_B = mask_to_index(~index_to_mask(node_index_A, size=total_num_nodes))
+        node_index_B = node_index_complement(node_index_A, total_num_nodes)
     return node_index_A, node_index_B
 
 def target_shadow_split(dataset, split="sampled", target_frac=0.5, shadow_frac=0.5):
