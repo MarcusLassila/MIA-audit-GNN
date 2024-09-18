@@ -4,7 +4,7 @@ confidence-flickr-GraphSAGE:
   dataset: "flickr"
   model: "GraphSAGE"
   epochs_target: 500
-  experiments: 20
+  experiments: 10
   hidden_dim_target: [1024]
   num_shadow_models: 128
   query_hops: [0, 2]
@@ -18,7 +18,7 @@ lira-flickr-GraphSAGE:
   dataset: "flickr"
   model: "GraphSAGE"
   epochs_target: 500
-  experiments: 20
+  experiments: 10
   hidden_dim_target: [1024]
   num_shadow_models: 128
   query_hops: [0, 2]
