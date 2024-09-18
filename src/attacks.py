@@ -216,7 +216,7 @@ class LiRA:
             loc=means.cpu().numpy(),
             scale=stds.cpu().numpy() + LiRA.EPS,
         )
-        return preds
+        return torch.tensor(preds)
 
 class RMIA:
     '''

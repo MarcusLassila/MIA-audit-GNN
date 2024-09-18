@@ -36,6 +36,7 @@ def bc_evaluation(preds, truth, target_fpr):
         'roc': (fpr, tpr),
         'tpr_fixed_fpr': tpr_fixed_fpr,
         'TP_fixed_fpr': true_positives,
+        'fixed_fpr_threshold': threshold,
     }
 
 def k_hop_query(model, dataset, query_nodes, num_hops=0, inductive_split=False):

@@ -21,7 +21,7 @@ class MembershipInferenceExperiment:
         self.config = utils.Config(config)
         self.dataset = datasetup.parse_dataset(root=self.config.datadir, name=self.config.dataset)
         self.criterion = Accuracy(task="multiclass", num_classes=self.dataset.num_classes).to(self.config.device)
-        print(utils.GraphInfo(self.dataset))
+        print(self.dataset)
 
     def visualize_embedding_distribution(self):
         config = self.config
@@ -120,7 +120,7 @@ class MembershipInferenceExperiment:
                         config=config,
                     )
                 case "confidence":
-                    target_dataset = datasetup.sample_subgraph(dataset, num_nodes=dataset.x.shape[0]//2)
+                    target_dataset, _ = datasetup.target_shadow_split(dataset, split="disjoint", target_frac=0.5, shadow_frac=0.5)
                     target_model = self.train_target_model(target_dataset)
                     attacker = attacks.ConfidenceAttack(
                         target_model=target_model,
@@ -149,7 +149,9 @@ class MembershipInferenceExperiment:
 
             # Remove validation mask from target samples
             target_samples = datasetup.masked_subgraph(target_dataset, ~target_dataset.val_mask)
+            truth = target_samples.train_mask.long()
 
+            all_hard_preds = []
             true_positives = []
             ids = [] # Used to label detection count dataframe
             # Run attack using the specified set of k-hop neighborhood queries.
@@ -157,8 +159,8 @@ class MembershipInferenceExperiment:
                 if num_hops == 0:
                     ids.append('0')
                     preds = attacker.run_attack(target_samples=target_samples, num_hops=num_hops)
-                    truth = target_samples.train_mask.long()
                     metrics = evaluation.bc_evaluation(preds, truth, config.target_fpr)
+                    all_hard_preds.append((preds >= metrics['fixed_fpr_threshold']))
                     fpr, tpr = metrics['roc']
                     true_positives.append(metrics['TP_fixed_fpr'])
                     scores[f'fprs_{num_hops}'].append(fpr)
@@ -171,14 +173,21 @@ class MembershipInferenceExperiment:
                         suffix = 'II' if flag else 'TI'
                         ids.append(f'{num_hops}-{suffix}')
                         preds = attacker.run_attack(target_samples=target_samples, num_hops=num_hops, inductive_inference=flag)
-                        truth = target_samples.train_mask.long()
                         metrics = evaluation.bc_evaluation(preds, truth, config.target_fpr)
+                        all_hard_preds.append((preds >= metrics['fixed_fpr_threshold']))
                         true_positives.append(metrics['TP_fixed_fpr'])
                         fpr, tpr = metrics['roc']
                         scores[f'fprs_{num_hops}_{suffix}'].append(fpr)
                         scores[f'tprs_{num_hops}_{suffix}'].append(tpr)
                         scores[f'auroc_{num_hops}_{suffix}'].append(metrics['auroc'])
                         scores[f'tprs_at_fixed_fpr_{num_hops}_{suffix}'].append(metrics['tpr_fixed_fpr'])
+
+
+            all_hard_preds = torch.stack(all_hard_preds)
+            combined_preds = all_hard_preds.any(axis=0)
+            truth = target_samples.train_mask
+            tpr = (combined_preds & truth).sum().item() / truth.sum().item()
+            scores['tprs_at_fixed_fpr_combined'].append(tpr)
 
             detection_counts = np.array(evaluation.inclusions(true_positives), dtype=np.int64)
             scores['detection_count'].append(detection_counts)
@@ -208,6 +217,8 @@ class MembershipInferenceExperiment:
                 'test_acc_mean': [f"{mean(scores['test_scores']):.4f}"],
                 'test_acc_std': [f"{stdev(scores['test_scores']):.4f}"],
             }
+            stats[f'tpr_{config.target_fpr:.2}_fpr_combined_mean'] = [f"{mean(scores['tprs_at_fixed_fpr_combined']):.4f}"]
+            stats[f'tpr_{config.target_fpr:.2}_fpr_combined_std'] = [f"{stdev(scores['tprs_at_fixed_fpr_combined']):.4f}"]
             for num_hops in config.query_hops:
                 if num_hops == 0:
                     stats[f'auroc_{num_hops}_mean'] = [f"{mean(scores[f'auroc_{num_hops}']):.4f}"]
@@ -226,6 +237,7 @@ class MembershipInferenceExperiment:
                 'train_acc': scores['train_scores'],
                 'test_acc': scores['test_scores'],
             }
+            stats[f'tpr_{config.target_fpr:.2}_fpr_combined'] = scores['tprs_at_fixed_fpr_combined']
             for num_hops in config.query_hops:
                 if num_hops == 0:
                     stats[f'auroc_{num_hops}'] = scores[f'auroc_{num_hops}']

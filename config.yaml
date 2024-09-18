@@ -1,8 +1,8 @@
 ---
-confidence-cora-GCN:
+confidence-cora-GraphSAGE:
   attack: "confidence"
   dataset: "cora"
-  model: "GCN"
+  model: "GraphSAGE"
   epochs_target: 500
   experiments: 200
   hidden_dim_target: [32]
@@ -10,32 +10,10 @@ confidence-cora-GCN:
   query_hops: [0, 2]
   transductive: false
   target_fpr: 0.005
-lira-cora-GCN:
+lira-cora-GraphSAGE:
   attack: "lira"
   dataset: "cora"
-  model: "GCN"
-  epochs_target: 500
-  experiments: 50
-  hidden_dim_target: [32]
-  num_shadow_models: 128
-  query_hops: [0, 2]
-  transductive: false
-  target_fpr: 0.005
-confidence-sbm-GCN:
-  attack: "confidence"
-  dataset: "sbm"
-  model: "GCN"
-  epochs_target: 500
-  experiments: 200
-  hidden_dim_target: [32]
-  num_shadow_models: 128
-  query_hops: [0, 2]
-  transductive: false
-  target_fpr: 0.005
-lira-sbm-GCN:
-  attack: "lira"
-  dataset: "sbm"
-  model: "GCN"
+  model: "GraphSAGE"
   epochs_target: 500
   experiments: 50
   hidden_dim_target: [32]

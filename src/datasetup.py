@@ -48,6 +48,7 @@ def masked_subgraph(graph, mask):
     )
     data.inductive_mask = train_split_interconnection_mask(data)
     data.random_edge_mask = random_edge_mask(data)
+    data.__class__.__str__ = utils.graph_info
     return data
 
 def train_val_test_masks(num_nodes, train_frac, val_frac, stratify=None):
@@ -122,6 +123,7 @@ def stochastic_block_model(root):
     data.inductive_mask = train_split_interconnection_mask(data)
     data.name = "SBM"
     data.root = root
+    data.__class__.__str__ = utils.graph_info
     return data
 
 def node_index_complement(node_index, num_nodes):
@@ -195,30 +197,19 @@ def random_walk(edge_index, available, path_length):
             if v in available_set:
                 queue.append(v)
 
-    # edge_index, _ = subgraph(
-    #     subset=list(available_set),
-    #     edge_index=edge_index,
-    #     relabel_nodes=False,
-    #     num_nodes=num_nodes,
-    # )
-    # _, indices = degree(edge_index[0], num_nodes=num_nodes, dtype=torch.long).sort(descending=False)
-
-    # available = [x for x in indices.tolist() if x in available_set]
-    # assert sorted(available) == sorted(available_set)
     available = [x for x in available if x in available_set]
     return visited, available
 
 def alternating_random_walk_node_split(dataset):
     total_num_nodes = dataset.x.shape[0]
     edge_index = dataset.edge_index
-    _, indices = degree(edge_index[0], num_nodes=total_num_nodes, dtype=torch.long).sort(descending=True)
-    #indices = indices[torch.randperm(total_num_nodes)]
+    _, indices = degree(edge_index[0], num_nodes=total_num_nodes, dtype=torch.long).sort(descending=False)
     available = [x.item() for x in indices]
 
     node_index_split = set(), set()
     turn = 0
     while available:
-        node_index, available = random_walk(edge_index, available, path_length=20)
+        node_index, available = random_walk(edge_index, available, path_length=50)
         node_index_split[turn].update(node_index)
         turn ^= 1
 
@@ -258,6 +249,7 @@ def extract_subgraph(dataset, node_index, train_frac=0.4, val_frac=0.2):
         name=dataset.name,
     )
     data.inductive_mask = train_split_interconnection_mask(data)
+    data.__class__.__str__ = utils.graph_info
     return data
 
 def sample_subgraph(dataset, num_nodes, train_frac=0.4, val_frac=0.2, v2=True):
@@ -283,7 +275,7 @@ def disjoint_node_split(dataset, balance=0.5, v2=True):
     total_num_nodes = dataset.x.shape[0]
     num_nodes_A = int(total_num_nodes * balance)
     if v2:
-        node_index_A, node_index_B = alternating_random_walk_node_split(dataset) # sample_nodes_v2(dataset, num_nodes_A, num_neighbors=[5, 5])
+        node_index_A, node_index_B = alternating_random_walk_node_split(dataset) # Only supports balance = 0.5
     else:
         node_index_A = sample_nodes(total_num_nodes, num_nodes_A, stratify=dataset.y)
         node_index_B = node_index_complement(node_index_A, total_num_nodes)
@@ -331,4 +323,5 @@ def parse_dataset(root, name):
             dataset = stochastic_block_model(root)
         case _:
             raise ValueError("Unsupported dataset!")
+    dataset.__class__.__str__ = utils.graph_info
     return dataset

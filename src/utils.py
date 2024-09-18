@@ -25,32 +25,6 @@ class Config:
     def __str__(self):
         return '\n'.join(f'{k}: {v}'.replace('_', ' ') for k, v in self.__dict__.items())
 
-class GraphInfo:
-
-    def __init__(self, dataset):
-        self.name = dataset.name
-        self.num_nodes = dataset.x.shape[0]
-        self.num_edges = dataset.edge_index.shape[1]
-        self.num_features = dataset.num_features
-        self.num_classes = dataset.num_classes
-        self.class_counts = np.zeros(self.num_classes)
-        for c in dataset.y:
-            self.class_counts[c] += 1
-        self.class_distr = self.class_counts / self.num_nodes
-        self.average_degree = average_degree(dataset)
-
-    def __str__(self):
-        s = (
-            f'Dataset: {self.name}\n'
-            f'#Nodes: {self.num_nodes}\n'
-            f'#Edges: {self.num_edges}\n'
-            f'#Features: {self.num_features}\n'
-            f'#Classes: {self.num_classes}\n'
-            f'#Class distribution: [{", ".join(f"{x:.4f}" for x in self.class_distr)}]\n'
-            f'Average degree: {self.average_degree:.4f}\n'
-        )
-        return s
-
 def fresh_model(model_type, num_features, hidden_dims, num_classes, dropout=0.0):
     try:
         model = getattr(models, model_type)(
@@ -89,6 +63,28 @@ def execute_silently(callable, *args, **kwargs):
     with redirect_stdout(null_stream), redirect_stderr(null_stream):
         res = callable(*args, **kwargs)
     return res
+
+def graph_info(dataset):
+    name = dataset.name
+    num_nodes = dataset.x.shape[0]
+    num_edges = dataset.edge_index.shape[1]
+    num_features = dataset.num_features
+    num_classes = dataset.num_classes
+    class_counts = np.zeros(num_classes)
+    for c in dataset.y:
+        class_counts[c] += 1
+    class_distr = class_counts / num_nodes
+    avg_degree = average_degree(dataset)
+    return (
+        f'Dataset: {name}\n'
+        f'#Nodes: {num_nodes}\n'
+        f'#Edges: {num_edges}\n'
+        f'#Features: {num_features}\n'
+        f'#Classes: {num_classes}\n'
+        f'#Class distribution: [{", ".join(f"{x:.4f}" for x in class_distr)}]\n'
+        f'Average degree: {avg_degree:.4f}\n'
+        f'Fraction isolated nodes: {fraction_isolated_nodes(dataset)}\n'
+    )
 
 def tpr_at_fixed_fpr(fpr, tpr, target_fpr, thresholds):
     idx = np.argmax(fpr >= target_fpr)
