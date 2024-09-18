@@ -1,23 +1,29 @@
 ---
-confidence-cora-GraphSAGE:
+confidence-flickr-GraphSAGE:
   attack: "confidence"
-  dataset: "cora"
+  dataset: "flickr"
   model: "GraphSAGE"
   epochs_target: 500
-  experiments: 200
-  hidden_dim_target: [32]
+  experiments: 20
+  hidden_dim_target: [1024]
   num_shadow_models: 128
   query_hops: [0, 2]
   transductive: false
   target_fpr: 0.005
-lira-cora-GraphSAGE:
+  lr: 0.001
+  weight_decay: 0.0005
+  dropout: 0.25
+lira-flickr-GraphSAGE:
   attack: "lira"
-  dataset: "cora"
+  dataset: "flickr"
   model: "GraphSAGE"
   epochs_target: 500
-  experiments: 50
-  hidden_dim_target: [32]
+  experiments: 20
+  hidden_dim_target: [1024]
   num_shadow_models: 128
   query_hops: [0, 2]
   transductive: false
   target_fpr: 0.005
+  lr: 0.001
+  weight_decay: 0.0005
+  dropout: 0.25

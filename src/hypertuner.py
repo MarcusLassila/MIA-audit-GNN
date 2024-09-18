@@ -24,8 +24,8 @@ def grid_search(
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
     criterion = Accuracy(task="multiclass", num_classes=dataset.num_classes).to(device)
     grid = {
-        'lr': [5e-4, 1e-3, 5e-3, 1e-2, 5e-2],
-        'weight_decay': [1e-5, 5e-5, 1e-4, 5e-4],
+        'lr': [1e-3, 5e-3, 1e-2],
+        'weight_decay': [1e-5, 1e-4, 1e-3],
         'dropout': [0.0, 0.25, 0.5],
     }
     desc=f'Running grid search over the following hyperparameters: {", ".join(grid.keys())}'
