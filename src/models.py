@@ -1,8 +1,7 @@
 import torch.nn as nn
 import torch.nn.functional as F
 import torch_geometric.nn as gnn
-from torch_geometric.utils import add_self_loops
-from torch_scatter import scatter
+
 
 class BaseGNN(nn.Module):
 
@@ -71,28 +70,6 @@ class GIN(BaseGNN):
             gnn.MLP(channel_list=[in_c, out_c, out_c]) for in_c, out_c in zip(channel_list, channel_list[1:])
         ])
         self.num_layers = len(self.convs)
-
-class DecoupledGCN(nn.Module):
-
-    def __init__(self, in_dim, hidden_dim, out_dim, dropout=0.0, num_layers=2):
-        super(DecoupledGCN, self).__init__()
-        self.num_layers = num_layers
-        self.mlp = gnn.MLP(
-            in_channels=in_dim,
-            hidden_channels=hidden_dim,
-            out_channels=out_dim,
-            num_layers=1,
-            dropout=dropout,
-        )
-
-    def forward(self, x, edge_index):
-        x = self.mlp(x)
-        edge_index, _ = add_self_loops(edge_index, num_nodes=x.shape[0])
-        for _ in range(self.num_layers - 1):
-            x = x[edge_index[1]]
-            x = scatter(x, edge_index[0], dim=0, reduce='mean')
-        x = scatter(x[edge_index[1]], edge_index[0], dim=0, reduce='mean')
-        return x
 
 class MLP(gnn.MLP):
 
