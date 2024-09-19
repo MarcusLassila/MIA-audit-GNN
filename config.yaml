@@ -6,7 +6,7 @@ lira-corafull-GCN:
   epochs_target: 500
   experiments: 10
   hidden_dim_target: [512]
-  num_shadow_models: 64
+  num_shadow_models: 32
   query_hops: [0, 2]
   transductive: false
   target_fpr: 0.0005
