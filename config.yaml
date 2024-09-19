@@ -1,29 +1,28 @@
 ---
-confidence-flickr-GraphSAGE:
-  attack: "confidence"
-  dataset: "flickr"
-  model: "GraphSAGE"
-  epochs_target: 500
-  experiments: 10
-  hidden_dim_target: [1024]
-  num_shadow_models: 128
-  query_hops: [0, 2]
-  transductive: false
-  target_fpr: 0.005
-  lr: 0.001
-  weight_decay: 0.0005
-  dropout: 0.25
-lira-flickr-GraphSAGE:
+lira-corafull-GCN:
   attack: "lira"
-  dataset: "flickr"
-  model: "GraphSAGE"
+  dataset: "corafull"
+  model: "GCN"
   epochs_target: 500
   experiments: 10
-  hidden_dim_target: [1024]
-  num_shadow_models: 128
+  hidden_dim_target: [512]
+  num_shadow_models: 64
   query_hops: [0, 2]
   transductive: false
-  target_fpr: 0.005
+  target_fpr: 0.0005
   lr: 0.001
-  weight_decay: 0.0005
-  dropout: 0.25
+  weight_decay: 0.00001
+  dropout: 0.5
+confidence-corafull-GCN:
+  attack: "confidence"
+  dataset: "corafull"
+  model: "GCN"
+  epochs_target: 500
+  experiments: 10
+  hidden_dim_target: [512]
+  query_hops: [0, 2]
+  transductive: false
+  target_fpr: 0.0005
+  lr: 0.001
+  weight_decay: 0.00001
+  dropout: 0.5

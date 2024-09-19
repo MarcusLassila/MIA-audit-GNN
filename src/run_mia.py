@@ -61,18 +61,17 @@ class MembershipInferenceExperiment:
                 epochs=self.config.epochs_target,
                 early_stopping=self.config.early_stopping,
                 optimizer=self.config.optimizer,
-                hidden_dim=self.config.hidden_dim_target,
                 transductive=config.transductive,
             )
             print(f'Grid search results: {opt_hyperparams}')
-            lr, weight_decay, dropout = opt_hyperparams.values()
+            lr, weight_decay, dropout, hidden_dim = opt_hyperparams.values()
         else:
-            lr, weight_decay, dropout = config.lr, config.weight_decay, config.dropout
+            lr, weight_decay, dropout, hidden_dim = config.lr, config.weight_decay, config.dropout, config.hidden_dim_target
 
         target_model = utils.fresh_model(
             model_type=self.config.model,
             num_features=dataset.num_features,
-            hidden_dims=self.config.hidden_dim_target,
+            hidden_dims=hidden_dim,
             num_classes=dataset.num_classes,
             dropout=dropout,
         )
@@ -120,7 +119,7 @@ class MembershipInferenceExperiment:
                         config=config,
                     )
                 case "confidence":
-                    target_dataset, _ = datasetup.target_shadow_split(dataset, split="disjoint", target_frac=0.5, shadow_frac=0.5)
+                    target_dataset, _ = datasetup.target_shadow_split(dataset, split="disjoint")
                     target_model = self.train_target_model(target_dataset)
                     attacker = attacks.ConfidenceAttack(
                         target_model=target_model,
@@ -129,7 +128,7 @@ class MembershipInferenceExperiment:
                 case "lira":
                     # In offline LiRA, the shadow models are trained on datasets that does not contain the target sample.
                     # Therefore we make a disjoint split and train shadow models on one part, and attack samples of the other part.
-                    target_dataset, population = datasetup.target_shadow_split(dataset, split="disjoint", target_frac=0.5, shadow_frac=0.5)
+                    target_dataset, population = datasetup.target_shadow_split(dataset, split="disjoint")
                     target_model = self.train_target_model(target_dataset)
                     attacker = attacks.LiRA(
                         target_model=target_model,
@@ -137,7 +136,7 @@ class MembershipInferenceExperiment:
                         config=config,
                     )
                 case "rmia":
-                    target_dataset, population = datasetup.target_shadow_split(dataset, split="disjoint", target_frac=0.5, shadow_frac=0.5)
+                    target_dataset, population = datasetup.target_shadow_split(dataset, split="disjoint")
                     target_model = self.train_target_model(target_dataset)
                     attacker = attacks.RMIA(
                         target_model=target_model,
@@ -181,7 +180,6 @@ class MembershipInferenceExperiment:
                         scores[f'tprs_{num_hops}_{suffix}'].append(tpr)
                         scores[f'auroc_{num_hops}_{suffix}'].append(metrics['auroc'])
                         scores[f'tprs_at_fixed_fpr_{num_hops}_{suffix}'].append(metrics['tpr_fixed_fpr'])
-
 
             all_hard_preds = torch.stack(all_hard_preds)
             combined_preds = all_hard_preds.any(axis=0)
