@@ -2,20 +2,10 @@ import utils
 
 import torch
 import torch_geometric
-from torch.utils.data import TensorDataset
 from torch_geometric.data import Data
 from torch_geometric.utils import degree, index_to_mask, mask_to_index, subgraph
-from sklearn.model_selection import train_test_split
 from collections import deque
 
-def create_attack_dataset(shadow_dataset, shadow_model):
-    # For basic-MLP attack
-    features = shadow_model(shadow_dataset.x, shadow_dataset.edge_index).cpu()
-    labels = shadow_dataset.train_mask.long().cpu()
-    train_X, test_X, train_y, test_y = train_test_split(features, labels, test_size=0.2, stratify=labels)
-    train_dataset = TensorDataset(train_X, train_y)
-    test_dataset = TensorDataset(test_X, test_y)
-    return train_dataset, test_dataset
 
 def train_split_interconnection_mask(dataset):
     mask = []
@@ -268,7 +258,7 @@ def sample_subgraph(dataset, num_nodes, train_frac=0.4, val_frac=0.2, v2=True):
         node_index = sample_nodes(total_num_nodes, num_nodes, stratify=dataset.y)
     return extract_subgraph(dataset, node_index, train_frac=train_frac, val_frac=val_frac)
 
-def disjoint_node_split(dataset, balance=0.5, v2=False):
+def disjoint_node_split(dataset, balance=0.5, v2=True):
     '''
     Split the nodes into two disjoint sets.
     Return node index tensors for the two sets.

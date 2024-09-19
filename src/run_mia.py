@@ -182,8 +182,8 @@ class MembershipInferenceExperiment:
                         scores[f'tprs_at_fixed_fpr_{num_hops}_{suffix}'].append(metrics['tpr_fixed_fpr'])
 
             all_hard_preds = torch.stack(all_hard_preds)
-            combined_preds = all_hard_preds.any(axis=0)
-            truth = target_samples.train_mask
+            combined_preds = all_hard_preds.any(axis=0).cpu()
+            truth = target_samples.train_mask.cpu()
             tpr = (combined_preds & truth).sum().item() / truth.sum().item()
             scores['tprs_at_fixed_fpr_combined'].append(tpr)
 

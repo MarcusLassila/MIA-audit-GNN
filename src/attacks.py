@@ -5,11 +5,12 @@ import utils
 
 import numpy as np
 from scipy.stats import norm
+from sklearn.model_selection import train_test_split
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch_geometric.nn import MLP
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, TensorDataset
 from torchmetrics import Accuracy
 from tqdm.auto import tqdm
 
@@ -62,9 +63,19 @@ class BasicMLPAttack:
             savedir=config.savedir,
         )
 
+    def create_attack_dataset(self):
+        shadow_model = self.shadow_model
+        shadow_dataset = self.shadow_dataset
+        features = shadow_model(shadow_dataset.x, shadow_dataset.edge_index).cpu()
+        labels = shadow_dataset.train_mask.long().cpu()
+        train_X, test_X, train_y, test_y = train_test_split(features, labels, test_size=0.2, stratify=labels)
+        train_dataset = TensorDataset(train_X, train_y)
+        test_dataset = TensorDataset(test_X, test_y)
+        return train_dataset, test_dataset
+
     def train_attack_model(self):
         config = self.config
-        train_dataset, valid_dataset = datasetup.create_attack_dataset(self.shadow_dataset, self.shadow_model)
+        train_dataset, valid_dataset = self.create_attack_dataset()
         train_loader = DataLoader(train_dataset, batch_size=config.batch_size, shuffle=True)
         valid_loader = DataLoader(valid_dataset, batch_size=config.batch_size, shuffle=False)
         train_config = trainer.TrainConfig(
