@@ -323,3 +323,34 @@ def parse_dataset(root, name):
             raise ValueError("Unsupported dataset!")
     dataset.__class__.__str__ = utils.graph_info
     return dataset
+
+def test_split():
+    from statistics import mean, stdev
+    from tqdm.auto import tqdm
+    dataset = parse_dataset('./data', 'amazon-photo')
+    print(dataset)
+    degree_A = []
+    degree_B = []
+    fractions_A = []
+    fractions_B = []
+    for _ in tqdm(range(20), desc='Computing datasplit statistics'):
+        data_A, data_B = target_shadow_split(dataset, split='disjoint', v2=False)
+        average_degree_A = utils.average_degree(data_A)
+        average_degree_B = utils.average_degree(data_B)
+        frac_A = utils.fraction_isolated_nodes(data_A)
+        frac_B = utils.fraction_isolated_nodes(data_B)
+        degree_A.append(average_degree_A)
+        degree_B.append(average_degree_B)
+        fractions_A.append(frac_A)
+        fractions_B.append(frac_B)
+    s = (
+        f'average degree A (mean, std): ({mean(degree_A):.4f}, {stdev(degree_A):.4f})\n'
+        f'average degree B (mean, std): ({mean(degree_B):.4f}, {stdev(degree_B):.4f})\n'
+        f'fraction isolated A (mean, std): ({mean(fractions_A):.4f}, {stdev(fractions_A):.4f})\n'
+        f'fraction isolated B (mean, std): ({mean(fractions_B):.4f}, {stdev(fractions_B):.4f})\n'
+    )
+    print(s)
+
+if __name__ == '__main__':
+    test_split()
+    pass
