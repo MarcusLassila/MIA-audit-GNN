@@ -2,7 +2,6 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch_geometric.nn as gnn
 
-
 class BaseGNN(nn.Module):
 
     def __init__(self, dropout=0.0):

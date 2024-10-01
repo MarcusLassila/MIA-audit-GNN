@@ -14,7 +14,6 @@ from torch.utils.data import DataLoader, TensorDataset
 from torchmetrics import Accuracy
 from tqdm.auto import tqdm
 
-
 class BasicMLPAttack:
 
     def __init__(self, target_model, shadow_dataset, config):

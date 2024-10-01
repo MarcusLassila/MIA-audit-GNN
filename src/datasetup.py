@@ -6,7 +6,6 @@ from torch_geometric.data import Data
 from torch_geometric.utils import degree, index_to_mask, mask_to_index, subgraph
 from collections import deque
 
-
 def train_split_interconnection_mask(dataset):
     mask = []
     for a, b in dataset.edge_index.T:

@@ -63,14 +63,14 @@ def k_hop_query(model, dataset, query_nodes, num_hops=0, inductive_split=False):
             edge_index = dataset.edge_index[:, dataset.inductive_mask] if inductive_split else dataset.edge_index[:, dataset.random_edge_mask]
             predictions = []
             for v in query_nodes:
-                node_index, edge_index, v_idx, _ = k_hop_subgraph(
+                node_index, sub_edge_index, v_idx, _ = k_hop_subgraph(
                     node_idx=v.item(),
                     num_hops=num_hops,
                     edge_index=edge_index,
                     relabel_nodes=True,
                     num_nodes=dataset.x.shape[0],
                 )
-                pred = model(dataset.x[node_index], edge_index)[v_idx].squeeze()
+                pred = model(dataset.x[node_index], sub_edge_index)[v_idx].squeeze()
                 predictions.append(pred)
             predictions = torch.stack(predictions)
     assert predictions.shape == torch.Size([len(query_nodes), dataset.num_classes])

@@ -174,16 +174,16 @@ class MembershipInferenceExperiment:
                         preds = attacker.run_attack(target_samples=target_samples, num_hops=num_hops, inductive_inference=flag)
                         metrics = evaluation.bc_evaluation(preds, truth, config.target_fpr)
                         soft_preds.append(preds)
-                        true_positives.append(metrics['TP_fixed_fpr'])
                         fpr, tpr = metrics['roc']
+                        true_positives.append(metrics['TP_fixed_fpr'])
                         scores[f'fprs_{num_hops}_{suffix}'].append(fpr)
                         scores[f'tprs_{num_hops}_{suffix}'].append(tpr)
                         scores[f'auroc_{num_hops}_{suffix}'].append(metrics['auroc'])
                         scores[f'tprs_at_fixed_fpr_{num_hops}_{suffix}'].append(metrics['tpr_fixed_fpr'])
 
             soft_preds = torch.stack(soft_preds)
-            combined_tpr, _ = utils.tpr_at_fixed_fpr_multi(soft_preds, truth, config.target_fpr)
-            scores['tprs_at_fixed_fpr_combined'].append(combined_tpr)
+            multi_tpr, _ = utils.tpr_at_fixed_fpr_multi(soft_preds, truth, config.target_fpr)
+            scores['tprs_at_fixed_fpr_multi'].append(multi_tpr)
 
             detection_counts = np.array(evaluation.inclusions(true_positives), dtype=np.int64)
             scores['detection_count'].append(detection_counts)
@@ -213,8 +213,8 @@ class MembershipInferenceExperiment:
                 'test_acc_mean': [f"{mean(scores['test_scores']):.4f}"],
                 'test_acc_std': [f"{stdev(scores['test_scores']):.4f}"],
             }
-            stats[f'tpr_{config.target_fpr:.2}_fpr_combined_mean'] = [f"{mean(scores['tprs_at_fixed_fpr_combined']):.4f}"]
-            stats[f'tpr_{config.target_fpr:.2}_fpr_combined_std'] = [f"{stdev(scores['tprs_at_fixed_fpr_combined']):.4f}"]
+            stats[f'tpr_{config.target_fpr:.2}_fpr_multi_mean'] = [f"{mean(scores['tprs_at_fixed_fpr_multi']):.4f}"]
+            stats[f'tpr_{config.target_fpr:.2}_fpr_multi_std'] = [f"{stdev(scores['tprs_at_fixed_fpr_multi']):.4f}"]
             for num_hops in config.query_hops:
                 if num_hops == 0:
                     stats[f'auroc_{num_hops}_mean'] = [f"{mean(scores[f'auroc_{num_hops}']):.4f}"]
@@ -233,7 +233,7 @@ class MembershipInferenceExperiment:
                 'train_acc': scores['train_scores'],
                 'test_acc': scores['test_scores'],
             }
-            stats[f'tpr_{config.target_fpr:.2}_fpr_combined'] = scores['tprs_at_fixed_fpr_combined']
+            stats[f'tpr_{config.target_fpr:.2}_fpr_multi'] = scores['tprs_at_fixed_fpr_multi']
             for num_hops in config.query_hops:
                 if num_hops == 0:
                     stats[f'auroc_{num_hops}'] = scores[f'auroc_{num_hops}']

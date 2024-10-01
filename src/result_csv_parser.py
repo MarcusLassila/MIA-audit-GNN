@@ -2,21 +2,26 @@ import utils
 
 import argparse
 import pandas as pd
+import re
+
+def merge_mean_and_std(row):
+    prefixes = {match.group(1) for idx in row.index for match in re.finditer(r'(.*)_(mean|std)$', idx)}
+    for prefix in prefixes:
+        row[prefix] = f'{row[prefix + "_mean"]} ({row[prefix + "_std"]})'
+        row = row.drop([prefix + "_mean", prefix + "_std"])
+    return row
 
 def subdivide_stats_csv(fpr):
     df = pd.read_csv('./results/statistics.csv', sep=',').set_index('Unnamed: 0')
-    df_1 = df[['train_acc_mean', 'train_acc_std', 'test_acc_mean', 'test_acc_std']]
-    df_2 = df[['auroc_0_mean', 'auroc_0_std', 'auroc_2_II_mean', 'auroc_2_II_std', 'auroc_2_TI_mean', 'auroc_2_TI_std']]
-    df_3 = df[[f'tpr_{fpr}_fpr_0_mean', f'tpr_{fpr}_fpr_0_std', f'tpr_{fpr}_fpr_2_II_mean', f'tpr_{fpr}_fpr_2_II_std', f'tpr_{fpr}_fpr_2_TI_mean', f'tpr_{fpr}_fpr_2_TI_std']]
-    df_4 = df[[f'tpr_{fpr}_fpr_combined_mean', f'tpr_{fpr}_fpr_combined_std']]
+    df_1 = df[['train_acc_mean', 'train_acc_std', 'test_acc_mean', 'test_acc_std']].apply(merge_mean_and_std, axis=1).sort_index(axis=1, key=lambda x: x.str.lower(), ascending=False)
+    df_2 = df.loc[:, df.columns.str.startswith('auroc')].apply(merge_mean_and_std, axis=1).sort_index(axis=1, key=lambda x: x.str.lower())
+    df_3 = df.loc[:, df.columns.str.startswith('tpr_')].apply(merge_mean_and_std, axis=1).sort_index(axis=1, key=lambda x: x.str.lower())
     print(df_1)
     print(df_2)
     print(df_3)
-    print(df_4)
     df_1.to_csv('./results/statistics_train.csv', sep=',', index=True, index_label='')
     df_2.to_csv('./results/statistics_auroc.csv', sep=',', index=True, index_label='')
     df_3.to_csv('./results/statistics_TPR.csv', sep=',', index=True, index_label='')
-    df_4.to_csv('./results/statistics_combined.csv', sep=',', index=True, index_label='')
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()

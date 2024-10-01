@@ -17,7 +17,6 @@ from itertools import cycle, islice, product
 import io
 from contextlib import redirect_stdout, redirect_stderr
 
-
 class Config:
 
     def __init__(self, dictionary):

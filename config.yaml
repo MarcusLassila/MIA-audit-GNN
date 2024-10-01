@@ -1,28 +1,28 @@
 ---
-lira-corafull-GCN:
+lira-cora-GCN:
   attack: "lira"
-  dataset: "corafull"
+  dataset: "cora"
   model: "GCN"
   epochs_target: 500
   experiments: 10
-  hidden_dim_target: [512]
-  num_shadow_models: 32
-  query_hops: [0, 2]
+  hidden_dim_target: [64]
+  num_shadow_models: 128
+  query_hops: [0, 1, 2]
   transductive: false
-  target_fpr: 0.0005
-  lr: 0.001
-  weight_decay: 0.00001
+  target_fpr: 0.005
+  lr: 0.01
+  weight_decay: 0.0001
   dropout: 0.5
-confidence-corafull-GCN:
+confidence-cora-GCN:
   attack: "confidence"
-  dataset: "corafull"
+  dataset: "cora"
   model: "GCN"
   epochs_target: 500
-  experiments: 10
-  hidden_dim_target: [512]
-  query_hops: [0, 2]
+  experiments: 100
+  hidden_dim_target: [64]
+  query_hops: [0, 1, 2]
   transductive: false
-  target_fpr: 0.0005
-  lr: 0.001
-  weight_decay: 0.00001
+  target_fpr: 0.005
+  lr: 0.01
+  weight_decay: 0.0001
   dropout: 0.5
