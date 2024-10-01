@@ -150,7 +150,7 @@ class MembershipInferenceExperiment:
             target_samples = datasetup.masked_subgraph(target_dataset, ~target_dataset.val_mask)
             truth = target_samples.train_mask.long()
 
-            all_hard_preds = []
+            soft_preds = []
             true_positives = []
             ids = [] # Used to label detection count dataframe
             # Run attack using the specified set of k-hop neighborhood queries.
@@ -159,7 +159,7 @@ class MembershipInferenceExperiment:
                     ids.append('0')
                     preds = attacker.run_attack(target_samples=target_samples, num_hops=num_hops)
                     metrics = evaluation.bc_evaluation(preds, truth, config.target_fpr)
-                    all_hard_preds.append((preds >= metrics['fixed_fpr_threshold']))
+                    soft_preds.append(preds)
                     fpr, tpr = metrics['roc']
                     true_positives.append(metrics['TP_fixed_fpr'])
                     scores[f'fprs_{num_hops}'].append(fpr)
@@ -173,7 +173,7 @@ class MembershipInferenceExperiment:
                         ids.append(f'{num_hops}-{suffix}')
                         preds = attacker.run_attack(target_samples=target_samples, num_hops=num_hops, inductive_inference=flag)
                         metrics = evaluation.bc_evaluation(preds, truth, config.target_fpr)
-                        all_hard_preds.append((preds >= metrics['fixed_fpr_threshold']))
+                        soft_preds.append(preds)
                         true_positives.append(metrics['TP_fixed_fpr'])
                         fpr, tpr = metrics['roc']
                         scores[f'fprs_{num_hops}_{suffix}'].append(fpr)
@@ -181,11 +181,9 @@ class MembershipInferenceExperiment:
                         scores[f'auroc_{num_hops}_{suffix}'].append(metrics['auroc'])
                         scores[f'tprs_at_fixed_fpr_{num_hops}_{suffix}'].append(metrics['tpr_fixed_fpr'])
 
-            all_hard_preds = torch.stack(all_hard_preds)
-            combined_preds = all_hard_preds.any(axis=0).cpu()
-            truth = target_samples.train_mask.cpu()
-            tpr = (combined_preds & truth).sum().item() / truth.sum().item()
-            scores['tprs_at_fixed_fpr_combined'].append(tpr)
+            soft_preds = torch.stack(soft_preds)
+            combined_tpr, _ = utils.tpr_at_fixed_fpr_multi(soft_preds, truth, config.target_fpr)
+            scores['tprs_at_fixed_fpr_combined'].append(combined_tpr)
 
             detection_counts = np.array(evaluation.inclusions(true_positives), dtype=np.int64)
             scores['detection_count'].append(detection_counts)
