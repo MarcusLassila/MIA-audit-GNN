@@ -103,7 +103,7 @@ def tpr_at_fixed_fpr_multi(soft_preds, truth, target_fpr):
         fpr, tpr, threshold = roc_curve(y_true=truth, y_score=soft_pred)
         _, t = tpr_at_fixed_fpr(fpr, tpr, target_fpr, threshold)
         thresholds.append(threshold[np.where(threshold >= t)].tolist())
-    best_fpr, best_tpr = 0.0, 0.0
+    best_tpr = 0.0
     best_thresholds = ()
     for ts in product(*thresholds):
         hard_pred = torch.zeros(soft_preds.shape[1], dtype=torch.bool)
@@ -112,9 +112,8 @@ def tpr_at_fixed_fpr_multi(soft_preds, truth, target_fpr):
         fpr = (hard_pred & ~truth).sum().item() / (~truth).sum().item()
         tpr = (hard_pred & truth).sum().item() / truth.sum().item()
         if fpr <= target_fpr and tpr > best_tpr:
-            best_fpr, best_tpr = fpr, tpr
+            best_tpr = tpr
             best_thresholds = ts
-    print(f'Multi (fpr, tpr) = ({best_fpr:.4f}, {best_tpr:.4f})')
     return best_tpr, best_thresholds
 
 def plot_graph(graph):

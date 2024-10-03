@@ -100,7 +100,7 @@ class BasicMLPAttack:
             preds = evaluation.k_hop_query(
                 model=self.target_model,
                 dataset=target_samples,
-                query_nodes=[*range(num_target_samples)],
+                query_nodes=torch.arange(num_target_samples),
                 num_hops=num_hops,
                 inductive_split=inductive_inference,
             )
@@ -120,7 +120,7 @@ class ConfidenceAttack:
             preds = evaluation.k_hop_query(
                 model=self.target_model,
                 dataset=target_samples,
-                query_nodes=[*range(num_target_samples)],
+                query_nodes=torch.arange(num_target_samples),
                 num_hops=num_hops,
                 inductive_split=inductive_inference,
             )
@@ -183,7 +183,7 @@ class LiRA:
                 preds = evaluation.k_hop_query(
                     model=shadow_model,
                     dataset=target_samples,
-                    query_nodes=[*range(num_target_samples)],
+                    query_nodes=torch.arange(num_target_samples),
                     num_hops=num_hops,
                     inductive_split=inductive_inference,
                 )
@@ -211,7 +211,7 @@ class LiRA:
             preds = evaluation.k_hop_query(
                 model=self.target_model,
                 dataset=target_samples,
-                query_nodes=[*range(num_target_samples)],
+                query_nodes=torch.arange(num_target_samples),
                 num_hops=num_hops,
                 inductive_split=inductive_inference,
             )
@@ -286,7 +286,7 @@ class RMIA:
                 preds = evaluation.k_hop_query(
                     model=shadow_model,
                     dataset=dataset,
-                    query_nodes=[*range(num_target_nodes)],
+                    query_nodes=torch.arange(num_target_nodes),
                     num_hops=num_hops,
                     inductive_split=inductive_inference,
                 )
@@ -300,7 +300,7 @@ class RMIA:
             preds = evaluation.k_hop_query(
                 model=self.target_model,
                 dataset=dataset,
-                query_nodes=[*range(num_target_nodes)],
+                query_nodes=torch.arange(num_target_nodes),
                 num_hops=num_hops,
                 inductive_split=inductive_inference,
             )

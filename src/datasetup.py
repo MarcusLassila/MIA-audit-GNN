@@ -212,9 +212,6 @@ def extract_subgraph(dataset, node_index, train_frac=0.4, val_frac=0.2):
     Constructs a subgraph of dataset consisting of the nodes indexed in node_index with the edges linking them.
     Masks for training/validation/testing are constructed uniformly random with the specified proportions.
     '''
-    if dataset.name == "SBM":
-        # Temporary solution
-        return stochastic_block_model(dataset.root)
     edge_index, _ = subgraph(
         subset=node_index,
         edge_index=dataset.edge_index,
@@ -274,11 +271,6 @@ def disjoint_node_split(dataset, balance=0.5, v2=True):
 def target_shadow_split(dataset, split="sampled", v2=True):
     target_frac = 0.5
     shadow_frac = 0.5
-    if dataset.name == "SBM":
-        # Temporary solution
-        target_set = stochastic_block_model(dataset.root)
-        shadow_set = stochastic_block_model(dataset.root)
-        return target_set, shadow_set
     num_nodes = dataset.x.shape[0]
     if split == "sampled":
         target_size = int(num_nodes * target_frac)
