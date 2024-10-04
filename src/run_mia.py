@@ -8,8 +8,10 @@ import utils
 import argparse
 import pandas as pd
 import numpy as np
+import matplotlib.pyplot as plt
 import torch
 import torch.nn.functional as F
+from torch_geometric.utils import k_hop_subgraph
 from torchmetrics import Accuracy
 from statistics import mean, stdev
 from collections import defaultdict
@@ -50,6 +52,33 @@ class MembershipInferenceExperiment:
                 label_mask = dataset.y == label
                 savepath = f'{savedir}/hinge_hist_class{label}_{config.name}.png'
                 utils.plot_hinge_histogram(hinge, label_mask=label_mask, train_mask=train_mask, savepath=savepath)
+
+    def visualize_aggregation_effect_on_attack_vulnerabilities(self, attacker, target_samples, target_fpr, num_hops=2):
+        soft_preds_0 = attacker.run_attack(target_samples=target_samples, num_hops=0)
+        soft_preds_k = attacker.run_attack(target_samples=target_samples, num_hops=num_hops, inductive_inference=True)
+        most_vul_node = torch.argmax(soft_preds_0).item()
+        node_index, _, _, _ = k_hop_subgraph(
+            node_idx=most_vul_node,
+            num_hops=num_hops,
+            edge_index=target_samples.edge_index[:, target_samples.inductive_mask],
+            relabel_nodes=False,
+            num_nodes=target_samples.x.shape[0],
+        )
+        preds_0 = soft_preds_0[node_index]
+        preds_2 = soft_preds_k[node_index]
+        threshold_0 = evaluation.bc_evaluation(preds=soft_preds_0, truth=target_samples.train_mask.long(), target_fpr=target_fpr)['fixed_fpr_threshold']
+        threshold_k = evaluation.bc_evaluation(preds=soft_preds_k, truth=target_samples.train_mask.long(), target_fpr=target_fpr)['fixed_fpr_threshold']
+        indices = torch.arange(node_index.shape[0])
+        savepath = f'{self.config.savedir}/{self.config.name}_agg_vuln.png'
+        plt.scatter(indices, preds_0, label='0-hop')
+        plt.scatter(indices, preds_2, label=f'{num_hops}-hop', marker='x')
+        plt.plot(indices, torch.ones_like(indices) * threshold_0, label=r'$\gamma$ 0-hop')
+        plt.plot(indices, torch.ones_like(indices) * threshold_k, label=rf'$\gamma$ {num_hops}-hop')
+        plt.xticks(np.arange(indices.shape[0]))
+        plt.xlabel('Node id')
+        plt.ylabel('Test statistic')
+        plt.legend()
+        utils.savefig_or_show(savepath)
 
     def train_target_model(self, dataset, plot_training_results=True):
         config = self.config
@@ -149,6 +178,9 @@ class MembershipInferenceExperiment:
             # Remove validation mask from target samples
             target_samples = datasetup.masked_subgraph(target_dataset, ~target_dataset.val_mask)
             truth = target_samples.train_mask.long()
+
+            if config.experiments == 1:
+                self.visualize_aggregation_effect_on_attack_vulnerabilities(attacker, target_samples, config.target_fpr, num_hops=2)
 
             soft_preds = []
             true_positives = []
