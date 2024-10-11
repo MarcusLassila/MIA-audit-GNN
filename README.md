@@ -28,7 +28,7 @@ Alternatively, run "src/run_mia.py" which only run one MIA simulation experiment
 * --early-stopping: Number of successive epochs with no performance improvement on validation set before stopping the training. If <= 0 no early stopping is used. If 0 the model of the last training epoch will be used, otherwise the model with best validation set perfomance is used.
 * --hidden-dim-target: Dimension of the hidden layer of the 2-layer GNN target/shadow model.
 * --hidden-dim-attack: Dimensions of the hidden layers in the MLP of the basic-mlp attack model. Input is given as a comma separeted list, e.g. 128,64,32.
-* --rmia-offline-interp-param: Hyperparamter for interpolation of "in models" from "out models".
+* --rmia-gamma: Threshold on likelihood ratio to count as evidence of membership in RMIA attack (see parameter gamma in "Low-Cost High-Power Membership Inference Attacks" paper).
 * --query-hops: List of the k-hops to use during inference in the attacks.
 * --experiments: Number of times to repeat the whole attack experiment (including retraining target model) and average results over.
 * --optimizer: Will call getattr(torch.optim, optimizer) so it better exist in torch.optim.

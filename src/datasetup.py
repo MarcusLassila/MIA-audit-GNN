@@ -207,6 +207,23 @@ def alternating_random_walk_node_split(dataset):
     node_index_B = torch.tensor(list(node_index_split[1]), dtype=torch.long)
     return node_index_A, node_index_B
 
+def new_train_split_mask(dataset, train_frac=0.4, val_frac=0.2, stratify=None):
+    '''
+    Return a copy of dataset with new train/val/test masks.
+    '''
+    train_mask, val_mask, test_mask = train_val_test_masks(
+        num_nodes=dataset.x.shape[0],
+        train_frac=train_frac,
+        val_frac=val_frac,
+        stratify=stratify,
+    )
+    data = dataset.clone()
+    data.train_mask = train_mask
+    data.val_mask = val_mask
+    data.test_mask = test_mask
+    data.inductive_mask = train_split_interconnection_mask(data)
+    return data
+
 def extract_subgraph(dataset, node_index, train_frac=0.4, val_frac=0.2):
     '''
     Constructs a subgraph of dataset consisting of the nodes indexed in node_index with the edges linking them.
@@ -236,6 +253,7 @@ def extract_subgraph(dataset, node_index, train_frac=0.4, val_frac=0.2):
         name=dataset.name,
     )
     data.inductive_mask = train_split_interconnection_mask(data)
+    data.random_edge_mask = random_edge_mask(data)
     data.__class__.__str__ = utils.graph_info
     return data
 

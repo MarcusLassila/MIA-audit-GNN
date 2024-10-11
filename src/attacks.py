@@ -5,6 +5,7 @@ import utils
 
 import numpy as np
 from scipy.stats import norm
+from sklearn.metrics import roc_auc_score
 from sklearn.model_selection import train_test_split
 import torch
 import torch.nn as nn
@@ -94,7 +95,7 @@ class BasicMLPAttack:
             config=train_config,
         )
     
-    def run_attack(self, target_samples, num_hops=0, inductive_inference=False):
+    def run_attack(self, target_samples, num_hops=0, inductive_inference=True):
         num_target_samples = target_samples.x.shape[0]
         with torch.inference_mode():
             preds = evaluation.k_hop_query(
@@ -114,7 +115,7 @@ class ConfidenceAttack:
         self.target_model = target_model
         self.config = config
     
-    def run_attack(self, target_samples, num_hops=0, inductive_inference=False):
+    def run_attack(self, target_samples, num_hops=0, inductive_inference=True):
         num_target_samples = target_samples.x.shape[0]
         with torch.inference_mode():
             preds = evaluation.k_hop_query(
@@ -124,23 +125,22 @@ class ConfidenceAttack:
                 num_hops=num_hops,
                 inductive_split=inductive_inference,
             )
-            row_idx = np.arange(num_target_samples)
+            row_idx = torch.arange(num_target_samples)
             confidences = preds[row_idx, target_samples.y] # Unnormalized for numerical stability
         return confidences
 
 class LiRA:
     '''
-    The likelihood ratio attack from "Membership Inference Attacks From First Principles"
+    The (offline) likelihood ratio attack from "Membership Inference Attacks From First Principles"
     '''
     EPS = 1e-6
 
-    def __init__(self, target_model, population, config, online=False):
+    def __init__(self, target_model, population, config):
         target_model.eval()
         self.target_model = target_model
         self.shadow_models = []
         self.population = population # Should not contain target samples.
         self.config = config
-        self.shadow_size = population.x.shape[0] // 2
         self.train_shadow_models()
 
     def train_shadow_models(self):
@@ -157,7 +157,10 @@ class LiRA:
             optimizer=getattr(torch.optim, config.optimizer),
         )
         for _ in tqdm(range(config.num_shadow_models), desc=f"Training {config.num_shadow_models} shadow models for LiRA"):
-            shadow_dataset = datasetup.sample_subgraph(self.population, self.shadow_size)
+            if config.transductive:
+                shadow_dataset = datasetup.sample_subgraph(self.population, self.population.x.shape[0] // 2)
+            else:
+                shadow_dataset = datasetup.new_train_split_mask(self.population, train_frac=0.5, val_frac=0.2)
             shadow_model = utils.fresh_model(
                 model_type=config.model,
                 num_features=shadow_dataset.num_features,
@@ -203,7 +206,7 @@ class LiRA:
             )
         return means, stds
 
-    def run_attack(self, target_samples, num_hops=0, inductive_inference=False):
+    def run_attack(self, target_samples, num_hops=0, inductive_inference=True):
         target_samples.to(self.config.device)
         num_target_samples = target_samples.x.shape[0]
         means, stds = self.get_mean_and_std(target_samples, num_hops, inductive_inference)
@@ -230,8 +233,7 @@ class LiRA:
 
 class RMIA:
     '''
-    The attack from "Low-Cost High-Power Membership Inference Attacks".
-    Only the offline attack is currently supported.
+    The offline RMIA attack from "Low-Cost High-Power Membership Inference Attacks".
     '''
 
     def __init__(self, target_model, population, config):
@@ -239,13 +241,14 @@ class RMIA:
         self.target_model = target_model
         self.population = population
         self.config = config
-        self.out_models = []
-        self.out_size = self.population .x.shape[0] // 2
-        self.gamma = 2 # Value used in the original paper
-        self.interp_param = config.rmia_offline_interp_param
-        self.train_out_models()
+        self.shadow_models = []
+        self.out_size = population.x.shape[0]
+        self.gamma = config.rmia_gamma
+        self.train_shadow_models()
+        self.interp_param = self.select_interp_param()
+        print("interp_param:", self.interp_param)
 
-    def train_out_models(self):
+    def train_shadow_models(self):
         config = self.config
         criterion = Accuracy(task="multiclass", num_classes=self.population.num_classes).to(config.device)
         train_config = trainer.TrainConfig(
@@ -258,8 +261,13 @@ class RMIA:
             weight_decay=config.weight_decay,
             optimizer=getattr(torch.optim, config.optimizer),
         )
-        for _ in tqdm(range(config.num_shadow_models), desc=f"Training {config.num_shadow_models} out models for RMIA"):
-            shadow_dataset = datasetup.sample_subgraph(self.population, self.out_size)
+        sim_target_idx, sim_shadow_idx = np.random.choice(np.arange(config.num_shadow_models), 2, replace=False)
+        for i in tqdm(range(config.num_shadow_models), desc=f"Training {config.num_shadow_models} out models for RMIA"):
+            if config.transductive:
+                # TODO: Need to make sure models are unbiased in population in/out node distribution.
+                shadow_dataset = datasetup.sample_subgraph(self.population, self.population.x.shape[0] // 2)
+            else:
+                shadow_dataset = datasetup.new_train_split_mask(self.population, train_frac=0.5, val_frac=0.2)
             shadow_model = utils.fresh_model(
                 model_type=config.model,
                 num_features=shadow_dataset.num_features,
@@ -274,52 +282,94 @@ class RMIA:
                 use_tqdm=False,
                 inductive_split=not config.transductive,
             )
-            self.out_models.append(shadow_model)
+            self.shadow_models.append(shadow_model)
+            if i == sim_target_idx:
+                self.sim_target = (shadow_model, shadow_dataset)
+            elif i == sim_shadow_idx:
+                self.sim_shadow = (shadow_model, shadow_dataset)
 
-    def ratio(self, dataset, num_hops, inductive_inference):
-        num_target_nodes = dataset.x.shape[0]
-        row_idx = np.arange(num_target_nodes)
-        out_confidences = []
-        for shadow_model in tqdm(self.out_models, desc=f"Querying out models. {next(self.out_models[0].parameters()).device} device"):
+    def select_interp_param(self):
+        sim_target_model, sim_target_dataset = self.sim_target
+        sim_shadow_model, sim_shadow_dataset = self.sim_shadow
+        # Assumes the nodes are labeled the same in sim_target_dataset and sim_shadow_dataset.
+        target_samples = datasetup.masked_subgraph(sim_target_dataset, ~(sim_target_dataset.val_mask | sim_shadow_dataset.train_mask))
+        population = datasetup.masked_subgraph(sim_shadow_dataset, ~(sim_target_dataset.train_mask))
+        best_auroc = 0
+        best_interp_param = 0.0
+        for interp_param in np.linspace(0, 1, 11):
+            sim_shadow_model.eval()
+            confidences = []
+            with torch.inference_mode():
+                for model, dataset in (sim_shadow_model, target_samples), (sim_target_model, target_samples), (sim_shadow_model, population), (sim_target_model, population):
+                    row_idx = torch.arange(dataset.x.shape[0])
+                    preds = evaluation.k_hop_query(
+                        model=model,
+                        dataset=dataset,
+                        query_nodes=row_idx,
+                        num_hops=0,
+                    )
+                    confidences.append(F.softmax(preds, dim=1)[row_idx, dataset.y])
+
+            ratioX = confidences[1] / (0.5 * ((interp_param + 1) * confidences[0] + 1 - interp_param))
+            ratioZ = confidences[3] / confidences[2]
+            thresholds = ratioZ * self.gamma
+            count = torch.zeros_like(ratioX)
+            for i, x in enumerate(ratioX):
+                count[i] = (x > thresholds).sum().item()
+            sizeZ = population.x.shape[0]
+            score = count / sizeZ
+            auroc = roc_auc_score(y_true=target_samples.train_mask, y_score=score)
+            if auroc > best_auroc:
+                best_auroc = auroc
+                best_interp_param = interp_param
+        return best_interp_param
+
+    def ratio(self, dataset, num_hops, inductive_inference, interp_from_out_models):
+        num_target_samples = dataset.x.shape[0]
+        row_idx = torch.arange(num_target_samples)
+        shadow_confidences = []
+        for shadow_model in self.shadow_models:
             shadow_model.eval()
             with torch.inference_mode():
                 preds = evaluation.k_hop_query(
                     model=shadow_model,
                     dataset=dataset,
-                    query_nodes=torch.arange(num_target_nodes),
+                    query_nodes=row_idx,
                     num_hops=num_hops,
                     inductive_split=inductive_inference,
                 )
-                out_confidences.append(F.softmax(preds, dim=1)[row_idx, dataset.y])
-        out_confidences = torch.stack(out_confidences)
-        pr_out = out_confidences.mean(dim=0)
-        # Heuristic to approximate the average of in and out, from out only.
-        pr = 0.5 * ((self.interp_param + 1) * pr_out + 1 - self.interp_param)
+                shadow_confidences.append(F.softmax(preds, dim=1)[row_idx, dataset.y])
+        shadow_confidences = torch.stack(shadow_confidences)
+        if interp_from_out_models:
+            pr_out = shadow_confidences.mean(dim=0)
+            # Heuristic to approximate the average of in and out, from out only.
+            pr = 0.5 * ((self.interp_param + 1) * pr_out + 1 - self.interp_param)
+        else:
+            pr = shadow_confidences.mean(dim=0)
 
         with torch.inference_mode():
             preds = evaluation.k_hop_query(
                 model=self.target_model,
                 dataset=dataset,
-                query_nodes=torch.arange(num_target_nodes),
+                query_nodes=row_idx,
                 num_hops=num_hops,
                 inductive_split=inductive_inference,
             )
             target_confidence = F.softmax(preds, dim=1)[row_idx, dataset.y] 
-        assert pr.shape == target_confidence.shape == torch.Size([num_target_nodes])
+        assert pr.shape == target_confidence.shape == torch.Size([num_target_samples])
         return target_confidence / pr
 
     def score(self, target_samples, num_hops, inductive_inference):
-        ratioX = self.ratio(target_samples, num_hops, inductive_inference)
-        ratioZ = self.ratio(self.population, num_hops, inductive_inference)
+        ratioX = self.ratio(target_samples, num_hops, inductive_inference, interp_from_out_models=True)
+        ratioZ = self.ratio(self.population, num_hops, inductive_inference, interp_from_out_models=False)
         thresholds = ratioZ * self.gamma
         count = torch.zeros_like(ratioX)
         for i, x in enumerate(ratioX):
             count[i] = (x > thresholds).sum().item()
-        sizeZ = thresholds.shape[0]
+        sizeZ = self.population.x.shape[0]
         return count / sizeZ
     
-    def run_attack(self, target_samples, num_hops=0, inductive_inference=False):
+    def run_attack(self, target_samples, num_hops=0, inductive_inference=True):
         target_samples.to(self.config.device)
         self.population.to(self.config.device)
-        preds = self.score(target_samples, num_hops, inductive_inference)
-        return preds
+        return self.score(target_samples, num_hops, inductive_inference)
