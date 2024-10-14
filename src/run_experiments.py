@@ -7,7 +7,6 @@ from pathlib import Path
 
 def add_name(params):
     params['name'] = '-'.join([
-        params['attack'][:4],
         params['dataset'],
         params['model'],
     ])
@@ -28,7 +27,7 @@ def main():
         'dropout': 0.5,
         'experiments': 10,
         'target_fpr': 0.01,
-        'make_plots': True,
+        'make_roc_plots': True,
         'transductive': False,
         'inductive_inference': None,
     }
