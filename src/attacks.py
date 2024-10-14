@@ -172,7 +172,7 @@ class LiRA:
                 model=shadow_model,
                 dataset=shadow_dataset,
                 config=train_config,
-                use_tqdm=False,
+                disable_tqdm=True,
                 inductive_split=not config.transductive,
             )
             self.shadow_models.append(shadow_model)
@@ -279,7 +279,7 @@ class RMIA:
                 model=shadow_model,
                 dataset=shadow_dataset,
                 config=train_config,
-                use_tqdm=False,
+                disable_tqdm=True,
                 inductive_split=not config.transductive,
             )
             self.shadow_models.append(shadow_model)

@@ -56,7 +56,7 @@ def grid_search(
                 model=model,
                 dataset=dataset,
                 config=train_config,
-                use_tqdm=False,
+                disable_tqdm=True,
                 inductive_split=not transductive,
             )['valid_loss'])
             valid_losses.append(valid_loss)

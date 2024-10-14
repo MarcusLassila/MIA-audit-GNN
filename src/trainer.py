@@ -6,17 +6,6 @@ from copy import deepcopy
 from dataclasses import dataclass
 from typing import Callable, Union
 
-def check_inductive_split(graph):
-    for a, b in graph.edge_index.T:
-        assert (
-            graph.train_mask[a] == graph.train_mask[b]
-            and graph.val_mask[a] == graph.val_mask[b]
-            and graph.test_mask[a] == graph.test_mask[b]
-        )
-
-def looper(iterable, use_tqdm, desc=""):
-    return tqdm(iterable, desc=desc) if use_tqdm else iterable
-
 @dataclass
 class TrainConfig:
     criterion: Callable[[Union[np.ndarray, torch.tensor], Union[np.ndarray, torch.tensor]], float]
@@ -52,7 +41,7 @@ def valid_step_gnn(model, dataset, loss_fn, criterion, edge_mask=None):
         score = criterion(out[dataset.val_mask].argmax(dim=1), dataset.y[dataset.val_mask])
     return loss.item() / dataset.val_mask.sum().item(), score.item()
 
-def train_gnn(model, dataset, config: TrainConfig, use_tqdm=True, inductive_split=True):
+def train_gnn(model, dataset, config: TrainConfig, disable_tqdm=False, inductive_split=True):
     model.to(config.device)
     dataset.to(config.device)
     if inductive_split:
@@ -65,7 +54,7 @@ def train_gnn(model, dataset, config: TrainConfig, use_tqdm=True, inductive_spli
     early_stopping_counter = 0
     min_loss = float('inf')
     best_model = None
-    for _ in looper(range(config.epochs), use_tqdm, desc=f"Training {model.__class__.__name__} on {config.device}"):
+    for _ in tqdm(range(config.epochs), disable=disable_tqdm, desc=f"Training {model.__class__.__name__} on {config.device}"):
         train_loss, train_score = train_step_gnn(model, dataset, optimizer, loss_fn, criterion, edge_mask)
         valid_loss, valid_score = valid_step_gnn(model, dataset, loss_fn, criterion, edge_mask)
         res['train_loss'].append(train_loss)
