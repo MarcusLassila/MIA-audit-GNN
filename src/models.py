@@ -75,4 +75,3 @@ class MLP(gnn.MLP):
     def __init__(self, in_dim, hidden_dims, out_dim, dropout=0.0):
         channel_list = [in_dim, *hidden_dims, out_dim]
         super(MLP, self).__init__(channel_list, dropout=dropout)
-        self.num_layers = len(channel_list) - 1

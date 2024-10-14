@@ -28,20 +28,26 @@ class TrainConfig:
     weight_decay: float
     optimizer: torch.optim.Optimizer
 
-def train_step_gnn(model, dataset, optimizer, loss_fn, criterion):
+def train_step_gnn(model, dataset, optimizer, loss_fn, criterion, edge_mask=None):
     model.train()
     optimizer.zero_grad()
-    out = model(dataset.x, dataset.edge_index)
+    if edge_mask is not None:
+        out = model(dataset.x, dataset.edge_index[:, edge_mask])
+    else:
+        out = model(dataset.x, dataset.edge_index)
     loss = loss_fn(out[dataset.train_mask], dataset.y[dataset.train_mask])
     score = criterion(out[dataset.train_mask].argmax(dim=1), dataset.y[dataset.train_mask])
     loss.backward()
     optimizer.step()
     return loss.item() / dataset.train_mask.sum().item(), score.item()
 
-def valid_step_gnn(model, dataset, loss_fn, criterion):
+def valid_step_gnn(model, dataset, loss_fn, criterion, edge_mask=None):
     model.eval()
     with torch.inference_mode():
-        out = model(dataset.x, dataset.edge_index)
+        if edge_mask is not None:
+            out = model(dataset.x, dataset.edge_index[:, edge_mask])
+        else:
+            out = model(dataset.x, dataset.edge_index)
         loss = loss_fn(out[dataset.val_mask], dataset.y[dataset.val_mask])
         score = criterion(out[dataset.val_mask].argmax(dim=1), dataset.y[dataset.val_mask])
     return loss.item() / dataset.val_mask.sum().item(), score.item()
@@ -50,9 +56,9 @@ def train_gnn(model, dataset, config: TrainConfig, use_tqdm=True, inductive_spli
     model.to(config.device)
     dataset.to(config.device)
     if inductive_split:
-        dataset = dataset.clone()
-        dataset.edge_index = dataset.edge_index[:, dataset.inductive_mask]
-        check_inductive_split(dataset)
+        edge_mask = dataset.inductive_mask
+    else:
+        edge_mask = dataset.random_edge_mask
     optimizer = config.optimizer(model.parameters(), lr=config.lr, weight_decay=config.weight_decay)
     loss_fn, criterion = config.loss_fn, config.criterion
     res = defaultdict(list)
@@ -60,8 +66,8 @@ def train_gnn(model, dataset, config: TrainConfig, use_tqdm=True, inductive_spli
     min_loss = float('inf')
     best_model = None
     for _ in looper(range(config.epochs), use_tqdm, desc=f"Training {model.__class__.__name__} on {config.device}"):
-        train_loss, train_score = train_step_gnn(model, dataset, optimizer, loss_fn, criterion)
-        valid_loss, valid_score = valid_step_gnn(model, dataset, loss_fn, criterion)
+        train_loss, train_score = train_step_gnn(model, dataset, optimizer, loss_fn, criterion, edge_mask)
+        valid_loss, valid_score = valid_step_gnn(model, dataset, loss_fn, criterion, edge_mask)
         res['train_loss'].append(train_loss)
         res['train_score'].append(train_score)
         res['valid_loss'].append(valid_loss)

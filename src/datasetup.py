@@ -1,5 +1,6 @@
 import utils
 
+import numpy as np
 import torch
 import torch_geometric
 from torch_geometric.data import Data
@@ -217,7 +218,7 @@ def new_train_split_mask(dataset, train_frac=0.4, val_frac=0.2, stratify=None):
         val_frac=val_frac,
         stratify=stratify,
     )
-    data = dataset.clone()
+    data = Data(**dataset)
     data.train_mask = train_mask
     data.val_mask = val_mask
     data.test_mask = test_mask
@@ -330,8 +331,16 @@ def parse_dataset(root, name):
             dataset = stochastic_block_model(root)
         case _:
             raise ValueError("Unsupported dataset!")
-    dataset.__class__.__str__ = utils.graph_info
-    return dataset
+    data = Data(
+        x=dataset.x,
+        edge_index=dataset.edge_index,
+        y=dataset.y,
+        num_features=dataset.num_features,
+        num_classes=dataset.num_classes,
+        name=dataset.name,
+    )
+    data.__class__.__str__ = utils.graph_info
+    return data
 
 def test_split():
     from statistics import mean, stdev

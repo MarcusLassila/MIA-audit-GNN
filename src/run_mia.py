@@ -80,7 +80,7 @@ class MembershipInferenceExperiment:
         plt.legend()
         utils.savefig_or_show(savepath)
 
-    def train_target_model(self, dataset, plot_training_results=True):
+    def train_target_model(self, dataset, plot_training_results=True, compare_with_mlp=False):
         config = self.config
 
         if self.config.grid_search:
@@ -104,7 +104,6 @@ class MembershipInferenceExperiment:
             num_classes=dataset.num_classes,
             dropout=dropout,
         )
-
         train_config = trainer.TrainConfig(
             criterion=self.criterion,
             device=config.device,
@@ -129,6 +128,26 @@ class MembershipInferenceExperiment:
             plot_title="Target model",
             savedir=config.savedir,
         )
+        if compare_with_mlp:
+            # Sanity check that graph split is good enough to still give advantage to GNN over MLP.
+            mlp_reference_model = utils.fresh_model(
+                model_type='MLP',
+                num_features=dataset.num_features,
+                hidden_dims=hidden_dim,
+                num_classes=dataset.num_classes,
+                dropout=dropout,
+            )
+            _ = trainer.train_gnn(
+                model=mlp_reference_model,
+                dataset=dataset,
+                config=train_config,
+                inductive_split=not config.transductive
+            )
+            evaluation.evaluate_graph_training(
+                model=mlp_reference_model,
+                dataset=dataset,
+                criterion=train_config.criterion,
+            )
         return target_model
 
     def run(self):
