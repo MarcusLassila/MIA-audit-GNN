@@ -273,13 +273,13 @@ def sample_subgraph(dataset, num_nodes, train_frac=0.4, val_frac=0.2, v2=True):
         node_index = sample_nodes(total_num_nodes, num_nodes, stratify=dataset.y)
     return extract_subgraph(dataset, node_index, train_frac=train_frac, val_frac=val_frac)
 
-def disjoint_node_split(dataset, balance=0.5, v2=True):
+def disjoint_node_split(dataset, v2=True):
     '''
     Split the nodes into two disjoint sets.
     Return node index tensors for the two sets.
     '''
     total_num_nodes = dataset.x.shape[0]
-    num_nodes_A = int(total_num_nodes * balance)
+    num_nodes_A = total_num_nodes // 2
     if v2:
         node_index_A, node_index_B = alternating_random_walk_node_split(dataset) # Only supports balance = 0.5
     else:
@@ -287,21 +287,13 @@ def disjoint_node_split(dataset, balance=0.5, v2=True):
         node_index_B = node_index_complement(node_index_A, total_num_nodes)
     return node_index_A, node_index_B
 
-def target_shadow_split(dataset, split="sampled", v2=True):
-    target_frac = 0.5
-    shadow_frac = 0.5
-    num_nodes = dataset.x.shape[0]
-    if split == "sampled":
-        target_size = int(num_nodes * target_frac)
-        shadow_size = int(num_nodes * shadow_frac)
-        target_set = sample_subgraph(dataset, target_size, v2=v2)
-        shadow_set = sample_subgraph(dataset, shadow_size, v2=v2)
-    elif split == "disjoint":
-        target_index, shadow_index = disjoint_node_split(dataset, balance=target_frac, v2=v2)
-        target_set = extract_subgraph(dataset, target_index)
-        shadow_set = extract_subgraph(dataset, shadow_index)
-    else:
-        raise ValueError(f"Unsupported split: {split}")
+def disjoint_graph_split(dataset, v2=True):
+    '''
+    Split the graph dataset in two rougly equal sized disjoint subgraphs.
+    '''
+    target_index, shadow_index = disjoint_node_split(dataset, v2=v2)
+    target_set = extract_subgraph(dataset, target_index)
+    shadow_set = extract_subgraph(dataset, shadow_index)
     return target_set, shadow_set
 
 def parse_dataset(root, name):
@@ -352,7 +344,7 @@ def test_split():
     fractions_A = []
     fractions_B = []
     for _ in tqdm(range(20), desc='Computing datasplit statistics'):
-        data_A, data_B = target_shadow_split(dataset, split='disjoint', v2=False)
+        data_A, data_B = disjoint_graph_split(dataset, v2=False)
         average_degree_A = utils.average_degree(data_A)
         average_degree_B = utils.average_degree(data_B)
         frac_A = utils.fraction_isolated_nodes(data_A)

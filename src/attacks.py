@@ -245,8 +245,8 @@ class RMIA:
         self.out_size = population.x.shape[0]
         self.gamma = config.rmia_gamma
         self.train_shadow_models()
-        self.interp_param = self.select_interp_param()
-        print("interp_param:", self.interp_param)
+        self.offline_a = self.select_offline_a()
+        print("offline_a:", self.offline_a)
 
     def train_shadow_models(self):
         config = self.config
@@ -288,15 +288,15 @@ class RMIA:
             elif i == sim_shadow_idx:
                 self.sim_shadow = (shadow_model, shadow_dataset)
 
-    def select_interp_param(self):
+    def select_offline_a(self):
         sim_target_model, sim_target_dataset = self.sim_target
         sim_shadow_model, sim_shadow_dataset = self.sim_shadow
         # Assumes the nodes are labeled the same in sim_target_dataset and sim_shadow_dataset.
         target_samples = datasetup.masked_subgraph(sim_target_dataset, ~(sim_target_dataset.val_mask | sim_shadow_dataset.train_mask))
         population = datasetup.masked_subgraph(sim_shadow_dataset, ~(sim_target_dataset.train_mask))
         best_auroc = 0
-        best_interp_param = 0.0
-        for interp_param in np.linspace(0, 1, 11):
+        best_offline_a = 0.0
+        for offline_a in np.linspace(0, 1, 11):
             sim_shadow_model.eval()
             confidences = []
             with torch.inference_mode():
@@ -310,7 +310,7 @@ class RMIA:
                     )
                     confidences.append(F.softmax(preds, dim=1)[row_idx, dataset.y])
 
-            ratioX = confidences[1] / (0.5 * ((interp_param + 1) * confidences[0] + 1 - interp_param))
+            ratioX = confidences[1] / (0.5 * ((offline_a + 1) * confidences[0] + 1 - offline_a))
             ratioZ = confidences[3] / confidences[2]
             thresholds = ratioZ * self.gamma
             count = torch.zeros_like(ratioX)
@@ -321,8 +321,8 @@ class RMIA:
             auroc = roc_auc_score(y_true=target_samples.train_mask, y_score=score)
             if auroc > best_auroc:
                 best_auroc = auroc
-                best_interp_param = interp_param
-        return best_interp_param
+                best_offline_a = offline_a
+        return best_offline_a
 
     def ratio(self, dataset, num_hops, inductive_inference, interp_from_out_models):
         num_target_samples = dataset.x.shape[0]
@@ -343,7 +343,7 @@ class RMIA:
         if interp_from_out_models:
             pr_out = shadow_confidences.mean(dim=0)
             # Heuristic to approximate the average of in and out, from out only.
-            pr = 0.5 * ((self.interp_param + 1) * pr_out + 1 - self.interp_param)
+            pr = 0.5 * ((self.offline_a + 1) * pr_out + 1 - self.offline_a)
         else:
             pr = shadow_confidences.mean(dim=0)
 

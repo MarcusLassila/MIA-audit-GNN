@@ -21,7 +21,7 @@ def inclusions(list_of_sets):
             res.append(len(incl - excl))
     return res
 
-def bc_evaluation(preds, truth, target_fpr):
+def evaluate_binary_classification(preds, truth, target_fpr):
     if torch.is_tensor(preds):
         preds = preds.cpu().numpy()
     if torch.is_tensor(truth):
@@ -36,6 +36,8 @@ def bc_evaluation(preds, truth, target_fpr):
         'roc': (fpr, tpr),
         'tpr_fixed_fpr': tpr_fixed_fpr,
         'TP_fixed_fpr': true_positives,
+        'soft_preds': preds,
+        'hard_preds': hard_preds,
         'fixed_fpr_threshold': threshold,
     }
 

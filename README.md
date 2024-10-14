@@ -37,3 +37,12 @@ Alternatively, run "src/run_mia.py" which only run one MIA simulation experiment
 * --savedir: Path to store results.
 * --name: Name to add to result files.
 * --experiments: Number of samples (retraining target, shadow and attack models) to compute result statistics over.
+
+### TODO
+
+1. Add support for PPI and other multi graph datasets.
+2. Extend 0 vs 2-hop test statistic visualization.
+3. Refactor membership inference experiment.
+4. Rethink how inductive training split is handled (should trainer copy dataset?).
+5. Replace printouts by logger?
+6. Stop using validation set?

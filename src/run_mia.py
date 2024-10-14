@@ -66,8 +66,8 @@ class MembershipInferenceExperiment:
         )
         preds_0 = soft_preds_0[node_index]
         preds_2 = soft_preds_k[node_index]
-        threshold_0 = evaluation.bc_evaluation(preds=soft_preds_0, truth=target_samples.train_mask.long(), target_fpr=target_fpr)['fixed_fpr_threshold']
-        threshold_k = evaluation.bc_evaluation(preds=soft_preds_k, truth=target_samples.train_mask.long(), target_fpr=target_fpr)['fixed_fpr_threshold']
+        threshold_0 = evaluation.evaluate_binary_classification(preds=soft_preds_0, truth=target_samples.train_mask.long(), target_fpr=target_fpr)['fixed_fpr_threshold']
+        threshold_k = evaluation.evaluate_binary_classification(preds=soft_preds_k, truth=target_samples.train_mask.long(), target_fpr=target_fpr)['fixed_fpr_threshold']
         indices = torch.arange(node_index.shape[0])
         savepath = f'{self.config.savedir}/{self.config.name}_agg_vuln.png'
         plt.scatter(indices, preds_0, label='0-hop')
@@ -157,88 +157,9 @@ class MembershipInferenceExperiment:
         for i_experiment in range(config.experiments):
             print(f'Running experiment {i_experiment + 1}/{config.experiments}.')
 
-            match config.attack:
-                case "basic-mlp":
-                    target_dataset, shadow_dataset = datasetup.target_shadow_split(dataset, split=config.split)
-                    target_model = self.train_target_model(target_dataset)
-                    attacker = attacks.BasicMLPAttack(
-                        target_model=target_model,
-                        shadow_dataset=shadow_dataset,
-                        config=config,
-                    )
-                case "confidence":
-                    target_dataset, _ = datasetup.target_shadow_split(dataset, split="disjoint")
-                    target_model = self.train_target_model(target_dataset)
-                    attacker = attacks.ConfidenceAttack(
-                        target_model=target_model,
-                        config=config,
-                    )
-                case "lira":
-                    # In offline LiRA, the shadow models are trained on datasets that does not contain the target sample.
-                    # Therefore we make a disjoint split and train shadow models on one part, and attack samples of the other part.
-                    target_dataset, population = datasetup.target_shadow_split(dataset, split="disjoint")
-                    target_model = self.train_target_model(target_dataset)
-                    attacker = attacks.LiRA(
-                        target_model=target_model,
-                        population=population,
-                        config=config,
-                    )
-                case "rmia":
-                    target_dataset, population = datasetup.target_shadow_split(dataset, split="disjoint")
-                    target_model = self.train_target_model(target_dataset)
-                    attacker = attacks.RMIA(
-                        target_model=target_model,
-                        population=population,
-                        config=config,
-                    )
-                case _:
-                    raise AttributeError(f"No attack named {config.attack}")
-
-            # Remove validation mask from target samples
-            target_samples = datasetup.masked_subgraph(target_dataset, ~target_dataset.val_mask)
-            truth = target_samples.train_mask.long()
-
-            if config.experiments == 1:
-                self.visualize_aggregation_effect_on_attack_vulnerabilities(attacker, target_samples, config.target_fpr, num_hops=2)
-
-            soft_preds = []
-            true_positives = []
-            ids = [] # Used to label detection count dataframe
-            # Run attack using the specified set of k-hop neighborhood queries.
-            for num_hops in config.query_hops:
-                if num_hops == 0:
-                    ids.append('0')
-                    preds = attacker.run_attack(target_samples=target_samples, num_hops=num_hops)
-                    metrics = evaluation.bc_evaluation(preds, truth, config.target_fpr)
-                    soft_preds.append(preds)
-                    fpr, tpr = metrics['roc']
-                    true_positives.append(metrics['TP_fixed_fpr'])
-                    scores[f'fprs_{num_hops}'].append(fpr)
-                    scores[f'tprs_{num_hops}'].append(tpr)
-                    scores[f'auroc_{num_hops}'].append(metrics['auroc'])
-                    scores[f'tprs_at_fixed_fpr_{num_hops}'].append(metrics['tpr_fixed_fpr'])
-                else:
-                    flags_IITI = (True, False) if config.inductive_inference is None else (config.inductive_inference,)
-                    for flag in flags_IITI:
-                        suffix = 'II' if flag else 'TI'
-                        ids.append(f'{num_hops}-{suffix}')
-                        preds = attacker.run_attack(target_samples=target_samples, num_hops=num_hops, inductive_inference=flag)
-                        metrics = evaluation.bc_evaluation(preds, truth, config.target_fpr)
-                        soft_preds.append(preds)
-                        fpr, tpr = metrics['roc']
-                        true_positives.append(metrics['TP_fixed_fpr'])
-                        scores[f'fprs_{num_hops}_{suffix}'].append(fpr)
-                        scores[f'tprs_{num_hops}_{suffix}'].append(tpr)
-                        scores[f'auroc_{num_hops}_{suffix}'].append(metrics['auroc'])
-                        scores[f'tprs_at_fixed_fpr_{num_hops}_{suffix}'].append(metrics['tpr_fixed_fpr'])
-
-            soft_preds = torch.stack(soft_preds)
-            multi_tpr, _ = utils.tpr_at_fixed_fpr_multi(soft_preds, truth, config.target_fpr)
-            scores['tprs_at_fixed_fpr_multi'].append(multi_tpr)
-
-            detection_counts = np.array(evaluation.inclusions(true_positives), dtype=np.int64)
-            scores['detection_count'].append(detection_counts)
-
+            # Train and evaluate target model.
+            target_dataset, other_half = datasetup.disjoint_graph_split(dataset)
+            target_model = self.train_target_model(target_dataset)
             target_scores = {
                 'train_score': evaluation.evaluate_graph_model(
                     model=target_model,
@@ -253,77 +174,118 @@ class MembershipInferenceExperiment:
                     criterion=self.criterion,
                 ),
             }
-
             scores['train_scores'].append(target_scores['train_score'])
             scores['test_scores'].append(target_scores['test_score'])
+            for attack in config.attacks.split(','):
+                match attack:
+                    case "basic-mlp":
+                        if config.split == 'sampled':
+                            shadow_dataset = datasetup.sample_subgraph(dataset, dataset.x.shape[0]//2)
+                        else:
+                            shadow_dataset = other_half
+                        attacker = attacks.BasicMLPAttack(
+                            target_model=target_model,
+                            shadow_dataset=shadow_dataset,
+                            config=config,
+                        )
+                    case "confidence":
+                        attacker = attacks.ConfidenceAttack(
+                            target_model=target_model,
+                            config=config,
+                        )
+                    case "lira":
+                        # In offline LiRA, the shadow models are trained on datasets that does not contain the target sample.
+                        # Therefore we make a disjoint split and train shadow models on one part, and attack samples of the other part.
+                        population = other_half
+                        attacker = attacks.LiRA(
+                            target_model=target_model,
+                            population=population,
+                            config=config,
+                        )
+                    case "rmia":
+                        population = other_half
+                        attacker = attacks.RMIA(
+                            target_model=target_model,
+                            population=population,
+                            config=config,
+                        )
+                    case _:
+                        raise AttributeError(f"No attack named {attack}")
 
-        if config.experiments > 1:
-            stats = {
-                'train_acc_mean': [f"{mean(scores['train_scores']):.4f}"],
-                'train_acc_std': [f"{stdev(scores['train_scores']):.4f}"],
-                'test_acc_mean': [f"{mean(scores['test_scores']):.4f}"],
-                'test_acc_std': [f"{stdev(scores['test_scores']):.4f}"],
-            }
-            stats[f'tpr_{config.target_fpr:.2}_fpr_multi_mean'] = [f"{mean(scores['tprs_at_fixed_fpr_multi']):.4f}"]
-            stats[f'tpr_{config.target_fpr:.2}_fpr_multi_std'] = [f"{stdev(scores['tprs_at_fixed_fpr_multi']):.4f}"]
-            for num_hops in config.query_hops:
-                if num_hops == 0:
-                    stats[f'auroc_{num_hops}_mean'] = [f"{mean(scores[f'auroc_{num_hops}']):.4f}"]
-                    stats[f'auroc_{num_hops}_std'] = [f"{stdev(scores[f'auroc_{num_hops}']):.4f}"]
-                    stats[f'tpr_{config.target_fpr:.2}_fpr_{num_hops}_mean'] = [f"{mean(scores[f'tprs_at_fixed_fpr_{num_hops}']):.4f}"]
-                    stats[f'tpr_{config.target_fpr:.2}_fpr_{num_hops}_std'] = [f"{stdev(scores[f'tprs_at_fixed_fpr_{num_hops}']):.4f}"]
+                # Remove validation mask from target samples
+                target_samples = datasetup.masked_subgraph(target_dataset, ~target_dataset.val_mask)
+                truth = target_samples.train_mask.long()
+
+                if config.experiments == 1:
+                    self.visualize_aggregation_effect_on_attack_vulnerabilities(attacker, target_samples, config.target_fpr, num_hops=2)
+
+                soft_preds = []
+                true_positives = []
+                query_strategies = []
+                for num_hops in config.query_hops:
+                    if num_hops == 0:
+                        query_strategies.append((num_hops, True, f'{attack}_0'))
+                    else:
+                        query_strategies.append((num_hops, True, f'{attack}_{num_hops}_I'))
+                        query_strategies.append((num_hops, False, f'{attack}_{num_hops}_T'))
+                ids = [] # Used to label detection count dataframe
+                # Run attack using the specified set of k-hop neighborhood queries.
+                for num_hops, inductive_flag, id in query_strategies:
+                    ids.append(id)
+                    preds = attacker.run_attack(target_samples=target_samples, num_hops=num_hops, inductive_inference=inductive_flag)
+                    metrics = evaluation.evaluate_binary_classification(preds, truth, config.target_fpr)
+                    soft_preds.append(preds)
+                    fpr, tpr = metrics['roc']
+                    true_positives.append(metrics['TP_fixed_fpr'])
+                    scores[f'fprs_{id}'].append(fpr)
+                    scores[f'tprs_{id}'].append(tpr)
+                    scores[f'auroc_{id}'].append(metrics['auroc'])
+                    scores[f'tpr_{config.target_fpr}_fpr_{id}'].append(metrics['tpr_fixed_fpr'])
+
+                if len(soft_preds) > 1:
+                    soft_preds = torch.stack(soft_preds)
+                    multi_tpr, _ = utils.tpr_at_fixed_fpr_multi(soft_preds, truth, config.target_fpr)
+                    scores[f'tpr_{config.target_fpr}_fpr_multi_{attack}'].append(multi_tpr)
+
+                    detection_counts = np.array(evaluation.inclusions(true_positives), dtype=np.int64)
+                    scores[f'detection_count_{attack}'].append(detection_counts)
+            # End attack loop
+        # End experiment loop
+
+        stats = {}
+        for key, value in scores.items():
+            if isinstance(value[0], float):
+                if config.experiments > 1:
+                    stats[f'{key}_mean'] = [mean(value)]
+                    stats[f'{key}_std'] = [stdev(value)]
                 else:
-                    for flag in flags_IITI:
-                        suffix = 'II' if flag else 'TI'
-                        stats[f'auroc_{num_hops}_{suffix}_mean'] = [f"{mean(scores[f'auroc_{num_hops}_{suffix}']):.4f}"]
-                        stats[f'auroc_{num_hops}_{suffix}_std'] = [f"{stdev(scores[f'auroc_{num_hops}_{suffix}']):.4f}"]
-                        stats[f'tpr_{config.target_fpr:.2}_fpr_{num_hops}_{suffix}_mean'] = [f"{mean(scores[f'tprs_at_fixed_fpr_{num_hops}_{suffix}']):.4f}"]
-                        stats[f'tpr_{config.target_fpr:.2}_fpr_{num_hops}_{suffix}_std'] = [f"{stdev(scores[f'tprs_at_fixed_fpr_{num_hops}_{suffix}']):.4f}"]
-        else: # 1 experiment
-            stats = {
-                'train_acc': scores['train_scores'],
-                'test_acc': scores['test_scores'],
-            }
-            stats[f'tpr_{config.target_fpr:.2}_fpr_multi'] = scores['tprs_at_fixed_fpr_multi']
-            for num_hops in config.query_hops:
-                if num_hops == 0:
-                    stats[f'auroc_{num_hops}'] = scores[f'auroc_{num_hops}']
-                    stats[f'tpr_{config.target_fpr:.2}_fpr_{num_hops}'] = scores[f'tprs_at_fixed_fpr_{num_hops}']
-                else:
-                    for flag in flags_IITI:
-                        suffix = 'II' if flag else 'TI'
-                        stats[f'auroc_{num_hops}_{suffix}'] = scores[f'auroc_{num_hops}_{suffix}']
-                        stats[f'tpr_{config.target_fpr:.2}_fpr_{num_hops}_{suffix}'] = scores[f'tprs_at_fixed_fpr_{num_hops}_{suffix}']
-
-        detection_counts = np.stack(scores['detection_count'])
-        detection_counts_mean = np.mean(detection_counts, axis=0)
-        detection_counts_std = np.std(detection_counts, axis=0)
-        table = {}
-        i = 0
-        for r in range(1, len(ids) + 1):
-            for idx in combinations(range(len(ids)), r):
-                key = '+'.join(ids[j] for j in idx)
-                table[key] = [f'{detection_counts_mean[i]:.4f}', f'{detection_counts_std[i]:.4f}']
-                i += 1
-
-        detection_df = pd.DataFrame(table, index=['mean', 'std'])
-        detection_df.to_csv('./results/detection_counts.csv')
+                    stats[key] = value
         stat_df = pd.DataFrame(stats, index=[config.name])
-        if config.make_plots:
-            savepath = f'{config.savedir}/{config.name}_roc_loglog.png'
-            for num_hops in config.query_hops:
-                if num_hops == 0:
-                    savepath = f'{config.savedir}/{config.name}_{num_hops}_roc_loglog.png'
-                    fprs = scores[f'fprs_{num_hops}']
-                    tprs = scores[f'tprs_{num_hops}']
-                    utils.plot_multi_roc_loglog(fprs, tprs, savepath=savepath)
-                else:
-                    for flag in flags_IITI:
-                        suffix = 'II' if flag else 'TI'
-                        savepath = f'{config.savedir}/{config.name}_{num_hops}_{suffix}_roc_loglog.png'
-                        fprs = scores[f'fprs_{num_hops}_{suffix}']
-                        tprs = scores[f'tprs_{num_hops}_{suffix}']
-                        utils.plot_multi_roc_loglog(fprs, tprs, savepath=savepath)
+
+        # detection_counts = np.stack(scores['detection_count'])
+        # detection_counts_mean = np.mean(detection_counts, axis=0)
+        # detection_counts_std = np.std(detection_counts, axis=0)
+        # table = {}
+        # i = 0
+        # for r in range(1, len(ids) + 1):
+        #     for idx in combinations(range(len(ids)), r):
+        #         key = '+'.join(ids[j] for j in idx)
+        #         table[key] = [f'{detection_counts_mean[i]:.4f}', f'{detection_counts_std[i]:.4f}']
+        #         i += 1
+
+        # detection_df = pd.DataFrame(table, index=['mean', 'std'])
+        # detection_df.to_csv('./results/detection_counts.csv')
+        detection_df = pd.DataFrame()
+
+        # if config.make_plots:
+        #     for attack in config.attacks.split(','):
+        #         savepath = f'{config.savedir}/{config.name}_roc_loglog.png'
+        #         for num_hops, inductive_flag, id in query_strategies:
+        #             savepath = f'{config.savedir}/{config.name}_{id}_roc_loglog.png'
+        #             fprs = scores[f'fprs_{id}']
+        #             tprs = scores[f'tprs_{id}']
+        #             utils.plot_multi_roc_loglog(fprs, tprs, savepath=savepath)
+
         return stat_df, detection_df
 
 
@@ -337,7 +299,7 @@ def main(config):
 if __name__ == '__main__':
     torch.random.manual_seed(1)
     parser = argparse.ArgumentParser()
-    parser.add_argument("--attack", default="confidence", type=str)
+    parser.add_argument("--attacks", default="confidence", type=str)
     parser.add_argument("--dataset", default="cora", type=str)
     parser.add_argument("--split", default="sampled", type=str)
     parser.add_argument("--transductive", action=argparse.BooleanOptionalAction)
