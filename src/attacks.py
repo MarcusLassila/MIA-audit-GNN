@@ -27,7 +27,7 @@ class BasicMLPAttack:
             num_classes=shadow_dataset.num_classes,
             dropout=config.dropout,
         )
-        dims = [shadow_dataset.num_classes, *config.hidden_dim_attack, 2]
+        dims = [shadow_dataset.num_classes, *config.hidden_dim_mlp_attack, 2]
         self.attack_model = MLP(channel_list=dims, dropout=0.0)
         self.shadow_dataset = shadow_dataset
         self.config = config

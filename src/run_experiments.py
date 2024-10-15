@@ -15,7 +15,9 @@ def main():
     with open("config.yaml", "r") as file:
         config = yaml.safe_load(file)
     Path('./results').mkdir(parents=True, exist_ok=True)
-    stat_frames = []
+    train_stat_frames = []
+    attack_stat_frames = []
+    detection_frames = []
     default_params = {
         'datadir': './data',
         'savedir': './results',
@@ -39,15 +41,22 @@ def main():
         for k, v in params.items():
             print(f'{k}: {v}')
         print()
-        stat_df, detection_df = run_mia.main(params)
-        detection_df.rename_axis(params['name']).to_csv(f'{default_params["savedir"]}/detection_counts_{params["name"]}.csv', sep=',')
-        stat_frames.append(stat_df)
-    pd.concat(stat_frames).to_csv(f'{default_params["savedir"]}/statistics.csv', sep=',')
+        train_stats_df, attack_stats_df, detection_df = run_mia.main(params)
+        train_stat_frames.append(train_stats_df)
+        attack_stat_frames.append(attack_stats_df)
+        detection_frames.append(detection_df)
+    pd.concat(train_stat_frames).to_csv(f'{default_params["savedir"]}/train_statistics.csv', sep=',')
+    pd.concat(attack_stat_frames).to_csv(f'{default_params["savedir"]}/attack_statistics.csv', sep=',')
+    pd.concat(detection_frames).to_csv(f'{default_params["savedir"]}/detection_statistics.csv', sep=',')
 
 if __name__ == "__main__":
     main()
-    df = pd.read_csv('./results/statistics.csv', sep=',').set_index('Unnamed: 0')
+    train_df = pd.read_csv('./results/train_statistics.csv', sep=',')
+    attack_df = pd.read_csv('./results/attack_statistics.csv', sep=',')
+    detection_df = pd.read_csv('./results/detection_statistics.csv', sep=',')
     pd.set_option('display.max_columns', None)
     pd.set_option('display.max_rows', None)
-    print(df)
+    print(train_df)
+    print(attack_df)
+    print(detection_df)
     print('Done.')

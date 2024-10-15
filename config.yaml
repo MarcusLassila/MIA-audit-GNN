@@ -12,5 +12,20 @@ cora-GCN:
   lr: 0.01
   weight_decay: 0.0001
   dropout: 0.5
-  num_shadow_models: 32
+  num_shadow_models: 8
+  rmia_gamma: 2.0
+citeseer-GCN:
+  attacks: "rmia,lira"
+  dataset: "citeseer"
+  model: "GCN"
+  epochs_target: 500
+  experiments: 2
+  hidden_dim_target: [64]
+  query_hops: [0, 2]
+  transductive: false
+  target_fpr: 0.005
+  lr: 0.01
+  weight_decay: 0.0001
+  dropout: 0.5
+  num_shadow_models: 8
   rmia_gamma: 2.0

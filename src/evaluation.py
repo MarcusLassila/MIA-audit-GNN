@@ -32,10 +32,10 @@ def evaluate_binary_classification(preds, truth, target_fpr):
     hard_preds = (preds >= threshold).astype(np.int64)
     true_positives = (hard_preds & truth).nonzero()[0]
     return {
-        'auroc': auroc,
-        'roc': (fpr, tpr),
-        'tpr_fixed_fpr': tpr_fixed_fpr,
-        'TP_fixed_fpr': true_positives,
+        'AUC': auroc,
+        'ROC': (fpr, tpr),
+        'TPR@FPR': tpr_fixed_fpr,
+        'TP': true_positives,
         'soft_preds': preds,
         'hard_preds': hard_preds,
         'fixed_fpr_threshold': threshold,

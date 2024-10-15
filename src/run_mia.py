@@ -13,7 +13,6 @@ import torch
 import torch.nn.functional as F
 from torch_geometric.utils import k_hop_subgraph
 from torchmetrics import Accuracy
-from statistics import mean, stdev
 from collections import defaultdict
 from itertools import combinations
 
@@ -150,7 +149,7 @@ class MembershipInferenceExperiment:
             )
         return target_model
 
-    def query_strategy_generator(self):
+    def query_generator(self):
         for num_hops in self.config.query_hops:
             if num_hops == 0:
                 yield (num_hops, True)
@@ -158,14 +157,46 @@ class MembershipInferenceExperiment:
                 yield (num_hops, True)
                 yield (num_hops, False)
 
+    def parse_train_stats(self, train_stats):
+        return pd.DataFrame({
+            'train_acc': [utils.stat_repr(train_stats['train_scores'])],
+            'test_acc': [utils.stat_repr(train_stats['test_scores'])],
+        }, index=[self.config.name])
+
+    def parse_attack_stats(self, attack_stats):
+        config = self.config
+        stats = defaultdict(list)
+        for key, value in attack_stats.items():
+            if isinstance(value[0], float):
+                key_content = key.split('_')
+                key = '_'.join(key_content[1:])
+                stats[f'{key}'].append(utils.stat_repr(value))
+        return pd.DataFrame(stats, index=[config.name + '_' + attack for attack in config.attacks])
+
+    def parse_detection_stats(self, detection_stats, tags):
+        config = self.config
+        detection_table = defaultdict(list)
+        for attack in config.attacks:
+            detection_counts = np.stack(detection_stats[attack])
+            detection_counts_mean = np.mean(detection_counts, axis=0)
+            detection_counts_std = np.std(detection_counts, axis=0)
+            i = 0
+            for r in range(1, len(tags) + 1):
+                for idx in combinations(range(len(tags)), r):
+                    key = '+'.join(tags[j].split('_')[1] for j in idx)
+                    detection_table[key].append(f'{detection_counts_mean[i]:.2f} ({detection_counts_std[i]:.2f})')
+                    i += 1
+        return pd.DataFrame(detection_table, index=[config.name + '_' + attack for attack in config.attacks])
+
     def run(self):
         config = self.config
         dataset = self.dataset
-        training_stats = defaultdict(list)
-        scores = defaultdict(list)
+        train_stats = defaultdict(list)
+        attack_stats = defaultdict(list)
+        detection_stats = defaultdict(list)
 
         def make_tag(attack: str, num_hops: int, inductive_flag: bool):
-            return f'{attack}_{num_hops}_{"I" if inductive_flag else "T"}'
+            return f'{attack}_{num_hops}{"I" if inductive_flag else "T"}'
 
         for i_experiment in range(config.experiments):
             print(f'Running experiment {i_experiment + 1}/{config.experiments}.')
@@ -187,8 +218,8 @@ class MembershipInferenceExperiment:
                     criterion=self.criterion,
                 ),
             }
-            training_stats['train_acc'].append(target_scores['train_score'])
-            training_stats['test_acc'].append(target_scores['test_score'])
+            train_stats['train_scores'].append(target_scores['train_score'])
+            train_stats['test_scores'].append(target_scores['test_score'])
             for attack in config.attacks:
                 match attack:
                     case "basic-mlp":
@@ -236,67 +267,41 @@ class MembershipInferenceExperiment:
                 true_positives = []
                 tags = [] # Used to label detection count dataframe
                 # Run attack using the specified set of k-hop neighborhood queries.
-                for num_hops, inductive_flag in self.query_strategy_generator():
+                for num_hops, inductive_flag in self.query_generator():
                     tag = make_tag(attack, num_hops, inductive_flag)
                     tags.append(tag)
                     preds = attacker.run_attack(target_samples=target_samples, num_hops=num_hops, inductive_inference=inductive_flag)
                     metrics = evaluation.evaluate_binary_classification(preds, truth, config.target_fpr)
                     soft_preds.append(preds)
-                    fpr, tpr = metrics['roc']
-                    true_positives.append(metrics['TP_fixed_fpr'])
-                    scores[f'{tag}_fprs'].append(fpr)
-                    scores[f'{tag}_tprs'].append(tpr)
-                    scores[f'{tag}_auroc'].append(metrics['auroc'])
-                    scores[f'{tag}_tpr_{config.target_fpr}_fpr'].append(metrics['tpr_fixed_fpr'])
+                    fpr, tpr = metrics['ROC']
+                    true_positives.append(metrics['TP'])
+                    attack_stats[f'{tag}_FPR'].append(fpr)
+                    attack_stats[f'{tag}_TPR'].append(tpr)
+                    attack_stats[f'{tag}_AUC'].append(metrics['AUC'])
+                    attack_stats[f'{tag}_TPR@{config.target_fpr}FPR'].append(metrics['TPR@FPR'])
 
                 if len(soft_preds) > 1:
                     soft_preds = torch.stack(soft_preds)
                     multi_tpr, _ = utils.tpr_at_fixed_fpr_multi(soft_preds, truth, config.target_fpr)
-                    scores[f'{attack}_tpr_{config.target_fpr}_fpr_multi'].append(multi_tpr)
+                    attack_stats[f'{attack}_TPR@{config.target_fpr}FPR_multi'].append(multi_tpr)
 
                 detection_counts = np.array(evaluation.inclusions(true_positives), dtype=np.int64)
-                scores[f'detection_count_{attack}'].append(detection_counts)
-            # End attack loop
-        # End experiment loop
+                detection_stats[attack].append(detection_counts)
 
-        # Process results, make dataframes and plots.
-
-        stats = defaultdict(list)
-        for key, value in scores.items():
-            if isinstance(value[0], float):
-                key_content = key.split('_')
-                attack, key = key_content[0], '_'.join(key_content[1:])
-                if config.experiments > 1:
-                    stats[f'{key}_mean'].append(mean(value))
-                    stats[f'{key}_std'].append(stdev(value))
-                else:
-                    stats[key].append(value[0])
-        stat_df = pd.DataFrame(stats, index=[config.name + '_' + attack for attack in config.attacks])
-
-        for attack in config.attacks:
-
-            detection_counts = np.stack(scores[f'detection_count_{attack}'])
-            detection_counts_mean = np.mean(detection_counts, axis=0)
-            detection_counts_std = np.std(detection_counts, axis=0)
-            detection_table = {}
-            i = 0
-            for r in range(1, len(tags) + 1):
-                for idx in combinations(range(len(tags)), r):
-                    key = '+'.join(tags[j] for j in idx)
-                    detection_table[key] = [f'{detection_counts_mean[i]:.4f}', f'{detection_counts_std[i]:.4f}']
-                    i += 1
-
-            if config.make_roc_plots:
+        if config.make_roc_plots:
+            for attack in config.attacks:
                 savepath = f'{config.savedir}/{config.name}_roc_loglog.png'
-                for num_hops, inductive_flag in self.query_strategy_generator():
+                for num_hops, inductive_flag in self.query_generator():
                     tag = make_tag(attack, num_hops, inductive_flag)
                     savepath = f'{config.savedir}/{config.name}_{tag}_roc_loglog.png'
-                    fprs = scores[f'{tag}_fprs']
-                    tprs = scores[f'{tag}_tprs']
+                    fprs = attack_stats[f'{tag}_FPR']
+                    tprs = attack_stats[f'{tag}_TPR']
                     utils.plot_multi_roc_loglog(fprs, tprs, savepath=savepath)
 
-        detection_df = pd.DataFrame(detection_table, index=['mean', 'std'])
-        return stat_df, detection_df
+        train_stats_df = self.parse_train_stats(train_stats)
+        attack_stats_df = self.parse_attack_stats(attack_stats)
+        detection_df = self.parse_detection_stats(detection_stats, tags)
+        return train_stats_df, attack_stats_df, detection_df
 
 def main(config):
     config['attacks'] = config['attacks'].split(',')
@@ -324,7 +329,7 @@ if __name__ == '__main__':
     parser.add_argument("--dropout", default=0.5, type=float)
     parser.add_argument("--early-stopping", default=30, type=int)
     parser.add_argument("--hidden-dim-target", default=[32], type=lambda x: [*map(int, x.split(','))])
-    parser.add_argument("--hidden-dim-attack", default=[256, 64], type=lambda x: [*map(int, x.split(','))])
+    parser.add_argument("--hidden-dim-mlp-attack", default=[256, 64], type=lambda x: [*map(int, x.split(','))])
     parser.add_argument("--query-hops", default=[0], type=lambda x: [*map(int, x.split(','))])
     parser.add_argument("--experiments", default=1, type=int)
     parser.add_argument("--target-fpr", default=0.01, type=float)
@@ -337,11 +342,13 @@ if __name__ == '__main__':
     args = parser.parse_args()
     config = vars(args)
     config['make_roc_plots'] = True
+    config['name'] = config['dataset'] + '_' + config['model']
     print('Running MIA experiment.')
     print(utils.Config(config))
     print()
-    stat_df, detection_df = main(config)
+    train_df, stat_df, detection_df = main(config)
     print('Attack statistics:')
+    print(train_df)
     print(stat_df)
     if len(detection_df.columns) > 1:
         print('Node detection count set differences:')

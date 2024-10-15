@@ -64,6 +64,11 @@ def execute_silently(callable, *args, **kwargs):
         res = callable(*args, **kwargs)
     return res
 
+def stat_repr(arr):
+    ''' Return a string representation "mean (std)" of an array-like argument. '''
+    arr = np.array(arr)
+    return f'{arr.mean():.4f} ({arr.std():.4f})'
+
 def graph_info(dataset):
     name = dataset.name
     num_nodes = dataset.x.shape[0]

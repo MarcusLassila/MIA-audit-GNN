@@ -27,7 +27,7 @@ Alternatively, run "src/run_mia.py" which only run one MIA simulation experiment
 * --dropout: Dropout rate when training target and shadow model.
 * --early-stopping: Number of successive epochs with no performance improvement on validation set before stopping the training. If <= 0 no early stopping is used. If 0 the model of the last training epoch will be used, otherwise the model with best validation set perfomance is used.
 * --hidden-dim-target: Dimension of the hidden layer of the 2-layer GNN target/shadow model.
-* --hidden-dim-attack: Dimensions of the hidden layers in the MLP of the basic-mlp attack model. Input is given as a comma separeted list, e.g. 128,64,32.
+* --hidden-dim-mlp-attack: Dimensions of the hidden layers in the MLP of the basic-mlp attack model. Input is given as a comma separeted list, e.g. 128,64,32.
 * --rmia-gamma: Threshold on likelihood ratio to count as evidence of membership in RMIA attack (see parameter gamma in "Low-Cost High-Power Membership Inference Attacks" paper).
 * --query-hops: List of the k-hops to use during inference in the attacks.
 * --experiments: Number of times to repeat the whole attack experiment (including retraining target model) and average results over.
@@ -37,6 +37,10 @@ Alternatively, run "src/run_mia.py" which only run one MIA simulation experiment
 * --savedir: Path to store results.
 * --name: Name to add to result files.
 * --experiments: Number of samples (retraining target, shadow and attack models) to compute result statistics over.
+
+### Test
+
+run "python -m unittest"
 
 ### TODO
 
