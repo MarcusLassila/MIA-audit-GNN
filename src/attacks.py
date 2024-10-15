@@ -202,7 +202,7 @@ class LiRA:
                 mean=means[0].cpu().numpy(),
                 std=stds[0].cpu().numpy(),
                 bins=max(len(self.shadow_models) // 8, 1),
-                savepath="./results/gaussian_fit_histogram.png",
+                savepath="./results/LiRA_gaussian_fit_histogram.png",
             )
         return means, stds
 

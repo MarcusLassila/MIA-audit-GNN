@@ -38,7 +38,7 @@ def evaluate_binary_classification(preds, truth, target_fpr):
         'TP': true_positives,
         'soft_preds': preds,
         'hard_preds': hard_preds,
-        'fixed_fpr_threshold': threshold,
+        'fixed_FPR_threshold': threshold,
     }
 
 def k_hop_query(model, dataset, query_nodes, num_hops=0, inductive_split=False):

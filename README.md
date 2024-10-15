@@ -45,8 +45,8 @@ run "python -m unittest"
 ### TODO
 
 1. Add support for PPI and other multi graph datasets.
-2. Extend 0 vs 2-hop test statistic visualization.
-3. Refactor membership inference experiment.
-4. Rethink how inductive training split is handled (should trainer copy dataset?).
+2. Extend 0 vs 2-hop test statistic visualization. (Mostly done)
+3. Refactor membership inference experiment. (Mostly done)
+4. Rethink how inductive training split is handled (should trainer copy dataset?). (Mostly done)
 5. Replace printouts by logger?
 6. Stop using validation set?

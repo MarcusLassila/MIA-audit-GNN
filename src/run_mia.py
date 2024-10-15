@@ -52,30 +52,63 @@ class MembershipInferenceExperiment:
                 savepath = f'{savedir}/hinge_hist_class{label}_{config.name}.png'
                 utils.plot_hinge_histogram(hinge, label_mask=label_mask, train_mask=train_mask, savepath=savepath)
 
-    def visualize_aggregation_effect_on_attack_vulnerabilities(self, attacker, target_samples, target_fpr, num_hops=2):
+    def visualize_aggregation_effect_on_attack_vulnerabilities(self, attacker, target_samples, target_fpr, num_hops=2, max_num_plotted_nodes=20):
+        '''
+        Plot test statistic of nodes against decision threshold for nodes that are identified by the 0-hop attack, but not the k-hop attack, or vice versa.
+        '''
+        attack_name = attacker.__class__.__name__
         soft_preds_0 = attacker.run_attack(target_samples=target_samples, num_hops=0)
         soft_preds_k = attacker.run_attack(target_samples=target_samples, num_hops=num_hops, inductive_inference=True)
-        most_vul_node = torch.argmax(soft_preds_0).item()
+        metrics_0 = evaluation.evaluate_binary_classification(preds=soft_preds_0, truth=target_samples.train_mask.long(), target_fpr=target_fpr)
+        metrics_k = evaluation.evaluate_binary_classification(preds=soft_preds_k, truth=target_samples.train_mask.long(), target_fpr=target_fpr)
+        threshold_0 = metrics_0['fixed_FPR_threshold']
+        threshold_k = metrics_k['fixed_FPR_threshold']
+        hard_preds_0 = metrics_0['hard_preds']
+        hard_preds_k = metrics_k['hard_preds']
+        nodes_of_interest = torch.tensor((hard_preds_0 ^ hard_preds_k).nonzero()[0], dtype=torch.long)
         node_index, _, _, _ = k_hop_subgraph(
-            node_idx=most_vul_node,
+            node_idx=nodes_of_interest,
             num_hops=num_hops,
             edge_index=target_samples.edge_index[:, target_samples.inductive_mask],
             relabel_nodes=False,
             num_nodes=target_samples.x.shape[0],
         )
-        preds_0 = soft_preds_0[node_index]
-        preds_2 = soft_preds_k[node_index]
-        threshold_0 = evaluation.evaluate_binary_classification(preds=soft_preds_0, truth=target_samples.train_mask.long(), target_fpr=target_fpr)['fixed_fpr_threshold']
-        threshold_k = evaluation.evaluate_binary_classification(preds=soft_preds_k, truth=target_samples.train_mask.long(), target_fpr=target_fpr)['fixed_fpr_threshold']
-        indices = torch.arange(node_index.shape[0])
-        savepath = f'{self.config.savedir}/{self.config.name}_agg_vuln.png'
+        soft_preds_0_mean = soft_preds_0.mean()
+        soft_preds_0_std = soft_preds_0.std()
+        soft_preds_k_mean = soft_preds_k.mean()
+        soft_preds_k_std = soft_preds_k.std()
+        print(f'{attack_name} 0-hop test statistic (all nodes): {soft_preds_0_mean:.4f} ({soft_preds_0_std:.4f})')
+        print(f'{attack_name} 2-hop test statistic (all nodes): {soft_preds_k_mean:.4f} ({soft_preds_k_std:.4f})')
+        soft_preds_0_mean = soft_preds_0[node_index].mean()
+        soft_preds_0_std = soft_preds_0[node_index].std()
+        soft_preds_k_mean = soft_preds_k[node_index].mean()
+        soft_preds_k_std = soft_preds_k[node_index].std()
+        print(f'{attack_name} 0-hop test statistic (nodes of interest): {soft_preds_0_mean:.4f} ({soft_preds_0_std:.4f})')
+        print(f'{attack_name} 2-hop test statistic (nodes of interest): {soft_preds_k_mean:.4f} ({soft_preds_k_std:.4f})')
+
+        # Select representative portions of nodes that are identified by the 0-hop attack, but not k-hop attack, and vice versa.
+        index_0_pos = torch.tensor((hard_preds_0 & ~hard_preds_k).nonzero()[0], dtype=torch.long)
+        index_k_pos = torch.tensor((hard_preds_k & ~hard_preds_0).nonzero()[0], dtype=torch.long)
+        index_0_pos = index_0_pos[torch.randperm(index_0_pos.shape[0])]
+        index_k_pos = index_k_pos[torch.randperm(index_k_pos.shape[0])]
+        index_size_0 = int(max_num_plotted_nodes * index_0_pos.shape[0] / nodes_of_interest.shape[0])
+        index_size_k = int(max_num_plotted_nodes * index_k_pos.shape[0] / nodes_of_interest.shape[0])
+        node_index_subset = torch.concat([index_0_pos[:index_size_0], index_k_pos[:index_size_k]])
+        node_index_subset = node_index_subset[torch.randperm(node_index_subset.shape[0])]
+        preds_0 = soft_preds_0[node_index_subset]
+        preds_k = soft_preds_k[node_index_subset]
+        indices = torch.arange(node_index_subset.shape[0])
+        savepath = f'{self.config.savedir}/{self.config.name}_{attack_name}_node_vulnerabilities.png'
+        low, high, diff = min(threshold_0, threshold_k), max(threshold_0, threshold_k), abs(threshold_0 - threshold_k)
+        spread = 10
         plt.scatter(indices, preds_0, label='0-hop')
-        plt.scatter(indices, preds_2, label=f'{num_hops}-hop', marker='x')
+        plt.scatter(indices, preds_k, label=f'{num_hops}-hop', marker='x')
         plt.plot(indices, torch.ones_like(indices) * threshold_0, label=r'$\gamma$ 0-hop')
         plt.plot(indices, torch.ones_like(indices) * threshold_k, label=rf'$\gamma$ {num_hops}-hop')
         plt.xticks(np.arange(indices.shape[0]))
         plt.xlabel('Node id')
         plt.ylabel('Test statistic')
+        plt.ylim(low - spread * diff, high + spread * diff)
         plt.legend()
         utils.savefig_or_show(savepath)
 
@@ -260,7 +293,7 @@ class MembershipInferenceExperiment:
                 target_samples = datasetup.masked_subgraph(target_dataset, ~target_dataset.val_mask)
                 truth = target_samples.train_mask.long()
 
-                if config.experiments == 1:
+                if len(config.query_hops) > 1 and config.experiments == 1:
                     self.visualize_aggregation_effect_on_attack_vulnerabilities(attacker, target_samples, config.target_fpr, num_hops=2)
 
                 soft_preds = []
@@ -334,7 +367,7 @@ if __name__ == '__main__':
     parser.add_argument("--experiments", default=1, type=int)
     parser.add_argument("--target-fpr", default=0.01, type=float)
     parser.add_argument("--optimizer", default="Adam", type=str)
-    parser.add_argument("--num-shadow-models", default=64, type=int)
+    parser.add_argument("--num-shadow-models", default=32, type=int)
     parser.add_argument("--rmia-gamma", default=2.0, type=float)
     parser.add_argument("--name", default="unnamed", type=str)
     parser.add_argument("--datadir", default="./data", type=str)
@@ -346,11 +379,12 @@ if __name__ == '__main__':
     print('Running MIA experiment.')
     print(utils.Config(config))
     print()
+
     train_df, stat_df, detection_df = main(config)
-    print('Attack statistics:')
+    print('Target training statistics:')
     print(train_df)
+    print('Attack performance statistics:')
     print(stat_df)
-    if len(detection_df.columns) > 1:
+    if len(config['query_hops']) > 1:
         print('Node detection count set differences:')
         print(detection_df)
-        detection_df.to_csv('./results/detection_counts.csv')
