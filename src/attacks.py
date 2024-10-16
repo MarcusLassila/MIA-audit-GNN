@@ -157,8 +157,12 @@ class LiRA:
             weight_decay=config.weight_decay,
             optimizer=getattr(torch.optim, config.optimizer),
         )
-        for _ in tqdm(range(config.num_shadow_models), desc=f"Training {config.num_shadow_models} shadow models for LiRA"):
-            if config.transductive_split:
+        num_shadow_models = min(len(self.population), config.num_shadow_models)
+        for i in tqdm(range(num_shadow_models), desc=f"Training {num_shadow_models} shadow models for LiRA"):
+            if isinstance(self.population, datasetup.MultiGraph):
+                shadow_dataset = self.population[i]
+                shadow_validation_set = self.population[(i + 1) % len(self.population)]
+            elif config.transductive_split:
                 shadow_dataset = datasetup.sample_subgraph(self.population, self.population.x.shape[0] // 2, train_frac=config.train_frac, val_frac=config.val_frac)
             else:
                 shadow_dataset = datasetup.new_train_split_mask(self.population, train_frac=config.train_frac, val_frac=config.val_frac)
@@ -169,13 +173,22 @@ class LiRA:
                 num_classes=shadow_dataset.num_classes,
                 dropout=config.dropout,
             )
-            _ = trainer.train_gnn(
-                model=shadow_model,
-                dataset=shadow_dataset,
-                config=train_config,
-                disable_tqdm=True,
-                inductive_split=not config.transductive_split,
-            )
+            if isinstance(self.population, datasetup.MultiGraph):
+                _ = trainer.train_gnn_multi_graph(
+                    model=shadow_model,
+                    train_set=shadow_dataset,
+                    val_set=shadow_validation_set,
+                    config=train_config,
+                    disable_tqdm=True,
+                )
+            else:
+                _ = trainer.train_gnn(
+                    model=shadow_model,
+                    dataset=shadow_dataset,
+                    config=train_config,
+                    disable_tqdm=True,
+                    inductive_split=not config.transductive_split,
+                )
             self.shadow_models.append(shadow_model)
     
     def get_mean_and_std(self, target_samples, num_hops, inductive_inference):

@@ -59,10 +59,16 @@ def k_hop_query(model, dataset, query_nodes, num_hops=0, inductive_split=False):
             empty_edge_index = torch.tensor([[],[]], dtype=torch.int64).to(dataset.edge_index.device)
             predictions = model(dataset.x[query_nodes], empty_edge_index)
         elif num_hops == model.num_layers:
-            edge_index = dataset.edge_index[:, dataset.inductive_mask] if inductive_split else dataset.edge_index[:, dataset.random_edge_mask]
+            if inductive_split not in dataset.__dict__:
+                edge_index = dataset.edge_index
+            else:
+                edge_index = dataset.edge_index[:, dataset.inductive_mask] if inductive_split else dataset.edge_index[:, dataset.random_edge_mask]
             predictions = model(dataset.x[query_nodes], edge_index)
         else:
-            edge_index = dataset.edge_index[:, dataset.inductive_mask] if inductive_split else dataset.edge_index[:, dataset.random_edge_mask]
+            if inductive_split not in dataset.__dict__:
+                edge_index = dataset.edge_index
+            else:
+                edge_index = dataset.edge_index[:, dataset.inductive_mask] if inductive_split else dataset.edge_index[:, dataset.random_edge_mask]
             predictions = []
             for v in query_nodes:
                 node_index, sub_edge_index, v_idx, _ = k_hop_subgraph(

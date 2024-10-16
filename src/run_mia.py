@@ -202,12 +202,15 @@ class MembershipInferenceExperiment:
         return target_model
 
     def query_generator(self):
-        for num_hops in self.config.query_hops:
-            if num_hops == 0:
-                yield (num_hops, True)
-            else:
-                yield (num_hops, True)
-                yield (num_hops, False)
+        if isinstance(self.dataset, datasetup.MultiGraph):
+            yield from [(num_hops, True) for num_hops in self.config.query_hops]
+        else:
+            for num_hops in self.config.query_hops:
+                if num_hops == 0:
+                    yield (num_hops, True)
+                else:
+                    yield (num_hops, True)
+                    yield (num_hops, False)
 
     def parse_train_stats(self, train_stats):
         return pd.DataFrame({
@@ -316,7 +319,10 @@ class MembershipInferenceExperiment:
                     case "lira":
                         # In offline LiRA, the shadow models are trained on datasets that does not contain the target sample.
                         # Therefore we make a disjoint split and train shadow models on one part, and attack samples of the other part.
-                        population = other_half.clone()
+                        if isinstance(self.dataset, datasetup.MultiGraph):
+                            population = self.dataset.non_target_graphs()
+                        else:
+                            population = other_half.clone()
                         attacker = attacks.LiRA(
                             target_model=target_model,
                             population=population,

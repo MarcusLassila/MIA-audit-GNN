@@ -19,45 +19,52 @@ class SingleGraph(Data):
     @property
     def num_nodes(self):
         return self.x.shape[0]
-    
+
     @property
     def num_features(self):
         return self.x.shape[1]
 
 class MultiGraph:
 
+    def __init__(self, graphs):
+        self.graphs = [SingleGraph(**graph) for graph in graphs]
+        self.num_classes = self.graphs[0].num_classes
+        self.num_features = self.graphs[0].num_features
+
+    def __len__(self):
+        return len(self.graphs)
+
+    def __getitem__(self, idx):
+        return self.graphs[idx]
+
+class MultiDataset(MultiGraph):
+
     def __init__(self, dataset, name):
         assert len(dataset) > 3, "Too few graphs to be useful. Merge to single graph instead."
-        self.dataset = [SingleGraph(**graph) for graph in dataset]
-        self.index = torch.arange(len(self.dataset))
-        self.num_features = self.dataset[0].num_features
-        self.num_classes = self.dataset[0].num_classes
+        super(MultiDataset, self).__init__(dataset)
+        self.index = torch.arange(len(self))
         self.name = name
 
     def __str__(self):
         return self.name
-    
-    def __len__(self):
-        return len(self.dataset)
 
     def reshuffle(self):
-        self.index = torch.randperm(len(self.dataset))
-    
+        self.index = torch.randperm(len(self))
+
     @property
     def target_train_set(self):
-        return self.dataset[self.index[0]]
-    
+        return self.graphs[self.index[0]]
+
     @property
     def target_val_set(self):
-        return self.dataset[self.index[1]]
-    
+        return self.graphs[self.index[1]]
+
     @property
     def target_test_set(self):
-        return self.dataset[self.index[2]]
-    
-    @property
+        return self.graphs[self.index[2]]
+
     def non_target_graphs(self):
-        return self.dataset[self.index[3]:]
+        return MultiGraph([graph for i, graph in enumerate(self.graphs) if i not in self.index[:3]])
 
 def merge_graphs(graph_A, graph_B):
     x = torch.concat([graph_A.x, graph_B.x])
@@ -371,7 +378,7 @@ def parse_dataset(root, name):
                     edge_index=graph.edge_index,
                     y=graph.y[:,0].long(),
                 ))
-            dataset = MultiGraph(dataset, name="PPI")
+            dataset = MultiDataset(dataset, name="PPI")
         case "pubmed":
             dataset = torch_geometric.datasets.Planetoid(root=root, name="PubMed")
         case "reddit":
