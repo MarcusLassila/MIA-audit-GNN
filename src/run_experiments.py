@@ -30,8 +30,10 @@ def main():
         'experiments': 10,
         'target_fpr': 0.01,
         'make_roc_plots': True,
-        'transductive': False,
-        'inductive_inference': None,
+        'transductive_split': False,
+        'inductive_inference': False,
+        'train_frac': 0.4,
+        'val_frac': 0.2,
     }
     for _, params in config.items():
         params = default_params | params

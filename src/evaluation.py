@@ -78,14 +78,17 @@ def k_hop_query(model, dataset, query_nodes, num_hops=0, inductive_split=False):
     assert predictions.shape == torch.Size([len(query_nodes), dataset.num_classes])
     return predictions
 
-def evaluate_graph_model(model, dataset, mask, criterion):
+def evaluate_graph_model(model, dataset, mask, criterion, inductive_inference=True):
     model.eval()
     with torch.inference_mode():
-        out = model(dataset.x, dataset.edge_index)
+        if inductive_inference:
+            out = model(dataset.x, dataset.edge_index[:, dataset.inductive_mask])
+        else:
+            out = model(dataset.x, dataset.edge_index)
         score = criterion(out[mask].argmax(dim=1), dataset.y[mask])
     return score.item()
 
-def evaluate_graph_training(model, dataset, criterion, training_results=None, plot_title="", savedir=None):
+def evaluate_graph_training(model, dataset, criterion, inductive_inference=True, training_results=None, plot_title="", savedir=None):
     if training_results:
         utils.plot_training_results(training_results, plot_title, savedir)
     train_score = evaluate_graph_model(
@@ -93,11 +96,35 @@ def evaluate_graph_training(model, dataset, criterion, training_results=None, pl
         dataset=dataset,
         mask=dataset.train_mask,
         criterion=criterion,
+        inductive_inference=inductive_inference,
     )
     test_score = evaluate_graph_model(
         model=model,
         dataset=dataset,
         mask=dataset.test_mask,
+        criterion=criterion,
+        inductive_inference=inductive_inference,
+    )
+    print(f"Train accuracy: {train_score:.4f} | Test accuracy: {test_score:.4f}")
+
+def evaluate_graph_model_inductive(model, dataset, criterion):
+    model.eval()
+    with torch.inference_mode():
+        out = model(dataset.x, dataset.edge_index)
+        score = criterion(out.argmax(dim=1), dataset.y)
+    return score.item()
+
+def evaluate_multi_graph_training(model, train_set, test_set, criterion, training_results=None, plot_title="", savedir=None):
+    if training_results:
+        utils.plot_training_results(training_results, plot_title, savedir)
+    train_score = evaluate_graph_model_inductive(
+        model=model,
+        dataset=train_set,
+        criterion=criterion,
+    )
+    test_score = evaluate_graph_model_inductive(
+        model=model,
+        dataset=test_set,
         criterion=criterion,
     )
     print(f"Train accuracy: {train_score:.4f} | Test accuracy: {test_score:.4f}")

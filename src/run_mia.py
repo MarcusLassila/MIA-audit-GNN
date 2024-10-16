@@ -179,6 +179,7 @@ class MembershipInferenceExperiment:
                 model=mlp_reference_model,
                 dataset=dataset,
                 criterion=train_config.criterion,
+                inductive_inference=config.inductive_inference,
             )
         return target_model
 

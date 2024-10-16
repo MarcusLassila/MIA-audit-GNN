@@ -11,7 +11,7 @@ class TestDataSetup(unittest.TestCase):
     
     def test_inductive_mask(self):
         graph = datasetup.parse_dataset(os.path.join(curr_dir, '..', 'data'), 'cora')
-        graph = datasetup.new_train_split_mask(graph)
+        graph = datasetup.new_train_split_mask(graph, train_frac=0.4, val_frac=0.2)
         for a, b in graph.edge_index[:, graph.inductive_mask].T:
             self.assertEqual(graph.train_mask[a], graph.train_mask[b])
             self.assertEqual(graph.val_mask[a], graph.val_mask[b])

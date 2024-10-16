@@ -8,8 +8,62 @@ from torch_geometric.utils import degree, index_to_mask, mask_to_index, subgraph
 from collections import deque
 
 class SingleGraph(Data):
+
+    def __init__(self, *args, **kwargs):
+        super(SingleGraph, self).__init__(*args, **kwargs)
+        self.num_classes = self.y.max().item() + 1
+
     def __str__(self):
         return utils.graph_info(self)
+
+    @property
+    def num_nodes(self):
+        return self.x.shape[0]
+    
+    @property
+    def num_features(self):
+        return self.x.shape[1]
+
+class MultiGraph:
+
+    def __init__(self, dataset, name):
+        assert len(dataset) > 3, "Too few graphs to be useful. Merge to single graph instead."
+        self.dataset = [SingleGraph(**graph) for graph in dataset]
+        self.index = torch.arange(len(self.dataset))
+        self.num_features = self.dataset[0].num_features
+        self.num_classes = self.dataset[0].num_classes
+        self.name = name
+
+    def __str__(self):
+        return self.name
+    
+    def __len__(self):
+        return len(self.dataset)
+
+    def reshuffle(self):
+        self.index = torch.randperm(len(self.dataset))
+    
+    @property
+    def target_train_set(self):
+        return self.dataset[self.index[0]]
+    
+    @property
+    def target_val_set(self):
+        return self.dataset[self.index[1]]
+    
+    @property
+    def target_test_set(self):
+        return self.dataset[self.index[2]]
+    
+    @property
+    def non_target_graphs(self):
+        return self.dataset[self.index[3]:]
+
+def merge_graphs(graph_A, graph_B):
+    x = torch.concat([graph_A.x, graph_B.x])
+    y = torch.concat([graph_A.y, graph_B.y])
+    edge_index = torch.concat([graph_A.edge_index, graph_B.edge_index + graph_A.x.shape[0]], dim=1)
+    return SingleGraph(x=x, edge_index=edge_index, y=y)
 
 def train_split_interconnection_mask(dataset):
     mask = []
@@ -37,8 +91,6 @@ def masked_subgraph(graph, mask):
         train_mask=graph.train_mask[mask],
         val_mask=graph.val_mask[mask],
         test_mask=graph.test_mask[mask],
-        num_classes=graph.num_classes,
-        num_features=graph.num_features,
     )
     data.inductive_mask = train_split_interconnection_mask(data)
     data.random_edge_mask = random_edge_mask(data)
@@ -110,8 +162,6 @@ def stochastic_block_model(root):
         train_mask=train_mask,
         val_mask=val_mask,
         test_mask=test_mask,
-        num_classes=len(block_sizes),
-        num_features=num_features,
     )
     data.inductive_mask = train_split_interconnection_mask(data)
     data.name = "SBM"
@@ -196,7 +246,6 @@ def alternating_random_walk_node_split(dataset):
     total_num_nodes = dataset.x.shape[0]
     edge_index = dataset.edge_index
     _, indices = degree(edge_index[0], num_nodes=total_num_nodes, dtype=torch.long).sort(descending=True)
-    #indices = indices[torch.randperm(indices.shape[0])]
     available = [x.item() for x in indices]
 
     node_index_split = set(), set()
@@ -251,8 +300,6 @@ def extract_subgraph(dataset, node_index, train_frac, val_frac):
         train_mask=train_mask,
         val_mask=val_mask,
         test_mask=test_mask,
-        num_classes=dataset.num_classes,
-        num_features=dataset.num_features,
         name=dataset.name,
     )
     data.inductive_mask = train_split_interconnection_mask(data)
@@ -324,15 +371,17 @@ def parse_dataset(root, name):
             dataset = stochastic_block_model(root)
         case _:
             raise ValueError("Unsupported dataset!")
-    data = SingleGraph(
-        x=dataset.x,
-        edge_index=dataset.edge_index,
-        y=dataset.y,
-        num_features=dataset.num_features,
-        num_classes=dataset.num_classes,
-        name=dataset.name,
-    )
-    return data
+    if len(dataset) == 1:
+        dataset = SingleGraph(
+            x=dataset.x,
+            edge_index=dataset.edge_index,
+            y=dataset.y,
+            name=dataset.name,
+        )
+    else:
+        pass
+        # dataset = MultiGraph(dataset)
+    return dataset
 
 def test_split():
     from statistics import mean, stdev
