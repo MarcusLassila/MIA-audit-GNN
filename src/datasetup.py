@@ -362,6 +362,16 @@ def parse_dataset(root, name):
         case "flickr":
             dataset = torch_geometric.datasets.Flickr(root=f'{root}/Flickr')
             dataset.name = "Flickr"
+        case "ppi":
+            raw_dataset = torch_geometric.datasets.PPI(root=root)
+            dataset = []
+            for graph in raw_dataset:
+                dataset.append(SingleGraph(
+                    x=graph.x,
+                    edge_index=graph.edge_index,
+                    y=graph.y[:,0].long(),
+                ))
+            dataset = MultiGraph(dataset, name="PPI")
         case "pubmed":
             dataset = torch_geometric.datasets.Planetoid(root=root, name="PubMed")
         case "reddit":

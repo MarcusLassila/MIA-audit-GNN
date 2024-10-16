@@ -146,20 +146,38 @@ class MembershipInferenceExperiment:
             weight_decay=weight_decay,
             optimizer=getattr(torch.optim, config.optimizer),
         )
-        train_res = trainer.train_gnn(
-            model=target_model,
-            dataset=dataset,
-            config=train_config,
-            inductive_split=not config.transductive_split
-        )
-        evaluation.evaluate_graph_training(
-            model=target_model,
-            dataset=dataset,
-            criterion=train_config.criterion,
-            training_results=train_res if plot_training_results else None,
-            plot_title="Target model",
-            savedir=config.savedir,
-        )
+        if isinstance(dataset, datasetup.SingleGraph):
+            train_res = trainer.train_gnn(
+                model=target_model,
+                dataset=dataset,
+                config=train_config,
+                inductive_split=not config.transductive_split
+            )
+            evaluation.evaluate_graph_training(
+                model=target_model,
+                dataset=dataset,
+                criterion=train_config.criterion,
+                inductive_inference=config.inductive_inference,
+                training_results=train_res if plot_training_results else None,
+                plot_title="Target model",
+                savedir=config.savedir,
+            )
+        elif isinstance(dataset, datasetup.MultiGraph):
+            train_res = trainer.train_gnn_multi_graph(
+                model=target_model,
+                train_set=dataset.target_train_set,
+                val_set=dataset.target_val_set,
+                config=train_config,
+            )
+            evaluation.evaluate_multi_graph_training(
+                model=target_model,
+                train_set=dataset.target_train_set,
+                test_set=dataset.target_test_set,
+                criterion=train_config.criterion,
+                training_results=train_res if plot_training_results else None,
+                plot_title="Target model",
+                savedir=config.savedir,
+            )
         if compare_with_mlp:
             # Sanity check that graph split is good enough to still give advantage to GNN over MLP.
             mlp_reference_model = utils.fresh_model(
@@ -236,22 +254,41 @@ class MembershipInferenceExperiment:
             print(f'Running experiment {i_experiment + 1}/{config.experiments}.')
 
             # Train and evaluate target model.
-            target_dataset, other_half = datasetup.disjoint_graph_split(dataset, train_frac=config.train_frac, val_frac=config.val_frac)
-            target_model = self.train_target_model(target_dataset)
-            target_scores = {
-                'train_score': evaluation.evaluate_graph_model(
-                    model=target_model,
-                    dataset=target_dataset,
-                    mask=target_dataset.train_mask,
-                    criterion=self.criterion,
-                ),
-                'test_score': evaluation.evaluate_graph_model(
-                    model=target_model,
-                    dataset=target_dataset,
-                    mask=target_dataset.test_mask,
-                    criterion=self.criterion,
-                ),
-            }
+            if isinstance(self.dataset, datasetup.SingleGraph):
+                target_dataset, other_half = datasetup.disjoint_graph_split(dataset, train_frac=config.train_frac, val_frac=config.val_frac)
+                target_model = self.train_target_model(target_dataset)
+                target_scores = {
+                    'train_score': evaluation.evaluate_graph_model(
+                        model=target_model,
+                        dataset=target_dataset,
+                        mask=target_dataset.train_mask,
+                        criterion=self.criterion,
+                    ),
+                    'test_score': evaluation.evaluate_graph_model(
+                        model=target_model,
+                        dataset=target_dataset,
+                        mask=target_dataset.test_mask,
+                        criterion=self.criterion,
+                    ),
+                }
+            elif isinstance(self.dataset, datasetup.MultiGraph):
+                self.dataset.reshuffle() # Reshuffle the graphs so the target dataset changes.
+                target_dataset = self.dataset
+                target_model = self.train_target_model(target_dataset)
+                target_scores = {
+                    'train_score': evaluation.evaluate_graph_model_inductive(
+                        model=target_model,
+                        dataset=target_dataset.target_train_set,
+                        criterion=self.criterion,
+                    ),
+                    'test_score': evaluation.evaluate_graph_model_inductive(
+                        model=target_model,
+                        dataset=target_dataset.target_test_set,
+                        criterion=self.criterion,
+                    ),
+                }
+            else:
+                raise ValueError('Unsupported dataset')
             train_stats['train_scores'].append(target_scores['train_score'])
             train_stats['test_scores'].append(target_scores['test_score'])
             for attack in config.attacks:
@@ -296,7 +333,13 @@ class MembershipInferenceExperiment:
                         raise AttributeError(f"No attack named {attack}")
 
                 # Remove validation mask from target samples
-                if target_dataset.val_mask.sum().item() > 0:
+                if isinstance(self.dataset, datasetup.MultiGraph):
+                    target_samples = datasetup.merge_graphs(self.dataset.target_train_set, self.dataset.target_test_set)
+                    target_samples.train_mask = torch.concat([
+                        torch.ones(self.dataset.target_train_set.num_nodes),
+                        torch.zeros(self.dataset.target_test_set.num_nodes),
+                    ]).bool()
+                elif target_dataset.val_mask.sum().item() > 0:
                     target_samples = datasetup.masked_subgraph(target_dataset, ~target_dataset.val_mask)
                 else:
                     target_samples = target_dataset.clone()

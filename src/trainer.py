@@ -76,6 +76,55 @@ def train_gnn(model, dataset, config: TrainConfig, disable_tqdm=False, inductive
         model = best_model
     return res
 
+def train_step_gnn_inductive(model, dataset, optimizer, loss_fn, criterion):
+    model.train()
+    optimizer.zero_grad()
+    out = model(dataset.x, dataset.edge_index)
+    loss = loss_fn(out, dataset.y)
+    score = criterion(out.argmax(dim=1), dataset.y)
+    loss.backward()
+    optimizer.step()
+    return loss.item() / dataset.x.shape[0], score.item()
+
+def valid_step_gnn_inductive(model, dataset, loss_fn, criterion):
+    model.eval()
+    with torch.inference_mode():
+        out = model(dataset.x, dataset.edge_index)
+        loss = loss_fn(out, dataset.y)
+        score = criterion(out.argmax(dim=1), dataset.y)
+    return loss.item() / dataset.x.shape[0], score.item()
+
+def train_gnn_multi_graph(model, train_set, val_set, config: TrainConfig, disable_tqdm=False):
+    model.to(config.device)
+    train_set.to(config.device)
+    if val_set is not None:
+        val_set.to(config.device)
+    optimizer = config.optimizer(model.parameters(), lr=config.lr, weight_decay=config.weight_decay)
+    loss_fn, criterion = config.loss_fn, config.criterion
+    res = defaultdict(list)
+    early_stopping_counter = 0
+    min_loss = float('inf')
+    best_model = None
+    for _ in tqdm(range(config.epochs), disable=disable_tqdm, desc=f"Training {model.__class__.__name__} on {config.device}"):
+        train_loss, train_score = train_step_gnn_inductive(model, train_set, optimizer, loss_fn, criterion)
+        res['train_loss'].append(train_loss)
+        res['train_score'].append(train_score)
+        if val_set is not None:
+            valid_loss, valid_score = valid_step_gnn_inductive(model, val_set, loss_fn, criterion)
+            res['valid_loss'].append(valid_loss)
+            res['valid_score'].append(valid_score)
+            if valid_loss < min_loss:
+                min_loss = valid_loss
+                best_model = deepcopy(model)
+                early_stopping_counter = 0
+            elif config.early_stopping > 0:
+                early_stopping_counter += 1
+                if early_stopping_counter == config.early_stopping:
+                    break
+    if config.early_stopping:
+        model = best_model
+    return res
+
 def train_step(model, data_loader, optimizer, loss_fn, criterion, device):
     model.train()
     accumulated_loss, score = 0, 0
