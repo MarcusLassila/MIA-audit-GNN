@@ -106,25 +106,3 @@ def evaluate_graph_training(model, dataset, criterion, inductive_inference=True,
         inductive_inference=inductive_inference,
     )
     print(f"Train accuracy: {train_score:.4f} | Test accuracy: {test_score:.4f}")
-
-def evaluate_graph_model_inductive(model, dataset, criterion):
-    model.eval()
-    with torch.inference_mode():
-        out = model(dataset.x, dataset.edge_index)
-        score = criterion(out.argmax(dim=1), dataset.y)
-    return score.item()
-
-def evaluate_multi_graph_training(model, train_set, test_set, criterion, training_results=None, plot_title="", savedir=None):
-    if training_results:
-        utils.plot_training_results(training_results, plot_title, savedir)
-    train_score = evaluate_graph_model_inductive(
-        model=model,
-        dataset=train_set,
-        criterion=criterion,
-    )
-    test_score = evaluate_graph_model_inductive(
-        model=model,
-        dataset=test_set,
-        criterion=criterion,
-    )
-    print(f"Train accuracy: {train_score:.4f} | Test accuracy: {test_score:.4f}")

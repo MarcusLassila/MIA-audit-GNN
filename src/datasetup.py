@@ -24,41 +24,6 @@ class SingleGraph(Data):
     def num_features(self):
         return self.x.shape[1]
 
-class MultiGraph:
-
-    def __init__(self, dataset, name):
-        assert len(dataset) > 3, "Too few graphs to be useful. Merge to single graph instead."
-        self.dataset = [SingleGraph(**graph) for graph in dataset]
-        self.index = torch.arange(len(self.dataset))
-        self.num_features = self.dataset[0].num_features
-        self.num_classes = self.dataset[0].num_classes
-        self.name = name
-
-    def __str__(self):
-        return self.name
-    
-    def __len__(self):
-        return len(self.dataset)
-
-    def reshuffle(self):
-        self.index = torch.randperm(len(self.dataset))
-    
-    @property
-    def target_train_set(self):
-        return self.dataset[self.index[0]]
-    
-    @property
-    def target_val_set(self):
-        return self.dataset[self.index[1]]
-    
-    @property
-    def target_test_set(self):
-        return self.dataset[self.index[2]]
-    
-    @property
-    def non_target_graphs(self):
-        return self.dataset[self.index[3]:]
-
 def merge_graphs(graph_A, graph_B):
     x = torch.concat([graph_A.x, graph_B.x])
     y = torch.concat([graph_A.y, graph_B.y])
@@ -371,16 +336,12 @@ def parse_dataset(root, name):
             dataset = stochastic_block_model(root)
         case _:
             raise ValueError("Unsupported dataset!")
-    if len(dataset) == 1:
-        dataset = SingleGraph(
-            x=dataset.x,
-            edge_index=dataset.edge_index,
-            y=dataset.y,
-            name=dataset.name,
-        )
-    else:
-        pass
-        # dataset = MultiGraph(dataset)
+    dataset = SingleGraph(
+        x=dataset.x,
+        edge_index=dataset.edge_index,
+        y=dataset.y,
+        name=dataset.name,
+    )
     return dataset
 
 def test_split():
