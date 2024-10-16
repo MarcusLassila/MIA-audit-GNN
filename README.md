@@ -20,7 +20,7 @@ Alternatively, run "src/run_mia.py" which only run one MIA simulation experiment
 * --inductive-inference: Make inferences using the inductive split. This ensures that member nodes are only connected to non-member nodes and vice versa. Default None will run inference twice, with inductive and transductive datasplit.
 * --model: GCN, DecoupledGCN, GCNConv (single layer), SGC, GraphSAGE, GAT or GIN (case sensitive).
 * --epochs_target: Number of epochs to train target and shadow model.
-* --epochs-attack: Number of epochs to train the attack model in basic-mlp attack.
+* --epochs-mlp-attack: Number of epochs to train the attack model in basic-mlp attack.
 * --batch-size: Size of mini-batches.
 * --lr: Learning rate when training target and shadow models.
 * --weight_decay: Weight decay (L2 penalty) to when training traget and shadow models.
@@ -37,6 +37,8 @@ Alternatively, run "src/run_mia.py" which only run one MIA simulation experiment
 * --savedir: Path to store results.
 * --name: Name to add to result files.
 * --experiments: Number of samples (retraining target, shadow and attack models) to compute result statistics over.
+* --train-frac: Fraction of training nodes, applicable to all graphs used for training (e.g. target graph, shadow graphs etc.).
+* --val-frac: Fraction of validation nodes, applicable to all graphs used for training (e.g. target graph, shadow graphs etc.).
 
 ### Test
 

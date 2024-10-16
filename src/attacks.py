@@ -81,7 +81,7 @@ class BasicMLPAttack:
         train_config = trainer.TrainConfig(
             criterion=Accuracy(task="multiclass", num_classes=2).to(config.device),
             device=config.device,
-            epochs=config.epochs_attack,
+            epochs=config.epochs_mlp_attack,
             early_stopping=config.early_stopping,
             loss_fn=nn.CrossEntropyLoss(),
             lr=1e-3,

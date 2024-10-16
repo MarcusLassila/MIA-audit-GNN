@@ -7,6 +7,10 @@ from torch_geometric.data import Data
 from torch_geometric.utils import degree, index_to_mask, mask_to_index, subgraph
 from collections import deque
 
+class SingleGraph(Data):
+    def __str__(self):
+        return utils.graph_info(self)
+
 def train_split_interconnection_mask(dataset):
     mask = []
     for a, b in dataset.edge_index.T:
@@ -26,7 +30,7 @@ def masked_subgraph(graph, mask):
         edge_index=graph.edge_index,
         relabel_nodes=True,
     )
-    data = Data(
+    data = SingleGraph(
         x=graph.x[mask],
         edge_index=edge_index,
         y=graph.y[mask],
@@ -38,7 +42,6 @@ def masked_subgraph(graph, mask):
     )
     data.inductive_mask = train_split_interconnection_mask(data)
     data.random_edge_mask = random_edge_mask(data)
-    data.__class__.__str__ = utils.graph_info
     return data
 
 def train_val_test_masks(num_nodes, train_frac, val_frac, stratify=None):
@@ -100,7 +103,7 @@ def stochastic_block_model(root):
         val_frac=0.2,
         stratify=dataset.y,
     )
-    data = Data(
+    data = SingleGraph(
         x=dataset.x,
         edge_index=dataset.edge_index,
         y=dataset.y,
@@ -113,7 +116,6 @@ def stochastic_block_model(root):
     data.inductive_mask = train_split_interconnection_mask(data)
     data.name = "SBM"
     data.root = root
-    data.__class__.__str__ = utils.graph_info
     return data
 
 def node_index_complement(node_index, num_nodes):
@@ -218,7 +220,7 @@ def new_train_split_mask(dataset, train_frac, val_frac, stratify=None):
         val_frac=val_frac,
         stratify=stratify,
     )
-    data = Data(**dataset)
+    data = SingleGraph(**dataset)
     data.train_mask = train_mask
     data.val_mask = val_mask
     data.test_mask = test_mask
@@ -242,7 +244,7 @@ def extract_subgraph(dataset, node_index, train_frac, val_frac):
         val_frac=val_frac,
         stratify=dataset.y[node_index],
     )
-    data = Data(
+    data = SingleGraph(
         x=dataset.x[node_index],
         edge_index=edge_index,
         y=dataset.y[node_index],
@@ -255,7 +257,6 @@ def extract_subgraph(dataset, node_index, train_frac, val_frac):
     )
     data.inductive_mask = train_split_interconnection_mask(data)
     data.random_edge_mask = random_edge_mask(data)
-    data.__class__.__str__ = utils.graph_info
     return data
 
 def sample_subgraph(dataset, num_nodes, train_frac, val_frac, v2=True):
@@ -323,7 +324,7 @@ def parse_dataset(root, name):
             dataset = stochastic_block_model(root)
         case _:
             raise ValueError("Unsupported dataset!")
-    data = Data(
+    data = SingleGraph(
         x=dataset.x,
         edge_index=dataset.edge_index,
         y=dataset.y,
@@ -331,7 +332,6 @@ def parse_dataset(root, name):
         num_classes=dataset.num_classes,
         name=dataset.name,
     )
-    data.__class__.__str__ = utils.graph_info
     return data
 
 def test_split():
