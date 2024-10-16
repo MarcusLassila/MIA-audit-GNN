@@ -78,7 +78,7 @@ def k_hop_query(model, dataset, query_nodes, num_hops=0, inductive_split=False):
     assert predictions.shape == torch.Size([len(query_nodes), dataset.num_classes])
     return predictions
 
-def evaluate_graph_model(model, dataset, mask, criterion, inductive_inference=True):
+def evaluate_graph_model(model, dataset, mask, criterion, inductive_inference):
     model.eval()
     with torch.inference_mode():
         if inductive_inference:

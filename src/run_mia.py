@@ -100,7 +100,7 @@ class MembershipInferenceExperiment:
         indices = torch.arange(node_index_subset.shape[0])
         savepath = f'{self.config.savedir}/{self.config.name}_{attack_name}_node_vulnerabilities.png'
         low, high, diff = min(threshold_0, threshold_k), max(threshold_0, threshold_k), abs(threshold_0 - threshold_k)
-        spread = 10
+        spread = 2
         plt.scatter(indices, preds_0, label='0-hop')
         plt.scatter(indices, preds_k, label=f'{num_hops}-hop', marker='x')
         plt.plot(indices, torch.ones_like(indices) * threshold_0, label=r'$\gamma$ 0-hop')
@@ -108,11 +108,14 @@ class MembershipInferenceExperiment:
         plt.xticks(np.arange(indices.shape[0]))
         plt.xlabel('Node id')
         plt.ylabel('Test statistic')
-        plt.ylim(low - spread * diff, high + spread * diff)
+        if attack_name == "LiRA":
+            plt.ylim(low - spread * diff, high + spread * diff)
+        elif attack_name == "RMIA":
+            plt.ylim(0.0, 1.0)
         plt.legend()
         utils.savefig_or_show(savepath)
 
-    def train_target_model(self, dataset, plot_training_results=True, compare_with_mlp=False):
+    def train_target_model(self, dataset, plot_training_results=True, compare_with_mlp=True):
         config = self.config
 
         if self.config.grid_search:
@@ -122,7 +125,7 @@ class MembershipInferenceExperiment:
                 epochs=self.config.epochs_target,
                 early_stopping=self.config.early_stopping,
                 optimizer=self.config.optimizer,
-                transductive=config.transductive_split,
+                inductive_split=config.inductive_split,
             )
             print(f'Grid search results: {opt_hyperparams}')
             lr, weight_decay, dropout, hidden_dim = opt_hyperparams.values()
@@ -150,12 +153,13 @@ class MembershipInferenceExperiment:
             model=target_model,
             dataset=dataset,
             config=train_config,
-            inductive_split=not config.transductive_split
+            inductive_split=config.inductive_split
         )
         evaluation.evaluate_graph_training(
             model=target_model,
             dataset=dataset,
             criterion=train_config.criterion,
+            inductive_inference=config.inductive_inference,
             training_results=train_res if plot_training_results else None,
             plot_title="Target model",
             savedir=config.savedir,
@@ -169,17 +173,20 @@ class MembershipInferenceExperiment:
                 num_classes=dataset.num_classes,
                 dropout=dropout,
             )
-            _ = trainer.train_gnn(
+            mlp_train_res = trainer.train_gnn(
                 model=mlp_reference_model,
                 dataset=dataset,
                 config=train_config,
-                inductive_split=not config.transductive_split
+                inductive_split=config.inductive_split
             )
             evaluation.evaluate_graph_training(
                 model=mlp_reference_model,
                 dataset=dataset,
                 criterion=train_config.criterion,
                 inductive_inference=config.inductive_inference,
+                training_results=mlp_train_res if plot_training_results else None,
+                plot_title="MLP model",
+                savedir=config.savedir,
             )
         return target_model
 
@@ -244,12 +251,14 @@ class MembershipInferenceExperiment:
                     dataset=target_dataset,
                     mask=target_dataset.train_mask,
                     criterion=self.criterion,
+                    inductive_inference=config.inductive_inference,
                 ),
                 'test_score': evaluation.evaluate_graph_model(
                     model=target_model,
                     dataset=target_dataset,
                     mask=target_dataset.test_mask,
                     criterion=self.criterion,
+                    inductive_inference=config.inductive_inference,
                 ),
             }
             train_stats['train_scores'].append(target_scores['train_score'])
@@ -354,12 +363,12 @@ def main(config):
     return mie.run()
 
 if __name__ == '__main__':
-    torch.random.manual_seed(1)
+    torch.random.manual_seed(0)
     parser = argparse.ArgumentParser()
     parser.add_argument("--attacks", default="confidence", type=str)
     parser.add_argument("--dataset", default="cora", type=str)
     parser.add_argument("--split", default="sampled", type=str)
-    parser.add_argument("--transductive-split", action=argparse.BooleanOptionalAction)
+    parser.add_argument("--inductive-split", action=argparse.BooleanOptionalAction)
     parser.add_argument("--inductive-inference", action=argparse.BooleanOptionalAction)
     parser.add_argument("--model", default="GCN", type=str)
     parser.add_argument("--batch-size", default=32, type=int)
@@ -387,6 +396,10 @@ if __name__ == '__main__':
     config = vars(args)
     config['make_roc_plots'] = True
     config['name'] = config['dataset'] + '_' + config['model']
+    if config['inductive_split'] is None:
+        config['inductive_split'] = True
+    if config['inductive_inference'] is None:
+        config['inductive_inference'] = True
     print('Running MIA experiment.')
     print(utils.Config(config))
     print()

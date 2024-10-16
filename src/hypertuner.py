@@ -19,7 +19,7 @@ def grid_search(
     epochs: int,
     early_stopping: bool,
     optimizer: str,
-    transductive: bool,
+    inductive_split: bool,
 ):
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
     criterion = Accuracy(task="multiclass", num_classes=dataset.num_classes).to(device)
@@ -57,7 +57,7 @@ def grid_search(
                 dataset=dataset,
                 config=train_config,
                 disable_tqdm=True,
-                inductive_split=not transductive,
+                inductive_split=inductive_split,
             )['valid_loss'])
             valid_losses.append(valid_loss)
         average_valid_loss = mean(valid_losses)

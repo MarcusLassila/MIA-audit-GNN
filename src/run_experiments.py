@@ -30,8 +30,8 @@ def main():
         'experiments': 10,
         'target_fpr': 0.01,
         'make_roc_plots': True,
-        'transductive_split': False,
-        'inductive_inference': False,
+        'inductive_split': True,
+        'inductive_inference': True,
         'train_frac': 0.4,
         'val_frac': 0.2,
     }
