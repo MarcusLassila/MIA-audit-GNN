@@ -26,7 +26,7 @@ class MembershipInferenceExperiment:
 
     def visualize_embedding_distribution(self):
         config = self.config
-        dataset = datasetup.sample_subgraph(self.dataset, self.dataset.x.shape[0])
+        dataset = datasetup.sample_subgraph(self.dataset, self.dataset.x.shape[0], train_frac=config.train_frac, val_frac=config.val_frac)
         savepath = f'{config.savedir}/embeddings/features.png'
         train_mask = ~dataset.test_mask
         utils.plot_embedding_2D_scatter(dataset.x, dataset.y, train_mask, savepath=savepath)
@@ -122,7 +122,7 @@ class MembershipInferenceExperiment:
                 epochs=self.config.epochs_target,
                 early_stopping=self.config.early_stopping,
                 optimizer=self.config.optimizer,
-                transductive=config.transductive,
+                transductive=config.transductive_split,
             )
             print(f'Grid search results: {opt_hyperparams}')
             lr, weight_decay, dropout, hidden_dim = opt_hyperparams.values()
@@ -150,7 +150,7 @@ class MembershipInferenceExperiment:
             model=target_model,
             dataset=dataset,
             config=train_config,
-            inductive_split=not config.transductive
+            inductive_split=not config.transductive_split
         )
         evaluation.evaluate_graph_training(
             model=target_model,
@@ -173,7 +173,7 @@ class MembershipInferenceExperiment:
                 model=mlp_reference_model,
                 dataset=dataset,
                 config=train_config,
-                inductive_split=not config.transductive
+                inductive_split=not config.transductive_split
             )
             evaluation.evaluate_graph_training(
                 model=mlp_reference_model,
@@ -235,7 +235,7 @@ class MembershipInferenceExperiment:
             print(f'Running experiment {i_experiment + 1}/{config.experiments}.')
 
             # Train and evaluate target model.
-            target_dataset, other_half = datasetup.disjoint_graph_split(dataset)
+            target_dataset, other_half = datasetup.disjoint_graph_split(dataset, train_frac=config.train_frac, val_frac=config.val_frac)
             target_model = self.train_target_model(target_dataset)
             target_scores = {
                 'train_score': evaluation.evaluate_graph_model(
@@ -257,9 +257,14 @@ class MembershipInferenceExperiment:
                 match attack:
                     case "basic-mlp":
                         if config.split == 'sampled':
-                            shadow_dataset = datasetup.sample_subgraph(dataset, dataset.x.shape[0]//2)
+                            shadow_dataset = datasetup.sample_subgraph(
+                                dataset,
+                                num_nodes=dataset.x.shape[0]//2,
+                                train_frac=config.train_frac,
+                                val_frac=config.val_frac
+                            )
                         else:
-                            shadow_dataset = other_half
+                            shadow_dataset = other_half.clone()
                         attacker = attacks.BasicMLPAttack(
                             target_model=target_model,
                             shadow_dataset=shadow_dataset,
@@ -273,14 +278,14 @@ class MembershipInferenceExperiment:
                     case "lira":
                         # In offline LiRA, the shadow models are trained on datasets that does not contain the target sample.
                         # Therefore we make a disjoint split and train shadow models on one part, and attack samples of the other part.
-                        population = other_half
+                        population = other_half.clone()
                         attacker = attacks.LiRA(
                             target_model=target_model,
                             population=population,
                             config=config,
                         )
                     case "rmia":
-                        population = other_half
+                        population = other_half.clone()
                         attacker = attacks.RMIA(
                             target_model=target_model,
                             population=population,
@@ -290,7 +295,10 @@ class MembershipInferenceExperiment:
                         raise AttributeError(f"No attack named {attack}")
 
                 # Remove validation mask from target samples
-                target_samples = datasetup.masked_subgraph(target_dataset, ~target_dataset.val_mask)
+                if target_dataset.val_mask.sum().item() > 0:
+                    target_samples = datasetup.masked_subgraph(target_dataset, ~target_dataset.val_mask)
+                else:
+                    target_samples = target_dataset.clone()
                 truth = target_samples.train_mask.long()
 
                 if len(config.query_hops) > 1 and config.experiments == 1:
@@ -350,7 +358,7 @@ if __name__ == '__main__':
     parser.add_argument("--attacks", default="confidence", type=str)
     parser.add_argument("--dataset", default="cora", type=str)
     parser.add_argument("--split", default="sampled", type=str)
-    parser.add_argument("--transductive", action=argparse.BooleanOptionalAction)
+    parser.add_argument("--transductive-split", action=argparse.BooleanOptionalAction)
     parser.add_argument("--inductive-inference", action=argparse.BooleanOptionalAction)
     parser.add_argument("--model", default="GCN", type=str)
     parser.add_argument("--batch-size", default=32, type=int)
@@ -372,6 +380,8 @@ if __name__ == '__main__':
     parser.add_argument("--name", default="unnamed", type=str)
     parser.add_argument("--datadir", default="./data", type=str)
     parser.add_argument("--savedir", default="./results", type=str)
+    parser.add_argument("--train-frac", default=0.5, type=float)
+    parser.add_argument("--val-frac", default=0.0, type=float)
     args = parser.parse_args()
     config = vars(args)
     config['make_roc_plots'] = True

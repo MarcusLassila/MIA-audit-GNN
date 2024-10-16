@@ -48,6 +48,8 @@ def train_gnn(model, dataset, config: TrainConfig, disable_tqdm=False, inductive
         edge_mask = dataset.inductive_mask
     else:
         edge_mask = dataset.random_edge_mask
+    if config.early_stopping and dataset.val_mask.sum().item() == 0:
+        raise Exception('Early stopping not possible without a validation set!')
     optimizer = config.optimizer(model.parameters(), lr=config.lr, weight_decay=config.weight_decay)
     loss_fn, criterion = config.loss_fn, config.criterion
     res = defaultdict(list)
@@ -56,19 +58,20 @@ def train_gnn(model, dataset, config: TrainConfig, disable_tqdm=False, inductive
     best_model = None
     for _ in tqdm(range(config.epochs), disable=disable_tqdm, desc=f"Training {model.__class__.__name__} on {config.device}"):
         train_loss, train_score = train_step_gnn(model, dataset, optimizer, loss_fn, criterion, edge_mask)
-        valid_loss, valid_score = valid_step_gnn(model, dataset, loss_fn, criterion, edge_mask)
         res['train_loss'].append(train_loss)
         res['train_score'].append(train_score)
-        res['valid_loss'].append(valid_loss)
-        res['valid_score'].append(valid_score)
-        if valid_loss < min_loss:
-            min_loss = valid_loss
-            best_model = deepcopy(model)
-            early_stopping_counter = 0
-        elif config.early_stopping > 0:
-            early_stopping_counter += 1
-            if early_stopping_counter == config.early_stopping:
-                break
+        if dataset.val_mask.sum().item() > 0:
+            valid_loss, valid_score = valid_step_gnn(model, dataset, loss_fn, criterion, edge_mask)
+            res['valid_loss'].append(valid_loss)
+            res['valid_score'].append(valid_score)
+            if valid_loss < min_loss:
+                min_loss = valid_loss
+                best_model = deepcopy(model)
+                early_stopping_counter = 0
+            elif config.early_stopping > 0:
+                early_stopping_counter += 1
+                if early_stopping_counter == config.early_stopping:
+                    break
     if config.early_stopping:
         model = best_model
     return res

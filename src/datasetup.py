@@ -208,7 +208,7 @@ def alternating_random_walk_node_split(dataset):
     node_index_B = torch.tensor(list(node_index_split[1]), dtype=torch.long)
     return node_index_A, node_index_B
 
-def new_train_split_mask(dataset, train_frac=0.4, val_frac=0.2, stratify=None):
+def new_train_split_mask(dataset, train_frac, val_frac, stratify=None):
     '''
     Return a copy of dataset with new train/val/test masks.
     '''
@@ -225,7 +225,7 @@ def new_train_split_mask(dataset, train_frac=0.4, val_frac=0.2, stratify=None):
     data.inductive_mask = train_split_interconnection_mask(data)
     return data
 
-def extract_subgraph(dataset, node_index, train_frac=0.4, val_frac=0.2):
+def extract_subgraph(dataset, node_index, train_frac, val_frac):
     '''
     Constructs a subgraph of dataset consisting of the nodes indexed in node_index with the edges linking them.
     Masks for training/validation/testing are constructed uniformly random with the specified proportions.
@@ -258,7 +258,7 @@ def extract_subgraph(dataset, node_index, train_frac=0.4, val_frac=0.2):
     data.__class__.__str__ = utils.graph_info
     return data
 
-def sample_subgraph(dataset, num_nodes, train_frac=0.4, val_frac=0.2, v2=True):
+def sample_subgraph(dataset, num_nodes, train_frac, val_frac, v2=True):
     '''
     Sample a subgraph by uniformly sample a number of nodes from the graph dataset.
     Masks for training/validation/testing are created uniformly at random with the specified proportions.
@@ -287,13 +287,13 @@ def disjoint_node_split(dataset, v2=True):
         node_index_B = node_index_complement(node_index_A, total_num_nodes)
     return node_index_A, node_index_B
 
-def disjoint_graph_split(dataset, v2=True):
+def disjoint_graph_split(dataset, train_frac, val_frac, v2=True):
     '''
     Split the graph dataset in two rougly equal sized disjoint subgraphs.
     '''
     target_index, shadow_index = disjoint_node_split(dataset, v2=v2)
-    target_set = extract_subgraph(dataset, target_index)
-    shadow_set = extract_subgraph(dataset, shadow_index)
+    target_set = extract_subgraph(dataset, target_index, train_frac=train_frac, val_frac=val_frac)
+    shadow_set = extract_subgraph(dataset, shadow_index, train_frac=train_frac, val_frac=val_frac)
     return target_set, shadow_set
 
 def parse_dataset(root, name):

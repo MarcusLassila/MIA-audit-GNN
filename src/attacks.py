@@ -52,7 +52,7 @@ class BasicMLPAttack:
             model=self.shadow_model,
             dataset=self.shadow_dataset,
             config=train_config,
-            inductive_split=not config.transductive,
+            inductive_split=not config.transductive_split,
         )
         evaluation.evaluate_graph_training(
             model=self.shadow_model,
@@ -157,10 +157,10 @@ class LiRA:
             optimizer=getattr(torch.optim, config.optimizer),
         )
         for _ in tqdm(range(config.num_shadow_models), desc=f"Training {config.num_shadow_models} shadow models for LiRA"):
-            if config.transductive:
-                shadow_dataset = datasetup.sample_subgraph(self.population, self.population.x.shape[0] // 2)
+            if config.transductive_split:
+                shadow_dataset = datasetup.sample_subgraph(self.population, self.population.x.shape[0] // 2, train_frac=config.train_frac, val_frac=config.val_frac)
             else:
-                shadow_dataset = datasetup.new_train_split_mask(self.population, train_frac=0.5, val_frac=0.2)
+                shadow_dataset = datasetup.new_train_split_mask(self.population, train_frac=config.train_frac, val_frac=config.val_frac)
             shadow_model = utils.fresh_model(
                 model_type=config.model,
                 num_features=shadow_dataset.num_features,
@@ -173,7 +173,7 @@ class LiRA:
                 dataset=shadow_dataset,
                 config=train_config,
                 disable_tqdm=True,
-                inductive_split=not config.transductive,
+                inductive_split=not config.transductive_split,
             )
             self.shadow_models.append(shadow_model)
     
@@ -263,11 +263,11 @@ class RMIA:
         )
         sim_target_idx, sim_shadow_idx = np.random.choice(np.arange(config.num_shadow_models), 2, replace=False)
         for i in tqdm(range(config.num_shadow_models), desc=f"Training {config.num_shadow_models} out models for RMIA"):
-            if config.transductive:
+            if config.transductive_split:
                 # TODO: Need to make sure models are unbiased in population in/out node distribution.
-                shadow_dataset = datasetup.sample_subgraph(self.population, self.population.x.shape[0] // 2)
+                shadow_dataset = datasetup.sample_subgraph(self.population, self.population.x.shape[0] // 2, train_frac=config.train_frac, val_frac=config.val_frac)
             else:
-                shadow_dataset = datasetup.new_train_split_mask(self.population, train_frac=0.5, val_frac=0.2)
+                shadow_dataset = datasetup.new_train_split_mask(self.population, train_frac=config.train_frac, val_frac=config.val_frac)
             shadow_model = utils.fresh_model(
                 model_type=config.model,
                 num_features=shadow_dataset.num_features,
@@ -280,7 +280,7 @@ class RMIA:
                 dataset=shadow_dataset,
                 config=train_config,
                 disable_tqdm=True,
-                inductive_split=not config.transductive,
+                inductive_split=not config.transductive_split,
             )
             self.shadow_models.append(shadow_model)
             if i == sim_target_idx:
