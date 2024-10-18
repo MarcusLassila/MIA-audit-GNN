@@ -52,7 +52,7 @@ class MembershipInferenceExperiment:
                 savepath = f'{savedir}/hinge_hist_class{label}_{config.name}.png'
                 utils.plot_hinge_histogram(hinge, label_mask=label_mask, train_mask=train_mask, savepath=savepath)
 
-    def visualize_aggregation_effect_on_attack_vulnerabilities(self, attacker, target_samples, target_fpr, num_hops=2, max_num_plotted_nodes=20):
+    def visualize_aggregation_effect_on_attack_vulnerabilities(self, attacker, target_samples, target_fpr, num_hops=2, max_num_plotted_nodes=10):
         '''
         Plot test statistic of nodes against decision threshold for nodes that are identified by the 0-hop attack, but not the k-hop attack, or vice versa.
         '''
@@ -66,45 +66,36 @@ class MembershipInferenceExperiment:
         hard_preds_0 = metrics_0['hard_preds']
         hard_preds_k = metrics_k['hard_preds']
         nodes_of_interest = torch.tensor((hard_preds_0 ^ hard_preds_k).nonzero()[0], dtype=torch.long)
-        node_index, _, _, _ = k_hop_subgraph(
-            node_idx=nodes_of_interest,
-            num_hops=num_hops,
-            edge_index=target_samples.edge_index[:, target_samples.inductive_mask],
-            relabel_nodes=False,
-            num_nodes=target_samples.x.shape[0],
-        )
-        soft_preds_0_mean = soft_preds_0.mean()
-        soft_preds_0_std = soft_preds_0.std()
-        soft_preds_k_mean = soft_preds_k.mean()
-        soft_preds_k_std = soft_preds_k.std()
-        print(f'{attack_name} 0-hop test statistic (all nodes): {soft_preds_0_mean:.4f} ({soft_preds_0_std:.4f})')
-        print(f'{attack_name} 2-hop test statistic (all nodes): {soft_preds_k_mean:.4f} ({soft_preds_k_std:.4f})')
-        soft_preds_0_mean = soft_preds_0[node_index].mean()
-        soft_preds_0_std = soft_preds_0[node_index].std()
-        soft_preds_k_mean = soft_preds_k[node_index].mean()
-        soft_preds_k_std = soft_preds_k[node_index].std()
-        print(f'{attack_name} 0-hop test statistic (nodes of interest): {soft_preds_0_mean:.4f} ({soft_preds_0_std:.4f})')
-        print(f'{attack_name} 2-hop test statistic (nodes of interest): {soft_preds_k_mean:.4f} ({soft_preds_k_std:.4f})')
+        means = torch.zeros(size=(nodes_of_interest.shape[0], 2))
+        for i, node in enumerate(nodes_of_interest):
+            node_index, _, _, _ = k_hop_subgraph(
+                node_idx=node.item(),
+                num_hops=num_hops,
+                edge_index=target_samples.edge_index[:, target_samples.inductive_mask],
+                relabel_nodes=False,
+                num_nodes=target_samples.x.shape[0],
+            )
+            means[i, 0] = soft_preds_0[node_index].mean()
+            means[i, 1] = soft_preds_k[node_index].mean()
 
-        # Select representative portions of nodes that are identified by the 0-hop attack, but not k-hop attack, and vice versa.
-        index_0_pos = torch.tensor((hard_preds_0 & ~hard_preds_k).nonzero()[0], dtype=torch.long)
-        index_k_pos = torch.tensor((hard_preds_k & ~hard_preds_0).nonzero()[0], dtype=torch.long)
-        index_0_pos = index_0_pos[torch.randperm(index_0_pos.shape[0])]
-        index_k_pos = index_k_pos[torch.randperm(index_k_pos.shape[0])]
-        index_size_0 = int(max_num_plotted_nodes * index_0_pos.shape[0] / nodes_of_interest.shape[0])
-        index_size_k = int(max_num_plotted_nodes * index_k_pos.shape[0] / nodes_of_interest.shape[0])
-        node_index_subset = torch.concat([index_0_pos[:index_size_0], index_k_pos[:index_size_k]])
-        node_index_subset = node_index_subset[torch.randperm(node_index_subset.shape[0])]
-        preds_0 = soft_preds_0[node_index_subset]
-        preds_k = soft_preds_k[node_index_subset]
-        indices = torch.arange(node_index_subset.shape[0])
+        perm_mask = torch.randperm(nodes_of_interest.shape[0])
+        node_index = nodes_of_interest[perm_mask][:max_num_plotted_nodes]
+        labels = means[perm_mask][:max_num_plotted_nodes]
+        preds_0 = soft_preds_0[node_index]
+        preds_k = soft_preds_k[node_index]
+        indices = torch.arange(1, max_num_plotted_nodes + 1)
         savepath = f'{self.config.savedir}/{self.config.name}_{attack_name}_node_vulnerabilities.png'
         low, high, diff = min(threshold_0, threshold_k), max(threshold_0, threshold_k), abs(threshold_0 - threshold_k)
         spread = 2
+
+        plt.figure(figsize=(8, 8))
         plt.scatter(indices, preds_0, label='0-hop')
         plt.scatter(indices, preds_k, label=f'{num_hops}-hop', marker='x')
         plt.plot(indices, torch.ones_like(indices) * threshold_0, label=r'$\gamma$ 0-hop')
         plt.plot(indices, torch.ones_like(indices) * threshold_k, label=rf'$\gamma$ {num_hops}-hop')
+        for i in range(max_num_plotted_nodes):
+            plt.text(indices[i], preds_0[i], f'{labels[i, 0]:.1f}', fontsize=12, ha='left', va='bottom')
+            plt.text(indices[i], preds_k[i], f'{labels[i, 1]:.1f}', fontsize=12, ha='right', va='bottom')
         plt.xticks(np.arange(indices.shape[0]))
         plt.xlabel('Node id')
         plt.ylabel('Test statistic')
