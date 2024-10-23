@@ -209,13 +209,14 @@ class MembershipInferenceExperiment:
         config = self.config
         detection_table = defaultdict(list)
         for attack in config.attacks:
+            subtags = [tag for tag in tags if tag.startswith(attack)]
             detection_counts = np.stack(detection_stats[attack])
             detection_counts_mean = np.mean(detection_counts, axis=0)
             detection_counts_std = np.std(detection_counts, axis=0)
             i = 0
-            for r in range(1, len(tags) + 1):
-                for idx in combinations(range(len(tags)), r):
-                    key = '+'.join(tags[j].split('_')[1] for j in idx)
+            for r in range(1, len(subtags) + 1):
+                for idx in combinations(range(len(subtags)), r):
+                    key = '+'.join(subtags[j].split('_')[1] for j in idx)
                     detection_table[key].append(f'{detection_counts_mean[i]:.2f} ({detection_counts_std[i]:.2f})')
                     i += 1
         return pd.DataFrame(detection_table, index=[config.name + '_' + attack for attack in config.attacks])
@@ -230,9 +231,9 @@ class MembershipInferenceExperiment:
         def make_tag(attack: str, num_hops: int, inductive_flag: bool):
             return f'{attack}_{num_hops}{"I" if inductive_flag else "T"}'
 
-        for i_experiment in range(config.experiments):
-            print(f'Running experiment {i_experiment + 1}/{config.experiments}.')
-
+        for i_experiment in range(1, config.experiments + 1):
+            print(f'Running experiment {i_experiment}/{config.experiments}.')
+            tags = [] # Used to label attack setups.
             # Train and evaluate target model.
             target_dataset, other_half = datasetup.disjoint_graph_split(dataset, train_frac=config.train_frac, val_frac=config.val_frac)
             target_model = self.train_target_model(target_dataset)
@@ -307,7 +308,7 @@ class MembershipInferenceExperiment:
 
                 soft_preds = []
                 true_positives = []
-                tags = [] # Used to label detection count dataframe
+
                 # Run attack using the specified set of k-hop neighborhood queries.
                 for num_hops, inductive_flag in self.query_generator():
                     tag = make_tag(attack, num_hops, inductive_flag)
@@ -331,14 +332,11 @@ class MembershipInferenceExperiment:
                 detection_stats[attack].append(detection_counts)
 
         if config.make_roc_plots:
-            for attack in config.attacks:
-                savepath = f'{config.savedir}/{config.name}_roc_loglog.png'
-                for num_hops, inductive_flag in self.query_generator():
-                    tag = make_tag(attack, num_hops, inductive_flag)
-                    savepath = f'{config.savedir}/{config.name}_{tag}_roc_loglog.png'
-                    fprs = attack_stats[f'{tag}_FPR']
-                    tprs = attack_stats[f'{tag}_TPR']
-                    utils.plot_multi_roc_loglog(fprs, tprs, savepath=savepath)
+            for tag in tags:
+                savepath = f'{config.savedir}/{config.name}_{tag}_roc_loglog.png'
+                fprs = attack_stats[f'{tag}_FPR']
+                tprs = attack_stats[f'{tag}_TPR']
+                utils.plot_multi_roc_loglog(fprs, tprs, savepath=savepath)
 
         train_stats_df = self.parse_train_stats(train_stats)
         attack_stats_df = self.parse_attack_stats(attack_stats)
