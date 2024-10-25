@@ -43,12 +43,3 @@ Alternatively, run "src/run_mia.py" which only run one MIA simulation experiment
 ### Test
 
 run "python -m unittest"
-
-### TODO
-
-1. Add support for PPI and other multi graph datasets.
-2. Extend 0 vs 2-hop test statistic visualization. (Mostly done)
-3. Refactor membership inference experiment. (Mostly done)
-4. Rethink how inductive training split is handled (should trainer copy dataset?). (Mostly done)
-5. Replace printouts by logger?
-6. Stop using validation set?
