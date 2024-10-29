@@ -363,13 +363,8 @@ class RMIA:
     def score(self, target_samples, num_hops, inductive_inference):
         ratioX = self.ratio(target_samples, num_hops, inductive_inference, interp_from_out_models=True)
         ratioZ = self.ratio(self.population, num_hops, inductive_inference, interp_from_out_models=False)
-        thresholds = ratioZ * self.gamma
-        count = torch.zeros_like(ratioX)
-        for i, x in enumerate(ratioX):
-            count[i] = (x > thresholds).sum().item()
-        sizeZ = self.population.x.shape[0]
-        return count / sizeZ
-    
+        return torch.tensor([(x > ratioZ * self.gamma).float().mean().item() for x in ratioX])
+
     def run_attack(self, target_samples, num_hops=0, inductive_inference=True):
         target_samples.to(self.config.device)
         self.population.to(self.config.device)
