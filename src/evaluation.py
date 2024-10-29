@@ -41,7 +41,7 @@ def evaluate_binary_classification(preds, truth, target_fpr):
         'fixed_FPR_threshold': threshold,
     }
 
-def k_hop_query(model, dataset, query_nodes, num_hops=0, inductive_split=False):
+def k_hop_query(model, dataset, query_nodes, num_hops=0, inductive_split=False, discard_features=False):
     '''
     Queries the model for each node in in query_nodes,
     using the local subgraph definded by the "num_hops"-hop neigborhood.
@@ -57,10 +57,16 @@ def k_hop_query(model, dataset, query_nodes, num_hops=0, inductive_split=False):
     with torch.inference_mode():
         if num_hops == 0:
             empty_edge_index = torch.tensor([[],[]], dtype=torch.int64).to(dataset.edge_index.device)
-            predictions = model(dataset.x[query_nodes], empty_edge_index)
+            if discard_features:
+                predictions = model(dataset.x[query_nodes] * 0, empty_edge_index)
+            else:
+                predictions = model(dataset.x[query_nodes], empty_edge_index)
         elif num_hops == model.num_layers:
             edge_index = dataset.edge_index[:, dataset.inductive_mask] if inductive_split else dataset.edge_index[:, dataset.random_edge_mask]
-            predictions = model(dataset.x[query_nodes], edge_index)
+            if discard_features:
+                predictions = model(dataset.x[query_nodes] * 0, edge_index)
+            else:
+                predictions = model(dataset.x[query_nodes], edge_index)
         else:
             edge_index = dataset.edge_index[:, dataset.inductive_mask] if inductive_split else dataset.edge_index[:, dataset.random_edge_mask]
             predictions = []
@@ -72,7 +78,10 @@ def k_hop_query(model, dataset, query_nodes, num_hops=0, inductive_split=False):
                     relabel_nodes=True,
                     num_nodes=dataset.x.shape[0],
                 )
-                pred = model(dataset.x[node_index], sub_edge_index)[v_idx].squeeze()
+                if discard_features:
+                    pred = model(dataset.x[node_index] * 0, sub_edge_index)[v_idx].squeeze()
+                else:
+                    pred = model(dataset.x[node_index], sub_edge_index)[v_idx].squeeze()
                 predictions.append(pred)
             predictions = torch.stack(predictions)
     assert predictions.shape == torch.Size([len(query_nodes), dataset.num_classes])

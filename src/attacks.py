@@ -116,7 +116,7 @@ class ConfidenceAttack:
         self.target_model = target_model
         self.config = config
     
-    def run_attack(self, target_samples, num_hops=0, inductive_inference=True):
+    def run_attack(self, target_samples, num_hops=0, inductive_inference=True, discard_features=False):
         num_target_samples = target_samples.x.shape[0]
         with torch.inference_mode():
             preds = evaluation.k_hop_query(
@@ -125,6 +125,7 @@ class ConfidenceAttack:
                 query_nodes=torch.arange(num_target_samples),
                 num_hops=num_hops,
                 inductive_split=inductive_inference,
+                discard_features=discard_features,
             )
             row_idx = torch.arange(num_target_samples)
             confidences = preds[row_idx, target_samples.y] # Unnormalized for numerical stability

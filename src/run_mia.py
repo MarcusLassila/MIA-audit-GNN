@@ -59,14 +59,17 @@ class MembershipInferenceExperiment:
         attack_name = attacker.__class__.__name__
         soft_preds_0 = attacker.run_attack(target_samples=target_samples, num_hops=0)
         soft_preds_k = attacker.run_attack(target_samples=target_samples, num_hops=num_hops, inductive_inference=True)
+        soft_preds_d = attacker.run_attack(target_samples=target_samples, num_hops=num_hops, inductive_inference=True, discard_features=True)
         metrics_0 = evaluation.evaluate_binary_classification(preds=soft_preds_0, truth=target_samples.train_mask.long(), target_fpr=target_fpr)
         metrics_k = evaluation.evaluate_binary_classification(preds=soft_preds_k, truth=target_samples.train_mask.long(), target_fpr=target_fpr)
+        metrics_d = evaluation.evaluate_binary_classification(preds=soft_preds_d, truth=target_samples.train_mask.long(), target_fpr=target_fpr)
         threshold_0 = metrics_0['fixed_FPR_threshold']
         threshold_k = metrics_k['fixed_FPR_threshold']
+        threshold_d = metrics_d['fixed_FPR_threshold']
         hard_preds_0 = metrics_0['hard_preds']
         hard_preds_k = metrics_k['hard_preds']
         nodes_of_interest = torch.tensor((hard_preds_0 ^ hard_preds_k).nonzero()[0], dtype=torch.long)
-        means = torch.zeros(size=(nodes_of_interest.shape[0], 2))
+        means = torch.zeros(size=(nodes_of_interest.shape[0], 3))
         for i, node in enumerate(nodes_of_interest):
             node_index, _, _, _ = k_hop_subgraph(
                 node_idx=node.item(),
@@ -77,26 +80,32 @@ class MembershipInferenceExperiment:
             )
             means[i, 0] = soft_preds_0[node_index].mean()
             means[i, 1] = soft_preds_k[node_index].mean()
+            means[i, 2] = soft_preds_d[node_index].mean()
 
         perm_mask = torch.randperm(nodes_of_interest.shape[0])
         node_index = nodes_of_interest[perm_mask][:max_num_plotted_nodes]
         labels = means[perm_mask][:max_num_plotted_nodes]
         preds_0 = soft_preds_0[node_index]
         preds_k = soft_preds_k[node_index]
+        preds_d = soft_preds_d[node_index]
         indices = torch.arange(1, max_num_plotted_nodes + 1)
-        savepath = f'{self.config.savedir}/{self.config.name}_{attack_name}_node_vulnerabilities.png'
+        savepath = f'{self.config.savedir}/{self.config.name}_{attack_name}_node_vulnerabilities_all.png'
         low, high, diff = min(threshold_0, threshold_k), max(threshold_0, threshold_k), abs(threshold_0 - threshold_k)
         spread = 2
 
-        plt.figure(figsize=(8, 8))
+        plt.figure(figsize=(10, 10))
         plt.scatter(indices, preds_0, label='0-hop')
         plt.scatter(indices, preds_k, label=f'{num_hops}-hop', marker='x')
+        plt.scatter(indices, preds_d, label=f'No-features', marker='+')
         plt.plot(indices, torch.ones_like(indices) * threshold_0, label=r'$\gamma$ 0-hop')
         plt.plot(indices, torch.ones_like(indices) * threshold_k, label=rf'$\gamma$ {num_hops}-hop')
+        plt.plot(indices, torch.ones_like(indices) * threshold_d, label=rf'$\gamma$ no features')
         for i in range(max_num_plotted_nodes):
             plt.text(indices[i], preds_0[i], f'{labels[i, 0]:.1f}', fontsize=12, ha='left', va='bottom')
             plt.text(indices[i], preds_k[i], f'{labels[i, 1]:.1f}', fontsize=12, ha='right', va='bottom')
+            plt.text(indices[i], preds_d[i], f'{labels[i, 2]:.1f}', fontsize=12, ha='left', va='top')
         plt.xticks(np.arange(indices.shape[0]))
+        plt.yticks(np.arange(-1,12))
         plt.xlabel('Node id')
         plt.ylabel('Test statistic')
         if attack_name == "LiRA":
