@@ -14,6 +14,7 @@ from torch_geometric.nn import MLP
 from torch.utils.data import DataLoader, TensorDataset
 from torchmetrics import Accuracy
 from tqdm.auto import tqdm
+import copy
 
 class BasicMLPAttack:
 
@@ -150,7 +151,7 @@ class LiRA:
         train_config = trainer.TrainConfig(
             criterion=criterion,
             device=config.device,
-            epochs=config.epochs_target,
+            epochs=config.epochs_shadow,
             early_stopping=config.early_stopping,
             loss_fn=F.cross_entropy,
             lr=config.lr,
@@ -243,11 +244,38 @@ class RMIA:
         self.population = population
         self.config = config
         self.shadow_models = []
+        self.shadow_datasets = []
         self.out_size = population.x.shape[0]
         self.gamma = config.rmia_gamma
+        self.partition_population()
         self.train_shadow_models()
         self.offline_a = self.select_offline_a()
         print("offline_a:", self.offline_a)
+
+    def partition_population(self):
+        '''
+        Partition the training nodes for the shadow models such that each model is trained on 50% of the population nodes.
+        '''
+        config = self.config
+        shadow_indices = [[] for _ in range(config.num_shadow_models)]
+        node_indices = np.arange(self.population.num_nodes)
+        for node_index in node_indices:
+            chosen_models = np.random.choice(config.num_shadow_models, config.num_shadow_models // 2, replace=False)
+            for model_index in chosen_models:
+                shadow_indices[model_index].append(node_index)
+        for node_index in shadow_indices:
+            node_index = torch.tensor(node_index, dtype=torch.long)
+            shadow_dataset = copy.deepcopy(self.population)
+            train_mask = torch.zeros(shadow_dataset.num_nodes, dtype=torch.bool)
+            train_mask[node_index] = True
+            test_mask = torch.zeros(shadow_dataset.num_nodes, dtype=torch.bool)
+            test_mask[~node_index] = True
+            val_mask = torch.zeros(shadow_dataset.num_nodes, dtype=torch.bool)
+            shadow_dataset.train_mask = train_mask
+            shadow_dataset.test_mask = test_mask
+            shadow_dataset.val_mask = val_mask
+            shadow_dataset.inductive_mask = datasetup.train_split_interconnection_mask(shadow_dataset)
+            self.shadow_datasets.append(shadow_dataset)
 
     def train_shadow_models(self):
         config = self.config
@@ -255,20 +283,15 @@ class RMIA:
         train_config = trainer.TrainConfig(
             criterion=criterion,
             device=config.device,
-            epochs=config.epochs_target,
-            early_stopping=config.early_stopping,
+            epochs=config.epochs_shadow,
+            early_stopping=0,
             loss_fn=F.cross_entropy,
             lr=config.lr,
             weight_decay=config.weight_decay,
             optimizer=getattr(torch.optim, config.optimizer),
         )
-        sim_target_idx, sim_shadow_idx = np.random.choice(np.arange(config.num_shadow_models), 2, replace=False)
         for i in tqdm(range(config.num_shadow_models), desc=f"Training {config.num_shadow_models} out models for RMIA"):
-            if config.inductive_split:
-                shadow_dataset = datasetup.new_train_split_mask(self.population, train_frac=config.train_frac, val_frac=config.val_frac)
-            else:
-                # TODO: Need to make sure models are unbiased in population in/out node distribution.
-                shadow_dataset = datasetup.sample_subgraph(self.population, self.population.x.shape[0] // 2, train_frac=config.train_frac, val_frac=config.val_frac)
+            shadow_dataset = self.shadow_datasets[i]
             shadow_model = utils.fresh_model(
                 model_type=config.model,
                 num_features=shadow_dataset.num_features,
@@ -284,14 +307,11 @@ class RMIA:
                 inductive_split=config.inductive_split,
             )
             self.shadow_models.append(shadow_model)
-            if i == sim_target_idx:
-                self.sim_target = (shadow_model, shadow_dataset)
-            elif i == sim_shadow_idx:
-                self.sim_shadow = (shadow_model, shadow_dataset)
 
     def select_offline_a(self):
-        sim_target_model, sim_target_dataset = self.sim_target
-        sim_shadow_model, sim_shadow_dataset = self.sim_shadow
+        target_index, shadow_index = np.random.choice(self.config.num_shadow_models, 2, replace=False)
+        sim_target_model, sim_target_dataset = self.shadow_models[target_index], self.shadow_datasets[target_index]
+        sim_shadow_model, sim_shadow_dataset = self.shadow_models[shadow_index], self.shadow_datasets[shadow_index]
         # Assumes the nodes are labeled the same in sim_target_dataset and sim_shadow_dataset.
         target_samples = datasetup.masked_subgraph(sim_target_dataset, ~(sim_target_dataset.val_mask | sim_shadow_dataset.train_mask))
         population = datasetup.masked_subgraph(sim_shadow_dataset, ~(sim_target_dataset.train_mask))
@@ -334,12 +354,12 @@ class RMIA:
             with torch.inference_mode():
                 preds = evaluation.k_hop_query(
                     model=shadow_model,
-                    dataset=dataset,
+                    dataset=target_samples,
                     query_nodes=row_idx,
                     num_hops=num_hops,
                     inductive_split=inductive_inference,
                 )
-                shadow_confidences.append(F.softmax(preds, dim=1)[row_idx, dataset.y])
+                shadow_confidences.append(F.softmax(preds, dim=1)[row_idx, target_samples.y])
         shadow_confidences = torch.stack(shadow_confidences)
         if interp_from_out_models:
             pr_out = shadow_confidences.mean(dim=0)
@@ -351,12 +371,12 @@ class RMIA:
         with torch.inference_mode():
             preds = evaluation.k_hop_query(
                 model=self.target_model,
-                dataset=dataset,
+                dataset=target_samples,
                 query_nodes=row_idx,
                 num_hops=num_hops,
                 inductive_split=inductive_inference,
             )
-            target_confidence = F.softmax(preds, dim=1)[row_idx, dataset.y] 
+            target_confidence = F.softmax(preds, dim=1)[row_idx, target_samples.y]
         assert pr.shape == target_confidence.shape == torch.Size([num_target_samples])
         return target_confidence / pr
 

@@ -4,7 +4,8 @@ cora-GCN:
   dataset: "cora"
   model: "GCN"
   epochs_target: 500
-  experiments: 3
+  epochs_shadow: 20
+  experiments: 5
   hidden_dim_target: [64]
   query_hops: [0, 2]
   transductive: false

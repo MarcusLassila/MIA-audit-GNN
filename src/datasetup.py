@@ -271,7 +271,7 @@ def extract_subgraph(dataset, node_index, train_frac, val_frac):
     data.random_edge_mask = random_edge_mask(data)
     return data
 
-def sample_subgraph(dataset, num_nodes, train_frac, val_frac, v2=True):
+def sample_subgraph(dataset, num_nodes, train_frac, val_frac, v2=False):
     '''
     Sample a subgraph by uniformly sample a number of nodes from the graph dataset.
     Masks for training/validation/testing are created uniformly at random with the specified proportions.
@@ -286,7 +286,7 @@ def sample_subgraph(dataset, num_nodes, train_frac, val_frac, v2=True):
         node_index = sample_nodes(total_num_nodes, num_nodes, stratify=dataset.y)
     return extract_subgraph(dataset, node_index, train_frac=train_frac, val_frac=val_frac)
 
-def disjoint_node_split(dataset, v2=True):
+def disjoint_node_split(dataset, v2=False):
     '''
     Split the nodes into two disjoint sets.
     Return node index tensors for the two sets.
@@ -300,7 +300,7 @@ def disjoint_node_split(dataset, v2=True):
         node_index_B = node_index_complement(node_index_A, total_num_nodes)
     return node_index_A, node_index_B
 
-def disjoint_graph_split(dataset, train_frac, val_frac, v2=True):
+def disjoint_graph_split(dataset, train_frac, val_frac, v2=False):
     '''
     Split the graph dataset in two rougly equal sized disjoint subgraphs.
     '''

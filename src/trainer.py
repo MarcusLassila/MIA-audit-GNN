@@ -11,7 +11,7 @@ class TrainConfig:
     criterion: Callable[[Union[np.ndarray, torch.tensor], Union[np.ndarray, torch.tensor]], float]
     device: Union[str, torch.device]
     epochs: int
-    early_stopping: bool
+    early_stopping: int
     loss_fn: Callable[[Union[np.ndarray, torch.tensor], Union[np.ndarray, torch.tensor]], float]
     lr: float
     weight_decay: float

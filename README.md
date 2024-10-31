@@ -19,7 +19,8 @@ Alternatively, run "src/run_mia.py" which only run one MIA simulation experiment
 * --no-inductive_split: Use transductive training split, i.e. interconnections between training, validation and test set are kept.
 * --no-inductive-inference: Make inferences using the transductive training split.
 * --model: GCN, DecoupledGCN, GCNConv (single layer), SGC, GraphSAGE, GAT or GIN (case sensitive).
-* --epochs_target: Number of epochs to train target and shadow model.
+* --epochs_target: Number of epochs to train target model.
+* --epochs_shadow: Number of epochs to train shadow models.
 * --epochs-mlp-attack: Number of epochs to train the attack model in basic-mlp attack.
 * --batch-size: Size of mini-batches.
 * --lr: Learning rate when training target and shadow models.

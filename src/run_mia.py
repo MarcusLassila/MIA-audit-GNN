@@ -362,6 +362,7 @@ if __name__ == '__main__':
     parser.add_argument("--model", default="GCN", type=str)
     parser.add_argument("--batch-size", default=32, type=int)
     parser.add_argument("--epochs-target", default=20, type=int)
+    parser.add_argument("--epochs-shadow", default=20, type=int)
     parser.add_argument("--epochs-mlp-attack", default=100, type=int)
     parser.add_argument("--grid-search", action=argparse.BooleanOptionalAction)
     parser.add_argument("--lr", default=1e-2, type=float)
