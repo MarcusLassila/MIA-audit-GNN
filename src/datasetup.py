@@ -284,7 +284,7 @@ def disjoint_graph_split(graph, train_frac, val_frac, v2=False):
     target_index, shadow_index = disjoint_node_split(graph, v2=v2)
     target_graph = extract_subgraph(graph, target_index, train_frac=train_frac, val_frac=val_frac)
     shadow_graph = extract_subgraph(graph, shadow_index, train_frac=train_frac, val_frac=val_frac)
-    return target_graph, shadow_graph, target_index, shadow_index
+    return target_graph, shadow_graph
 
 def parse_dataset(root, name):
     match name:

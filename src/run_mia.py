@@ -385,6 +385,7 @@ if __name__ == '__main__':
     parser.add_argument("--savedir", default="./results", type=str)
     parser.add_argument("--train-frac", default=0.5, type=float)
     parser.add_argument("--val-frac", default=0.0, type=float)
+    parser.add_argument("--seed", default=0, type=int)
     args = parser.parse_args()
     config = vars(args)
     config['make_roc_plots'] = True
