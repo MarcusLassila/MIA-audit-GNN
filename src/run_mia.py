@@ -150,7 +150,7 @@ class MembershipInferenceExperiment:
             model=target_model,
             dataset=dataset,
             criterion=train_config.criterion,
-            inductive_inference=config.inductive_inference,
+            inductive_inference=config.inductive_split,
             training_results=train_res if plot_training_results else None,
             plot_title="Target model",
             savedir=config.savedir,
@@ -174,7 +174,7 @@ class MembershipInferenceExperiment:
                 model=mlp_reference_model,
                 dataset=dataset,
                 criterion=train_config.criterion,
-                inductive_inference=config.inductive_inference,
+                inductive_inference=config.inductive_split,
                 training_results=mlp_train_res if plot_training_results else None,
                 plot_title="MLP model",
                 savedir=config.savedir,
@@ -185,9 +185,11 @@ class MembershipInferenceExperiment:
         for num_hops in self.config.query_hops:
             if num_hops == 0:
                 yield (num_hops, True)
-            else:
+            elif self.config.inductive_inference is None:
                 yield (num_hops, True)
                 yield (num_hops, False)
+            else:
+                yield (num_hops, self.config.inductive_inference)
 
     def parse_train_stats(self, train_stats):
         return pd.DataFrame({
@@ -242,14 +244,14 @@ class MembershipInferenceExperiment:
                     dataset=target_dataset,
                     mask=target_dataset.train_mask,
                     criterion=self.criterion,
-                    inductive_inference=config.inductive_inference,
+                    inductive_inference=config.inductive_split,
                 ),
                 'test_score': evaluation.evaluate_graph_model(
                     model=target_model,
                     dataset=target_dataset,
                     mask=target_dataset.test_mask,
                     criterion=self.criterion,
-                    inductive_inference=config.inductive_inference,
+                    inductive_inference=config.inductive_split,
                 ),
             }
             train_stats['train_scores'].append(target_scores['train_score'])
@@ -279,17 +281,15 @@ class MembershipInferenceExperiment:
                     case "lira":
                         # In offline LiRA, the shadow models are trained on datasets that does not contain the target sample.
                         # Therefore we make a disjoint split and train shadow models on one part, and attack samples of the other part.
-                        population = other_half.clone()
                         attacker = attacks.LiRA(
                             target_model=target_model,
-                            population=population,
+                            population=other_half,
                             config=config,
                         )
                     case "rmia":
-                        population = other_half.clone()
                         attacker = attacks.RMIA(
                             target_model=target_model,
-                            population=population,
+                            population=other_half,
                             config=config,
                         )
                     case _:
@@ -342,7 +342,12 @@ class MembershipInferenceExperiment:
         detection_df = self.parse_detection_stats(detection_stats, tags)
         return train_stats_df, attack_stats_df, detection_df
 
+def set_seed(seed):
+    np.random.seed(seed)
+    torch.random.manual_seed(seed)
+
 def main(config):
+    set_seed(config['seed'])
     config['attacks'] = config['attacks'].split(',')
     config['dataset'] = config['dataset'].lower()
     config['device'] = 'cuda' if torch.cuda.is_available() else 'cpu'
@@ -351,7 +356,6 @@ def main(config):
     return mie.run()
 
 if __name__ == '__main__':
-    torch.random.manual_seed(0)
     parser = argparse.ArgumentParser()
     parser.add_argument("--attacks", default="confidence", type=str)
     parser.add_argument("--dataset", default="cora", type=str)

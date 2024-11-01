@@ -1,4 +1,3 @@
-import hypertuner
 import run_mia
 
 import yaml
@@ -21,7 +20,7 @@ def main():
     default_params = {
         'datadir': './data',
         'savedir': './results',
-        'early_stopping': 30,
+        'early_stopping': 0,
         'grid_search': False,
         'optimizer': 'Adam',
         'lr': 0.01,
@@ -32,8 +31,9 @@ def main():
         'make_roc_plots': True,
         'inductive_split': True,
         'inductive_inference': True,
-        'train_frac': 0.4,
-        'val_frac': 0.2,
+        'train_frac': 0.5,
+        'val_frac': 0.0,
+        'seed': 0,
     }
     for _, params in config.items():
         params = default_params | params

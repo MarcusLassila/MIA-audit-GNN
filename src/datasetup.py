@@ -42,7 +42,6 @@ def masked_subgraph(graph, mask):
         num_classes=graph.num_classes,
     )
     data.inductive_mask = train_split_interconnection_mask(data)
-    data.random_edge_mask = random_edge_mask(data)
     return data
 
 def train_val_test_masks(num_nodes, train_frac, val_frac, stratify=None):
@@ -72,15 +71,12 @@ def train_val_test_masks(num_nodes, train_frac, val_frac, stratify=None):
             test_mask[index[num_train_nodes + num_val_nodes:]] = True
     return train_mask, val_mask, test_mask
 
-def random_edge_mask(dataset):
-    train_mask, _, test_mask = train_val_test_masks(dataset.num_nodes, train_frac=0.5, val_frac=0.0, stratify=dataset.y)
-    mask = []
-    for a, b in dataset.edge_index.T:
-        mask.append(
-            train_mask[a] == train_mask[b]
-            and test_mask[a] == test_mask[b]
-        )
-    return torch.tensor(mask, dtype=torch.bool)
+def random_edge_mask(dataset, frac=0.5):
+    ''' Return a mask that uniformly randomly masks out a specified fraction of the edges. '''
+    mask = torch.ones(dataset.edge_index.shape[1], dtype=torch.bool)
+    index = np.random.choice(mask.shape[0], int(frac * mask.shape[0]), replace=False)
+    mask[index] = False
+    return mask
 
 def stochastic_block_model(root):
     block_sizes = [2000, 2000]
@@ -252,7 +248,6 @@ def extract_subgraph(graph, node_index, train_frac, val_frac):
         num_classes=graph.num_classes,
     )
     data.inductive_mask = train_split_interconnection_mask(data)
-    data.random_edge_mask = random_edge_mask(data)
     return data
 
 def sample_subgraph(dataset, num_nodes, train_frac, val_frac, v2=False):
@@ -282,14 +277,14 @@ def disjoint_node_split(dataset, v2=False):
         node_index_B = node_index_complement(node_index_A, dataset.num_nodes)
     return node_index_A, node_index_B
 
-def disjoint_graph_split(dataset, train_frac, val_frac, v2=False):
+def disjoint_graph_split(graph, train_frac, val_frac, v2=False):
     '''
     Split the graph dataset in two rougly equal sized disjoint subgraphs.
     '''
-    target_index, shadow_index = disjoint_node_split(dataset, v2=v2)
-    target_set = extract_subgraph(dataset, target_index, train_frac=train_frac, val_frac=val_frac)
-    shadow_set = extract_subgraph(dataset, shadow_index, train_frac=train_frac, val_frac=val_frac)
-    return target_set, shadow_set
+    target_index, shadow_index = disjoint_node_split(graph, v2=v2)
+    target_graph = extract_subgraph(graph, target_index, train_frac=train_frac, val_frac=val_frac)
+    shadow_graph = extract_subgraph(graph, shadow_index, train_frac=train_frac, val_frac=val_frac)
+    return target_graph, shadow_graph, target_index, shadow_index
 
 def parse_dataset(root, name):
     match name:
