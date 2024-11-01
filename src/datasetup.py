@@ -7,28 +7,11 @@ from torch_geometric.data import Data
 from torch_geometric.utils import degree, index_to_mask, mask_to_index, subgraph
 from collections import deque
 
-class SingleGraph(Data):
-
-    def __init__(self, *args, **kwargs):
-        super(SingleGraph, self).__init__(*args, **kwargs)
-        self.num_classes = self.y.max().item() + 1
-
-    def __str__(self):
-        return utils.graph_info(self)
-
-    @property
-    def num_nodes(self):
-        return self.x.shape[0]
-    
-    @property
-    def num_features(self):
-        return self.x.shape[1]
-
 def merge_graphs(graph_A, graph_B):
     x = torch.concat([graph_A.x, graph_B.x])
     y = torch.concat([graph_A.y, graph_B.y])
-    edge_index = torch.concat([graph_A.edge_index, graph_B.edge_index + graph_A.x.shape[0]], dim=1)
-    return SingleGraph(x=x, edge_index=edge_index, y=y)
+    edge_index = torch.concat([graph_A.edge_index, graph_B.edge_index + graph_A.num_nodes], dim=1)
+    return Data(x=x, edge_index=edge_index, y=y)
 
 def train_split_interconnection_mask(dataset):
     mask = []
@@ -49,13 +32,14 @@ def masked_subgraph(graph, mask):
         edge_index=graph.edge_index,
         relabel_nodes=True,
     )
-    data = SingleGraph(
+    data = Data(
         x=graph.x[mask],
         edge_index=edge_index,
         y=graph.y[mask],
         train_mask=graph.train_mask[mask],
         val_mask=graph.val_mask[mask],
         test_mask=graph.test_mask[mask],
+        num_classes=graph.num_classes,
     )
     data.inductive_mask = train_split_interconnection_mask(data)
     data.random_edge_mask = random_edge_mask(data)
@@ -89,7 +73,7 @@ def train_val_test_masks(num_nodes, train_frac, val_frac, stratify=None):
     return train_mask, val_mask, test_mask
 
 def random_edge_mask(dataset):
-    train_mask, _, test_mask = train_val_test_masks(dataset.x.shape[0], train_frac=0.5, val_frac=0.0, stratify=dataset.y)
+    train_mask, _, test_mask = train_val_test_masks(dataset.num_nodes, train_frac=0.5, val_frac=0.0, stratify=dataset.y)
     mask = []
     for a, b in dataset.edge_index.T:
         mask.append(
@@ -120,13 +104,14 @@ def stochastic_block_model(root):
         val_frac=0.2,
         stratify=dataset.y,
     )
-    data = SingleGraph(
+    data = Data(
         x=dataset.x,
         edge_index=dataset.edge_index,
         y=dataset.y,
         train_mask=train_mask,
         val_mask=val_mask,
         test_mask=test_mask,
+        num_classes=2,
     )
     data.inductive_mask = train_split_interconnection_mask(data)
     data.name = "SBM"
@@ -152,7 +137,7 @@ def sample_nodes(total_num_nodes, num_sampled_nodes, stratify=None):
     return node_index
 
 def sample_nodes_v2(dataset, num_nodes, num_neighbors):
-    node_index = sample_nodes(dataset.x.shape[0], num_nodes, stratify=dataset.y)
+    node_index = sample_nodes(dataset.num_nodes, num_nodes, stratify=dataset.y)
     node_index = node_index[torch.randperm(node_index.shape[0])]
     edge_index = dataset.edge_index
 
@@ -208,9 +193,8 @@ def random_walk(edge_index, available, path_length):
     return visited, available
 
 def alternating_random_walk_node_split(dataset):
-    total_num_nodes = dataset.x.shape[0]
     edge_index = dataset.edge_index
-    _, indices = degree(edge_index[0], num_nodes=total_num_nodes, dtype=torch.long).sort(descending=True)
+    _, indices = degree(edge_index[0], num_nodes=dataset.num_nodes, dtype=torch.long).sort(descending=True)
     available = [x.item() for x in indices]
 
     node_index_split = set(), set()
@@ -224,48 +208,48 @@ def alternating_random_walk_node_split(dataset):
     node_index_B = torch.tensor(list(node_index_split[1]), dtype=torch.long)
     return node_index_A, node_index_B
 
-def new_train_split_mask(dataset, train_frac, val_frac, stratify=None):
+def remasked_graph(graph, train_frac, val_frac, stratify=None):
     '''
     Return a copy of dataset with new train/val/test masks.
     '''
     train_mask, val_mask, test_mask = train_val_test_masks(
-        num_nodes=dataset.x.shape[0],
+        num_nodes=graph.num_nodes,
         train_frac=train_frac,
         val_frac=val_frac,
         stratify=stratify,
     )
-    data = SingleGraph(**dataset)
+    data = graph.clone()
     data.train_mask = train_mask
     data.val_mask = val_mask
     data.test_mask = test_mask
     data.inductive_mask = train_split_interconnection_mask(data)
     return data
 
-def extract_subgraph(dataset, node_index, train_frac, val_frac):
+def extract_subgraph(graph, node_index, train_frac, val_frac):
     '''
     Constructs a subgraph of dataset consisting of the nodes indexed in node_index with the edges linking them.
     Masks for training/validation/testing are constructed uniformly random with the specified proportions.
     '''
     edge_index, _ = subgraph(
         subset=node_index,
-        edge_index=dataset.edge_index,
+        edge_index=graph.edge_index,
         relabel_nodes=True,
-        num_nodes=dataset.x.shape[0],
+        num_nodes=graph.num_nodes,
     )
     train_mask, val_mask, test_mask = train_val_test_masks(
         num_nodes=node_index.shape[0],
         train_frac=train_frac,
         val_frac=val_frac,
-        stratify=dataset.y[node_index],
+        stratify=graph.y[node_index],
     )
-    data = SingleGraph(
-        x=dataset.x[node_index],
+    data = Data(
+        x=graph.x[node_index],
         edge_index=edge_index,
-        y=dataset.y[node_index],
+        y=graph.y[node_index],
         train_mask=train_mask,
         val_mask=val_mask,
         test_mask=test_mask,
-        name=dataset.name,
+        num_classes=graph.num_classes,
     )
     data.inductive_mask = train_split_interconnection_mask(data)
     data.random_edge_mask = random_edge_mask(data)
@@ -278,12 +262,11 @@ def sample_subgraph(dataset, num_nodes, train_frac, val_frac, v2=False):
     The keep_class_proportions flag specifies that the sampled subgraph should have about the same
     proportions of nodes for each class as the full graph.
     '''
-    total_num_nodes = dataset.x.shape[0]
-    assert 0 < num_nodes <= total_num_nodes
+    assert 0 < num_nodes <= dataset.num_nodes
     if v2:
         node_index = sample_nodes_v2(dataset, num_nodes, num_neighbors=[5, 5])
     else:
-        node_index = sample_nodes(total_num_nodes, num_nodes, stratify=dataset.y)
+        node_index = sample_nodes(dataset.num_nodes, num_nodes, stratify=dataset.y)
     return extract_subgraph(dataset, node_index, train_frac=train_frac, val_frac=val_frac)
 
 def disjoint_node_split(dataset, v2=False):
@@ -291,13 +274,12 @@ def disjoint_node_split(dataset, v2=False):
     Split the nodes into two disjoint sets.
     Return node index tensors for the two sets.
     '''
-    total_num_nodes = dataset.x.shape[0]
-    num_nodes_A = total_num_nodes // 2
+    num_nodes_A = dataset.num_nodes // 2
     if v2:
         node_index_A, node_index_B = alternating_random_walk_node_split(dataset) # Only supports balance = 0.5
     else:
-        node_index_A = sample_nodes(total_num_nodes, num_nodes_A, stratify=dataset.y)
-        node_index_B = node_index_complement(node_index_A, total_num_nodes)
+        node_index_A = sample_nodes(dataset.num_nodes, num_nodes_A, stratify=dataset.y)
+        node_index_B = node_index_complement(node_index_A, dataset.num_nodes)
     return node_index_A, node_index_B
 
 def disjoint_graph_split(dataset, train_frac, val_frac, v2=False):
@@ -336,11 +318,11 @@ def parse_dataset(root, name):
             dataset = stochastic_block_model(root)
         case _:
             raise ValueError("Unsupported dataset!")
-    dataset = SingleGraph(
+    dataset = Data(
         x=dataset.x,
         edge_index=dataset.edge_index,
         y=dataset.y,
-        name=dataset.name,
+        num_classes=dataset.num_classes,
     )
     return dataset
 

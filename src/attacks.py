@@ -98,7 +98,7 @@ class BasicMLPAttack:
         )
     
     def run_attack(self, target_samples, num_hops=0, inductive_inference=True):
-        num_target_samples = target_samples.x.shape[0]
+        num_target_samples = target_samples.num_nodes
         with torch.inference_mode():
             preds = evaluation.k_hop_query(
                 model=self.target_model,
@@ -118,7 +118,7 @@ class ConfidenceAttack:
         self.config = config
     
     def run_attack(self, target_samples, num_hops=0, inductive_inference=True):
-        num_target_samples = target_samples.x.shape[0]
+        num_target_samples = target_samples.num_nodes
         with torch.inference_mode():
             preds = evaluation.k_hop_query(
                 model=self.target_model,
@@ -159,10 +159,7 @@ class LiRA:
             optimizer=getattr(torch.optim, config.optimizer),
         )
         for _ in tqdm(range(config.num_shadow_models), desc=f"Training {config.num_shadow_models} shadow models for LiRA"):
-            if config.inductive_split:
-                shadow_dataset = datasetup.new_train_split_mask(self.population, train_frac=config.train_frac, val_frac=config.val_frac)
-            else:
-                shadow_dataset = datasetup.sample_subgraph(self.population, self.population.x.shape[0] // 2, train_frac=config.train_frac, val_frac=config.val_frac)
+            shadow_dataset = datasetup.remasked_graph(self.population, train_frac=config.train_frac, val_frac=config.val_frac, stratify=self.population.y)
             shadow_model = utils.fresh_model(
                 model_type=config.model,
                 num_features=shadow_dataset.num_features,
@@ -181,7 +178,7 @@ class LiRA:
     
     def get_mean_and_std(self, target_samples, num_hops, inductive_inference):
         hinges = []
-        num_target_samples = target_samples.x.shape[0]
+        num_target_samples = target_samples.num_nodes
         for shadow_model in self.shadow_models:
             shadow_model.eval()
             with torch.inference_mode():
@@ -210,7 +207,7 @@ class LiRA:
 
     def run_attack(self, target_samples, num_hops=0, inductive_inference=True):
         target_samples.to(self.config.device)
-        num_target_samples = target_samples.x.shape[0]
+        num_target_samples = target_samples.num_nodes
         means, stds = self.get_mean_and_std(target_samples, num_hops, inductive_inference)
         with torch.inference_mode():
             preds = evaluation.k_hop_query(
@@ -245,7 +242,7 @@ class RMIA:
         self.config = config
         self.shadow_models = []
         self.shadow_datasets = []
-        self.out_size = population.x.shape[0]
+        self.out_size = population.num_nodes
         self.gamma = config.rmia_gamma
         self.partition_population()
         self.train_shadow_models()
@@ -322,7 +319,7 @@ class RMIA:
             confidences = []
             with torch.inference_mode():
                 for model, dataset in (sim_shadow_model, target_samples), (sim_target_model, target_samples), (sim_shadow_model, population), (sim_target_model, population):
-                    row_idx = torch.arange(dataset.x.shape[0])
+                    row_idx = torch.arange(dataset.num_nodes)
                     preds = evaluation.k_hop_query(
                         model=model,
                         dataset=dataset,
@@ -333,20 +330,15 @@ class RMIA:
 
             ratioX = confidences[1] / (0.5 * ((offline_a + 1) * confidences[0] + 1 - offline_a))
             ratioZ = confidences[3] / confidences[2]
-            thresholds = ratioZ * self.gamma
-            count = torch.zeros_like(ratioX)
-            for i, x in enumerate(ratioX):
-                count[i] = (x > thresholds).sum().item()
-            sizeZ = population.x.shape[0]
-            score = count / sizeZ
+            score = torch.tensor([(x > ratioZ * self.gamma).float().mean().item() for x in ratioX])
             auroc = roc_auc_score(y_true=target_samples.train_mask, y_score=score)
             if auroc > best_auroc:
                 best_auroc = auroc
                 best_offline_a = offline_a
         return best_offline_a
 
-    def ratio(self, dataset, num_hops, inductive_inference, interp_from_out_models):
-        num_target_samples = dataset.x.shape[0]
+    def ratio(self, target_samples, num_hops, inductive_inference, interp_from_out_models):
+        num_target_samples = target_samples.num_nodes
         row_idx = torch.arange(num_target_samples)
         shadow_confidences = []
         for shadow_model in self.shadow_models:

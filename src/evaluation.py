@@ -70,7 +70,7 @@ def k_hop_query(model, dataset, query_nodes, num_hops=0, inductive_split=False):
                     num_hops=num_hops,
                     edge_index=edge_index,
                     relabel_nodes=True,
-                    num_nodes=dataset.x.shape[0],
+                    num_nodes=dataset.num_nodes,
                 )
                 pred = model(dataset.x[node_index], sub_edge_index)[v_idx].squeeze()
                 predictions.append(pred)

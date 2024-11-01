@@ -22,35 +22,35 @@ class MembershipInferenceExperiment:
         self.config = utils.Config(config)
         self.dataset = datasetup.parse_dataset(root=self.config.datadir, name=self.config.dataset)
         self.criterion = Accuracy(task="multiclass", num_classes=self.dataset.num_classes).to(self.config.device)
-        print(self.dataset)
+        print(utils.graph_info(self.dataset))
 
     def visualize_embedding_distribution(self):
         config = self.config
-        dataset = datasetup.sample_subgraph(self.dataset, self.dataset.x.shape[0], train_frac=config.train_frac, val_frac=config.val_frac)
+        dataset = datasetup.remasked_graph(self.dataset, train_frac=config.train_frac, val_frac=config.val_frac, stratify=self.dataset.y)
         savepath = f'{config.savedir}/embeddings/features.png'
         train_mask = ~dataset.test_mask
         utils.plot_embedding_2D_scatter(dataset.x, dataset.y, train_mask, savepath=savepath)
         target_model = self.train_target_model(dataset)
         target_model.eval()
-        query_nodes = torch.arange(0, dataset.x.shape[0])
+        query_nodes = torch.arange(0, dataset.num_nodes)
         savedir = f'{config.savedir}/embeddings'
-        query_hops = config.query_hops
-        savepath = f'{savedir}/emb_scatter_2D_{query_hops}hops_{config.name}.png'
-        with torch.inference_mode():
-            embs = evaluation.k_hop_query(
-                model=target_model,
-                dataset=dataset,
-                query_nodes=query_nodes,
-                num_hops=query_hops,
-                inductive_split=config.inductive_inference,
-            ).cpu()
-            dataset.to('cpu')
-            hinge = utils.hinge_loss(embs, dataset.y)
-            utils.plot_embedding_2D_scatter(embs=embs, y=dataset.y, train_mask=train_mask, savepath=savepath)
-            for label in range(dataset.num_classes):
-                label_mask = dataset.y == label
-                savepath = f'{savedir}/hinge_hist_class{label}_{config.name}.png'
-                utils.plot_hinge_histogram(hinge, label_mask=label_mask, train_mask=train_mask, savepath=savepath)
+        for query_hops in config.query_hops:
+            savepath = f'{savedir}/emb_scatter_2D_{query_hops}hops_{config.name}.png'
+            with torch.inference_mode():
+                embs = evaluation.k_hop_query(
+                    model=target_model,
+                    dataset=dataset,
+                    query_nodes=query_nodes,
+                    num_hops=query_hops,
+                    inductive_split=config.inductive_inference,
+                ).cpu()
+                dataset.to('cpu')
+                hinge = utils.hinge_loss(embs, dataset.y)
+                utils.plot_embedding_2D_scatter(embs=embs, y=dataset.y, train_mask=train_mask, savepath=savepath)
+                for label in range(dataset.num_classes):
+                    label_mask = dataset.y == label
+                    savepath = f'{savedir}/hinge_hist_class{label}_{config.name}.png'
+                    utils.plot_hinge_histogram(hinge, label_mask=label_mask, train_mask=train_mask, savepath=savepath)
 
     def visualize_aggregation_effect_on_attack_vulnerabilities(self, attacker, target_samples, target_fpr, num_hops=2, max_num_plotted_nodes=10):
         '''
@@ -73,7 +73,7 @@ class MembershipInferenceExperiment:
                 num_hops=num_hops,
                 edge_index=target_samples.edge_index[:, target_samples.inductive_mask],
                 relabel_nodes=False,
-                num_nodes=target_samples.x.shape[0],
+                num_nodes=target_samples.num_nodes,
             )
             means[i, 0] = soft_preds_0[node_index].mean()
             means[i, 1] = soft_preds_k[node_index].mean()
@@ -223,7 +223,6 @@ class MembershipInferenceExperiment:
 
     def run(self):
         config = self.config
-        dataset = self.dataset
         train_stats = defaultdict(list)
         attack_stats = defaultdict(list)
         detection_stats = defaultdict(list)
@@ -235,7 +234,7 @@ class MembershipInferenceExperiment:
             print(f'Running experiment {i_experiment}/{config.experiments}.')
             tags = [] # Used to label attack setups.
             # Train and evaluate target model.
-            target_dataset, other_half = datasetup.disjoint_graph_split(dataset, train_frac=config.train_frac, val_frac=config.val_frac)
+            target_dataset, other_half = datasetup.disjoint_graph_split(self.dataset, train_frac=config.train_frac, val_frac=config.val_frac)
             target_model = self.train_target_model(target_dataset)
             target_scores = {
                 'train_score': evaluation.evaluate_graph_model(
@@ -260,8 +259,8 @@ class MembershipInferenceExperiment:
                     case "basic-mlp":
                         if config.split == 'sampled':
                             shadow_dataset = datasetup.sample_subgraph(
-                                dataset,
-                                num_nodes=dataset.x.shape[0]//2,
+                                self.dataset,
+                                num_nodes=self.dataset.num_nodes//2,
                                 train_frac=config.train_frac,
                                 val_frac=config.val_frac
                             )

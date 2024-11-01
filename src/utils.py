@@ -52,10 +52,10 @@ def measure_execution_time(callable):
     return wrapper
 
 def average_degree(graph):
-    return degree(graph.edge_index[0], num_nodes=graph.x.shape[0], dtype=torch.float).mean().item()
+    return degree(graph.edge_index[0], num_nodes=graph.num_nodes, dtype=torch.float).mean().item()
 
 def fraction_isolated_nodes(graph):
-    _, _, mask = remove_isolated_nodes(graph.edge_index, num_nodes=graph.x.shape[0])
+    _, _, mask = remove_isolated_nodes(graph.edge_index, num_nodes=graph.num_nodes)
     return (~mask).float().mean().item()
 
 def execute_silently(callable, *args, **kwargs):
@@ -70,8 +70,7 @@ def stat_repr(arr):
     return f'{arr.mean():.4f} ({arr.std():.4f})'
 
 def graph_info(dataset):
-    name = dataset.name
-    num_nodes = dataset.x.shape[0]
+    num_nodes = dataset.num_nodes
     num_edges = dataset.edge_index.shape[1]
     num_features = dataset.num_features
     num_classes = dataset.num_classes
@@ -81,7 +80,7 @@ def graph_info(dataset):
     class_distr = class_counts / num_nodes
     avg_degree = average_degree(dataset)
     return (
-        f'Dataset: {name}\n'
+        f'Dataset properties\n'
         f'#Nodes: {num_nodes}\n'
         f'#Edges: {num_edges}\n'
         f'#Features: {num_features}\n'
