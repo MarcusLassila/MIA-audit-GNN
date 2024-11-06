@@ -236,7 +236,7 @@ class MembershipInferenceExperiment:
             print(f'Running experiment {i_experiment}/{config.experiments}.')
             tags = [] # Used to label attack setups.
             # Train and evaluate target model.
-            target_dataset, other_half = datasetup.disjoint_graph_split(self.dataset, train_frac=config.train_frac, val_frac=config.val_frac)
+            target_dataset, other_half, target_index, other_index = datasetup.disjoint_graph_split(self.dataset, train_frac=config.train_frac, val_frac=config.val_frac, v2=True)
             target_model = self.train_target_model(target_dataset)
             target_scores = {
                 'train_score': evaluation.evaluate_graph_model(
@@ -290,6 +290,7 @@ class MembershipInferenceExperiment:
                         attacker = attacks.RMIA(
                             target_model=target_model,
                             population=other_half,
+                            population_index=other_index,
                             config=config,
                         )
                     case _:
@@ -302,8 +303,8 @@ class MembershipInferenceExperiment:
                     target_samples = target_dataset.clone()
                 truth = target_samples.train_mask.long()
 
-                if len(config.query_hops) > 1 and config.experiments == 1:
-                    self.visualize_aggregation_effect_on_attack_vulnerabilities(attacker, target_samples, config.target_fpr, num_hops=2)
+                # if len(config.query_hops) > 1 and config.experiments == 1:
+                #     self.visualize_aggregation_effect_on_attack_vulnerabilities(attacker, target_samples, config.target_fpr, num_hops=2)
 
                 soft_preds = []
                 true_positives = []
@@ -312,7 +313,10 @@ class MembershipInferenceExperiment:
                 for num_hops, inductive_flag in self.query_generator():
                     tag = make_tag(attack, num_hops, inductive_flag)
                     tags.append(tag)
-                    preds = attacker.run_attack(target_samples=target_samples, num_hops=num_hops, inductive_inference=inductive_flag)
+                    if attack == "rmia":
+                        preds = attacker.run_attack(target_samples=target_samples, target_index=target_index, full_dataset=self.dataset, num_hops=num_hops, inductive_inference=inductive_flag)
+                    else:
+                        preds = attacker.run_attack(target_samples=target_samples, num_hops=num_hops, inductive_inference=inductive_flag)
                     metrics = evaluation.evaluate_binary_classification(preds, truth, config.target_fpr)
                     soft_preds.append(preds)
                     fpr, tpr = metrics['ROC']
@@ -385,6 +389,7 @@ if __name__ == '__main__':
     parser.add_argument("--savedir", default="./results", type=str)
     parser.add_argument("--train-frac", default=0.5, type=float)
     parser.add_argument("--val-frac", default=0.0, type=float)
+    parser.add_argument("--mc-samples-inference", default=1, type=int)
     parser.add_argument("--seed", default=0, type=int)
     args = parser.parse_args()
     config = vars(args)
@@ -392,8 +397,8 @@ if __name__ == '__main__':
     config['name'] = config['dataset'] + '_' + config['model']
     if config['inductive_split'] is None:
         config['inductive_split'] = True
-    if config['inductive_inference'] is None:
-        config['inductive_inference'] = True
+    #if config['inductive_inference'] is None:
+    #    config['inductive_inference'] = True
     print('Running MIA experiment.')
     print(utils.Config(config))
     print()

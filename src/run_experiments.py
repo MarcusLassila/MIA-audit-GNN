@@ -8,6 +8,7 @@ def add_name(params):
     params['name'] = '-'.join([
         params['dataset'],
         params['model'],
+        str(params['mc_samples_inference']),
     ])
 
 def main():
@@ -30,7 +31,7 @@ def main():
         'target_fpr': 0.01,
         'make_roc_plots': True,
         'inductive_split': True,
-        'inductive_inference': True,
+        'inductive_inference': None,
         'train_frac': 0.5,
         'val_frac': 0.0,
         'seed': 0,

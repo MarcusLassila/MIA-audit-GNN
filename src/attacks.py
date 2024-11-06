@@ -235,10 +235,11 @@ class RMIA:
     The offline RMIA attack from "Low-Cost High-Power Membership Inference Attacks".
     '''
 
-    def __init__(self, target_model, population, config):
+    def __init__(self, target_model, population, population_index, config):
         target_model.eval()
         self.target_model = target_model
         self.population = population
+        self.population_index = population_index
         self.config = config
         self.shadow_models = []
         self.shadow_datasets = []
@@ -337,20 +338,33 @@ class RMIA:
                 best_offline_a = offline_a
         return best_offline_a
 
-    def ratio(self, target_samples, num_hops, inductive_inference, interp_from_out_models):
+    def ratio(self, target_samples, target_index, full_dataset, num_hops, inductive_inference, interp_from_out_models):
+        target_samples.to(self.config.device)
+        for x, y, x2, y2 in zip(target_samples.x, target_samples.y, full_dataset.x[target_index], full_dataset.y[target_index]):
+            assert torch.allclose(x, x2) and torch.equal(y, y2)
         num_target_samples = target_samples.num_nodes
         row_idx = torch.arange(num_target_samples)
         shadow_confidences = []
         for shadow_model in self.shadow_models:
             shadow_model.eval()
             with torch.inference_mode():
-                preds = evaluation.k_hop_query(
-                    model=shadow_model,
-                    dataset=target_samples,
-                    query_nodes=row_idx,
-                    num_hops=num_hops,
-                    inductive_split=inductive_inference,
-                )
+                if num_hops > 0 and not inductive_inference:
+                    preds = evaluation.k_hop_query(
+                        model=shadow_model,
+                        dataset=full_dataset,
+                        query_nodes=target_index,
+                        num_hops=num_hops,
+                        inductive_split=False,
+                        monte_carlo_samples=self.config.mc_samples_inference,
+                    )
+                else:
+                    preds = evaluation.k_hop_query(
+                        model=shadow_model,
+                        dataset=target_samples,
+                        query_nodes=row_idx,
+                        num_hops=num_hops,
+                        inductive_split=inductive_inference,
+                    )
                 shadow_confidences.append(F.softmax(preds, dim=1)[row_idx, target_samples.y])
         shadow_confidences = torch.stack(shadow_confidences)
         if interp_from_out_models:
@@ -361,23 +375,34 @@ class RMIA:
             pr = shadow_confidences.mean(dim=0)
 
         with torch.inference_mode():
-            preds = evaluation.k_hop_query(
-                model=self.target_model,
-                dataset=target_samples,
-                query_nodes=row_idx,
-                num_hops=num_hops,
-                inductive_split=inductive_inference,
-            )
+            if num_hops > 0 and not inductive_inference:
+                preds = evaluation.k_hop_query(
+                    model=self.target_model,
+                    dataset=full_dataset,
+                    query_nodes=target_index,
+                    num_hops=num_hops,
+                    inductive_split=False,
+                    monte_carlo_samples=self.config.mc_samples_inference,
+                )
+            else:
+                preds = evaluation.k_hop_query(
+                    model=self.target_model,
+                    dataset=target_samples,
+                    query_nodes=row_idx,
+                    num_hops=num_hops,
+                    inductive_split=inductive_inference,
+                )
             target_confidence = F.softmax(preds, dim=1)[row_idx, target_samples.y]
         assert pr.shape == target_confidence.shape == torch.Size([num_target_samples])
         return target_confidence / pr
 
-    def score(self, target_samples, num_hops, inductive_inference):
-        ratioX = self.ratio(target_samples, num_hops, inductive_inference, interp_from_out_models=True)
-        ratioZ = self.ratio(self.population, num_hops, inductive_inference, interp_from_out_models=False)
+    def score(self, target_samples, target_index, full_dataset, num_hops, inductive_inference):
+        ratioX = self.ratio(target_samples, target_index, full_dataset, num_hops, inductive_inference, interp_from_out_models=True)
+        ratioZ = self.ratio(self.population, self.population_index, full_dataset, num_hops, inductive_inference, interp_from_out_models=False)
         return torch.tensor([(x > ratioZ * self.gamma).float().mean().item() for x in ratioX])
 
-    def run_attack(self, target_samples, num_hops=0, inductive_inference=True):
+    def run_attack(self, target_samples, target_index, full_dataset, num_hops=0, inductive_inference=True):
+        # target_samples = datasetup.extract_subgraph(full_dataset, target_index, self.config.train_frac, self.config.val_frac)
         target_samples.to(self.config.device)
         self.population.to(self.config.device)
-        return self.score(target_samples, num_hops, inductive_inference)
+        return self.score(target_samples, target_index, full_dataset, num_hops, inductive_inference)
