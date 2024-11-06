@@ -202,38 +202,38 @@ class MembershipInferenceExperiment:
         stats = defaultdict(list)
         for key, value in attack_stats.items():
             if isinstance(value[0], float):
-                key_content = key.split('_')
-                key = '_'.join(key_content[1:])
                 stats[f'{key}'].append(utils.stat_repr(value))
-        return pd.DataFrame(stats, index=[config.name + '_' + attack for attack in config.attacks])
+        return pd.DataFrame(stats, index=[config.name])
 
     def parse_detection_stats(self, detection_stats, tags):
         config = self.config
         detection_table = defaultdict(list)
-        for attack in config.attacks:
-            subtags = [tag for tag in tags if tag.startswith(attack)]
-            detection_counts = np.stack(detection_stats[attack])
-            detection_counts_mean = np.mean(detection_counts, axis=0)
-            detection_counts_std = np.std(detection_counts, axis=0)
-            i = 0
-            for r in range(1, len(subtags) + 1):
-                for idx in combinations(range(len(subtags)), r):
-                    key = '+'.join(subtags[j].split('_')[1] for j in idx)
-                    detection_table[key].append(f'{detection_counts_mean[i]:.2f} ({detection_counts_std[i]:.2f})')
-                    i += 1
-        return pd.DataFrame(detection_table, index=[config.name + '_' + attack for attack in config.attacks])
+        detection_counts = np.stack(detection_stats)
+        detection_counts_mean = np.mean(detection_counts, axis=0)
+        detection_counts_std = np.std(detection_counts, axis=0)
+        i = 0
+        for r in range(1, len(tags) + 1):
+            for idx in combinations(range(len(tags)), r):
+                key = '+'.join(tags[j] for j in idx)
+                detection_table[key].append(f'{detection_counts_mean[i]:.2f} ({detection_counts_std[i]:.2f})')
+                i += 1
+        return pd.DataFrame(detection_table, index=[config.name])
 
     def run(self):
         config = self.config
         train_stats = defaultdict(list)
         attack_stats = defaultdict(list)
-        detection_stats = defaultdict(list)
+        detection_stats = []
 
-        def make_tag(attack: str, num_hops: int, inductive_flag: bool):
-            return f'{attack}_{num_hops}{"I" if inductive_flag else "T"}'
+        def make_tag(num_hops: int, inductive_flag: bool):
+            return f'{num_hops}{"I" if inductive_flag else "T"}'
 
         for i_experiment in range(1, config.experiments + 1):
             print(f'Running experiment {i_experiment}/{config.experiments}.')
+
+            # Use fixed random seeds such that each experimental configuration is evaluated on the same dataset
+            set_seed(i_experiment)
+
             tags = [] # Used to label attack setups.
             # Train and evaluate target model.
             target_dataset, other_half = datasetup.disjoint_graph_split(self.dataset, train_frac=config.train_frac, val_frac=config.val_frac)
@@ -256,79 +256,79 @@ class MembershipInferenceExperiment:
             }
             train_stats['train_scores'].append(target_scores['train_score'])
             train_stats['test_scores'].append(target_scores['test_score'])
-            for attack in config.attacks:
-                match attack:
-                    case "basic-mlp":
-                        if config.split == 'sampled':
-                            shadow_dataset = datasetup.sample_subgraph(
-                                self.dataset,
-                                num_nodes=self.dataset.num_nodes//2,
-                                train_frac=config.train_frac,
-                                val_frac=config.val_frac
-                            )
-                        else:
-                            shadow_dataset = other_half.clone()
-                        attacker = attacks.BasicMLPAttack(
-                            target_model=target_model,
-                            shadow_dataset=shadow_dataset,
-                            config=config,
+            match config.attack:
+                case "basic-mlp":
+                    if config.split == 'sampled':
+                        shadow_dataset = datasetup.sample_subgraph(
+                            self.dataset,
+                            num_nodes=self.dataset.num_nodes//2,
+                            train_frac=config.train_frac,
+                            val_frac=config.val_frac
                         )
-                    case "confidence":
-                        attacker = attacks.ConfidenceAttack(
-                            target_model=target_model,
-                            config=config,
-                        )
-                    case "lira":
-                        # In offline LiRA, the shadow models are trained on datasets that does not contain the target sample.
-                        # Therefore we make a disjoint split and train shadow models on one part, and attack samples of the other part.
-                        attacker = attacks.LiRA(
-                            target_model=target_model,
-                            population=other_half,
-                            config=config,
-                        )
-                    case "rmia":
-                        attacker = attacks.RMIA(
-                            target_model=target_model,
-                            population=other_half,
-                            config=config,
-                        )
-                    case _:
-                        raise AttributeError(f"No attack named {attack}")
+                    else:
+                        shadow_dataset = other_half.clone()
+                    attacker = attacks.BasicMLPAttack(
+                        target_model=target_model,
+                        shadow_dataset=shadow_dataset,
+                        config=config,
+                    )
+                case "confidence":
+                    attacker = attacks.ConfidenceAttack(
+                        target_model=target_model,
+                        config=config,
+                    )
+                case "lira":
+                    # In offline LiRA, the shadow models are trained on datasets that does not contain the target sample.
+                    # Therefore we make a disjoint split and train shadow models on one part, and attack samples of the other part.
+                    attacker = attacks.LiRA(
+                        target_model=target_model,
+                        population=other_half,
+                        config=config,
+                    )
+                case "rmia":
+                    attacker = attacks.RMIA(
+                        target_model=target_model,
+                        population=other_half,
+                        config=config,
+                    )
+                case _:
+                    raise AttributeError(f"No attack named {config.attack}")
 
-                # Remove validation mask from target samples
-                if target_dataset.val_mask.sum().item() > 0:
-                    target_samples = datasetup.masked_subgraph(target_dataset, ~target_dataset.val_mask)
-                else:
-                    target_samples = target_dataset.clone()
-                truth = target_samples.train_mask.long()
+            # Remove validation mask from target samples
+            if target_dataset.val_mask.sum().item() > 0:
+                target_samples = datasetup.masked_subgraph(target_dataset, ~target_dataset.val_mask)
+            else:
+                target_samples = target_dataset.clone()
+            truth = target_samples.train_mask.long()
 
-                if len(config.query_hops) > 1 and config.experiments == 1:
-                    self.visualize_aggregation_effect_on_attack_vulnerabilities(attacker, target_samples, config.target_fpr, num_hops=2)
+            if len(config.query_hops) > 1 and config.experiments == 1:
+                pass
+                # self.visualize_aggregation_effect_on_attack_vulnerabilities(attacker, target_samples, config.target_fpr, num_hops=2)
 
-                soft_preds = []
-                true_positives = []
+            soft_preds = []
+            true_positives = []
 
-                # Run attack using the specified set of k-hop neighborhood queries.
-                for num_hops, inductive_flag in self.query_generator():
-                    tag = make_tag(attack, num_hops, inductive_flag)
-                    tags.append(tag)
-                    preds = attacker.run_attack(target_samples=target_samples, num_hops=num_hops, inductive_inference=inductive_flag)
-                    metrics = evaluation.evaluate_binary_classification(preds, truth, config.target_fpr)
-                    soft_preds.append(preds)
-                    fpr, tpr = metrics['ROC']
-                    true_positives.append(metrics['TP'])
-                    attack_stats[f'{tag}_FPR'].append(fpr)
-                    attack_stats[f'{tag}_TPR'].append(tpr)
-                    attack_stats[f'{tag}_AUC'].append(metrics['AUC'])
-                    attack_stats[f'{tag}_TPR@{config.target_fpr}FPR'].append(metrics['TPR@FPR'])
+            # Run attack using the specified set of k-hop neighborhood queries.
+            for num_hops, inductive_flag in self.query_generator():
+                tag = make_tag(num_hops, inductive_flag)
+                tags.append(tag)
+                preds = attacker.run_attack(target_samples=target_samples, num_hops=num_hops, inductive_inference=inductive_flag)
+                metrics = evaluation.evaluate_binary_classification(preds, truth, config.target_fpr)
+                soft_preds.append(preds)
+                fpr, tpr = metrics['ROC']
+                true_positives.append(metrics['TP'])
+                attack_stats[f'{tag}_FPR'].append(fpr)
+                attack_stats[f'{tag}_TPR'].append(tpr)
+                attack_stats[f'{tag}_AUC'].append(metrics['AUC'])
+                attack_stats[f'{tag}_TPR@{config.target_fpr}FPR'].append(metrics['TPR@FPR'])
 
-                if len(soft_preds) > 1:
-                    soft_preds = torch.stack(soft_preds)
-                    multi_tpr, _ = utils.tpr_at_fixed_fpr_multi(soft_preds, truth, config.target_fpr)
-                    attack_stats[f'{attack}_TPR@{config.target_fpr}FPR_multi'].append(multi_tpr)
+            if len(soft_preds) > 1:
+                soft_preds = torch.stack(soft_preds)
+                multi_tpr, _ = utils.tpr_at_fixed_fpr_multi(soft_preds, truth, config.target_fpr)
+                attack_stats[f'TPR@{config.target_fpr}FPR_multi'].append(multi_tpr)
 
-                detection_counts = np.array(evaluation.inclusions(true_positives), dtype=np.int64)
-                detection_stats[attack].append(detection_counts)
+            detection_counts = np.array(evaluation.inclusions(true_positives), dtype=np.int64)
+            detection_stats.append(detection_counts)
 
         if config.make_roc_plots:
             for tag in tags:
@@ -348,7 +348,6 @@ def set_seed(seed):
 
 def main(config):
     set_seed(config['seed'])
-    config['attacks'] = config['attacks'].split(',')
     config['dataset'] = config['dataset'].lower()
     config['device'] = 'cuda' if torch.cuda.is_available() else 'cpu'
     mie = MembershipInferenceExperiment(config)
@@ -357,7 +356,7 @@ def main(config):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument("--attacks", default="confidence", type=str)
+    parser.add_argument("--attack", default="confidence", type=str)
     parser.add_argument("--dataset", default="cora", type=str)
     parser.add_argument("--split", default="sampled", type=str)
     parser.add_argument("--inductive-split", action=argparse.BooleanOptionalAction)

@@ -1,11 +1,13 @@
 import run_mia
 
 import yaml
+import numpy as np
 import pandas as pd
 from pathlib import Path
 
 def add_name(params):
     params['name'] = '-'.join([
+        params['attack'],
         params['dataset'],
         params['model'],
     ])
@@ -30,7 +32,7 @@ def main():
         'target_fpr': 0.01,
         'make_roc_plots': True,
         'inductive_split': True,
-        'inductive_inference': True,
+        'inductive_inference': None,
         'train_frac': 0.5,
         'val_frac': 0.0,
         'seed': 0,
