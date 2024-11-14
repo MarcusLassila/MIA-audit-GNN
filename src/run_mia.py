@@ -272,6 +272,13 @@ class MembershipInferenceExperiment:
                         shadow_dataset=shadow_dataset,
                         config=config,
                     )
+                case "improved-mlp":
+                    attacker = attacks.ImprovedMLPAttack(
+                        target_model=target_model,
+                        population=other_half,
+                        queries=[0, 2],
+                        config=config,
+                    )
                 case "confidence":
                     attacker = attacks.ConfidenceAttack(
                         target_model=target_model,

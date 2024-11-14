@@ -84,7 +84,7 @@ class BasicMLPAttack:
             criterion=Accuracy(task="multiclass", num_classes=2).to(config.device),
             device=config.device,
             epochs=config.epochs_mlp_attack,
-            early_stopping=config.early_stopping,
+            early_stopping=30,
             loss_fn=nn.CrossEntropyLoss(),
             lr=1e-3,
             weight_decay=1e-4,
@@ -110,6 +110,114 @@ class BasicMLPAttack:
             logits = self.attack_model(preds)[:,1]
         return logits
 
+class ImprovedMLPAttack:
+
+    def __init__(self, target_model, population, queries, config, plot_training_results=True):
+        self.config = config
+        self.target_model = target_model
+        self.population = population
+        self.shadow_model = utils.fresh_model(
+            model_type=config.model,
+            num_features=population.num_features,
+            hidden_dims=config.hidden_dim_target,
+            num_classes=population.num_classes,
+            dropout=config.dropout,
+        )
+        self.plot_training_results = plot_training_results
+        self.queries = queries
+        dims = [population.num_classes * len(queries), *config.hidden_dim_mlp_attack, 2]
+        self.attack_model = MLP(channel_list=dims, dropout=0.0)
+        self.train_shadow_model()
+        self.train_attack_model()
+        self.attack_model.eval()
+
+    def train_shadow_model(self):
+        config = self.config
+        train_config = trainer.TrainConfig(
+            criterion=Accuracy(task="multiclass", num_classes=self.population.num_classes).to(config.device),
+            device=config.device,
+            epochs=config.epochs_target,
+            early_stopping=config.early_stopping,
+            loss_fn=F.cross_entropy,
+            lr=config.lr,
+            weight_decay=config.weight_decay,
+            optimizer=getattr(torch.optim, config.optimizer),
+        )
+        train_res = trainer.train_gnn(
+            model=self.shadow_model,
+            dataset=self.population,
+            config=train_config,
+            inductive_split=config.inductive_split,
+        )
+        evaluation.evaluate_graph_training(
+            model=self.shadow_model,
+            dataset=self.population,
+            criterion=train_config.criterion,
+            inductive_inference=config.inductive_inference,
+            training_results=train_res if self.plot_training_results else None,
+            plot_title="Shadow model",
+            savedir=config.savedir,
+        )
+
+    def make_attack_dataset(self):
+        features = []
+        row_idx = torch.arange(self.population.num_nodes)
+        for num_hops in self.queries:
+            preds = evaluation.k_hop_query(
+                model=self.shadow_model,
+                dataset=self.population,
+                query_nodes=row_idx,
+                num_hops=num_hops,
+                inductive_split=self.config.inductive_inference,
+            )
+            features.append(preds)
+        features = torch.cat(features, dim=1).cpu()
+        labels = self.population.train_mask.long().cpu()
+        train_X, test_X, train_y, test_y = train_test_split(features, labels, test_size=0.2, stratify=labels)
+        train_dataset = TensorDataset(train_X, train_y)
+        test_dataset = TensorDataset(test_X, test_y)
+        return train_dataset, test_dataset
+
+    def train_attack_model(self):
+        config = self.config
+        train_dataset, valid_dataset = self.make_attack_dataset()
+        train_loader = DataLoader(train_dataset, batch_size=config.batch_size, shuffle=True)
+        valid_loader = DataLoader(valid_dataset, batch_size=config.batch_size, shuffle=False)
+        train_config = trainer.TrainConfig(
+            criterion=Accuracy(task="multiclass", num_classes=2).to(config.device),
+            device=config.device,
+            epochs=config.epochs_mlp_attack,
+            early_stopping=30,
+            loss_fn=nn.CrossEntropyLoss(),
+            lr=1e-3,
+            weight_decay=1e-4,
+            optimizer=getattr(torch.optim, config.optimizer),
+        )
+        trainer.train_mlp(
+            model=self.attack_model,
+            train_loader=train_loader,
+            valid_loader=valid_loader,
+            config=train_config,
+        )
+
+    def run_attack(self, target_samples, num_hops=None, inductive_inference=True):
+        # num_hops not used, attack always use both 0-hop and 2-hop queries
+        row_idx = torch.arange(target_samples.num_nodes)
+        with torch.inference_mode():
+            features = []
+            for num_hops in self.queries:
+                preds = evaluation.k_hop_query(
+                    model=self.target_model,
+                    dataset=target_samples,
+                    query_nodes=row_idx,
+                    num_hops=num_hops,
+                    inductive_split=inductive_inference,
+                )
+                features.append(preds)
+            features = torch.cat(features, dim=1)
+            logits = self.attack_model(features)[:,1]
+        return logits
+
 class ConfidenceAttack:
     
     def __init__(self, target_model, config):
@@ -118,16 +226,15 @@ class ConfidenceAttack:
         self.config = config
     
     def run_attack(self, target_samples, num_hops=0, inductive_inference=True):
-        num_target_samples = target_samples.num_nodes
+        row_idx = torch.arange(target_samples.num_nodes)
         with torch.inference_mode():
             preds = evaluation.k_hop_query(
                 model=self.target_model,
                 dataset=target_samples,
-                query_nodes=torch.arange(num_target_samples),
+                query_nodes=row_idx,
                 num_hops=num_hops,
                 inductive_split=inductive_inference,
             )
-            row_idx = torch.arange(num_target_samples)
             confidences = preds[row_idx, target_samples.y] # Unnormalized for numerical stability
         return confidences
 
