@@ -338,7 +338,7 @@ class RMIA:
                 best_offline_a = offline_a
         return best_offline_a
 
-    def ratio(self, target_samples, target_index, full_dataset, num_hops, inductive_inference, interp_from_out_models):
+    def ratio(self, target_samples, target_index, full_dataset, num_hops, inductive_inference, interp_from_out_models, monte_carlo_masks):
         target_samples.to(self.config.device)
         for x, y, x2, y2 in zip(target_samples.x, target_samples.y, full_dataset.x[target_index], full_dataset.y[target_index]):
             assert torch.allclose(x, x2) and torch.equal(y, y2)
@@ -355,7 +355,7 @@ class RMIA:
                         query_nodes=target_index,
                         num_hops=num_hops,
                         inductive_split=False,
-                        monte_carlo_samples=self.config.mc_samples_inference,
+                        monte_carlo_masks=monte_carlo_masks,
                     )
                 else:
                     preds = evaluation.k_hop_query(
@@ -382,7 +382,7 @@ class RMIA:
                     query_nodes=target_index,
                     num_hops=num_hops,
                     inductive_split=False,
-                    monte_carlo_samples=self.config.mc_samples_inference,
+                    monte_carlo_masks=monte_carlo_masks,
                 )
             else:
                 preds = evaluation.k_hop_query(
@@ -397,8 +397,15 @@ class RMIA:
         return target_confidence / pr
 
     def score(self, target_samples, target_index, full_dataset, num_hops, inductive_inference):
-        ratioX = self.ratio(target_samples, target_index, full_dataset, num_hops, inductive_inference, interp_from_out_models=True)
-        ratioZ = self.ratio(self.population, self.population_index, full_dataset, num_hops, inductive_inference, interp_from_out_models=False)
+        monte_carlo_masks = []#[torch.tensor([[],[]], dtype=torch.long)]
+        for _ in range(self.config.mc_samples_inference):
+            edge_mask = datasetup.random_edge_mask(full_dataset, 0.75)
+            monte_carlo_masks.append(edge_mask)
+        # for _ in range(self.config.mc_samples_inference):
+        #     edge_mask = datasetup.random_edge_mask(full_dataset, 0.9)
+        #     monte_carlo_masks.append(edge_mask)
+        ratioX = self.ratio(target_samples, target_index, full_dataset, num_hops, inductive_inference, interp_from_out_models=True, monte_carlo_masks=monte_carlo_masks)
+        ratioZ = self.ratio(self.population, self.population_index, full_dataset, num_hops, inductive_inference, interp_from_out_models=False, monte_carlo_masks=monte_carlo_masks)
         return torch.tensor([(x > ratioZ * self.gamma).float().mean().item() for x in ratioX])
 
     def run_attack(self, target_samples, target_index, full_dataset, num_hops=0, inductive_inference=True):

@@ -42,7 +42,7 @@ def evaluate_binary_classification(preds, truth, target_fpr):
         'fixed_FPR_threshold': threshold,
     }
 
-def k_hop_query(model, dataset, query_nodes, num_hops=0, inductive_split=False, monte_carlo_samples=1):
+def k_hop_query(model, dataset, query_nodes, num_hops=0, inductive_split=False, monte_carlo_masks=[]):
     '''
     Queries the model for each node in in query_nodes,
     using the local subgraph definded by the "num_hops"-hop neigborhood.
@@ -64,19 +64,15 @@ def k_hop_query(model, dataset, query_nodes, num_hops=0, inductive_split=False, 
                 predictions = model(dataset.x[query_nodes], dataset.edge_index[:, dataset.inductive_mask])
             else:
                 predictions = []
-                for i in range(monte_carlo_samples):
-                    if i == 0:
-                        edge_index = torch.tensor([[],[]], dtype=torch.int64)
-                    else:
-                        random_edge_mask = datasetup.random_edge_mask(dataset, 0.75)
-                        edge_index = dataset.edge_index[:, random_edge_mask]
+                for edge_mask in monte_carlo_masks:
+                    edge_index = dataset.edge_index[:, edge_mask]
                     predictions.append(model(dataset.x, edge_index)[query_nodes])
-                predictions = torch.stack(predictions).max(dim=0).values
+                predictions = torch.stack(predictions).median(dim=0).values
         else:
             if inductive_split:
                 edge_index = dataset.edge_index[:, dataset.inductive_mask]
             else:
-                edge_index = dataset.edge_index[:, datasetup.random_edge_mask(dataset)]
+                edge_index = dataset.edge_index
             predictions = []
             for v in query_nodes:
                 node_index, sub_edge_index, v_idx, _ = k_hop_subgraph(

@@ -1,11 +1,28 @@
 ---
+# cora-GCN-0:
+#   attacks: "rmia"
+#   dataset: "cora"
+#   model: "GCN"
+#   epochs_target: 20
+#   epochs_shadow: 20
+#   experiments: 10
+#   hidden_dim_target: [64]
+#   query_hops: [0]
+#   target_fpr: 0.005
+#   lr: 0.01
+#   weight_decay: 0.0001
+#   dropout: 0.5
+#   num_shadow_models: 32
+#   rmia_gamma: 2.0
+#   inductive_inference: True
+#   mc_samples_inference: 0
 # cora-GCN-1:
 #   attacks: "rmia"
 #   dataset: "cora"
 #   model: "GCN"
-#   epochs_target: 15
-#   epochs_shadow: 15
-#   experiments: 20
+#   epochs_target: 20
+#   epochs_shadow: 20
+#   experiments: 10
 #   hidden_dim_target: [64]
 #   query_hops: [2]
 #   target_fpr: 0.005
@@ -16,37 +33,20 @@
 #   rmia_gamma: 2.0
 #   inductive_inference: False
 #   mc_samples_inference: 1
-# cora-GCN-2:
-#   attacks: "rmia"
-#   dataset: "cora"
-#   model: "GCN"
-#   epochs_target: 15
-#   epochs_shadow: 15
-#   experiments: 20
-#   hidden_dim_target: [64]
-#   query_hops: [2]
-#   target_fpr: 0.005
-#   lr: 0.01
-#   weight_decay: 0.0001
-#   dropout: 0.5
-#   num_shadow_models: 32
-#   rmia_gamma: 2.0
-#   inductive_inference: False
-#   mc_samples_inference: 2
-cora-GCN-51:
+cora-GCN-100:
   attacks: "rmia"
   dataset: "cora"
   model: "GCN"
-  epochs_target: 15
-  epochs_shadow: 15
-  experiments: 1
+  epochs_target: 20
+  epochs_shadow: 20
+  experiments: 10
   hidden_dim_target: [64]
   query_hops: [0,2]
-  target_fpr: 0.0001
+  target_fpr: 0.01
   lr: 0.01
   weight_decay: 0.0001
   dropout: 0.5
   num_shadow_models: 32
   rmia_gamma: 2.0
   inductive_inference: False
-  mc_samples_inference: 101
+  mc_samples_inference: 500
