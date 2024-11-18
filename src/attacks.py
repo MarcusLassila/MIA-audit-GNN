@@ -285,21 +285,20 @@ class LiRA:
     
     def get_mean_and_std(self, target_samples, num_hops, inductive_inference):
         hinges = []
-        num_target_samples = target_samples.num_nodes
         for shadow_model in self.shadow_models:
             shadow_model.eval()
             with torch.inference_mode():
                 preds = evaluation.k_hop_query(
                     model=shadow_model,
                     dataset=target_samples,
-                    query_nodes=torch.arange(num_target_samples),
+                    query_nodes=torch.arange(target_samples.num_nodes),
                     num_hops=num_hops,
                     inductive_split=inductive_inference,
                 )
                 # Approximate logits of confidence values using the hinge loss.
                 hinges.append(utils.hinge_loss(preds, target_samples.y))
         hinges = torch.stack(hinges)
-        assert hinges.shape == torch.Size([len(self.shadow_models), num_target_samples])
+        assert hinges.shape == torch.Size([len(self.shadow_models), target_samples.num_nodes])
         means = hinges.mean(dim=0)
         stds = hinges.std(dim=0)
         if self.config.experiments == 1:
@@ -314,13 +313,12 @@ class LiRA:
 
     def run_attack(self, target_samples, num_hops=0, inductive_inference=True):
         target_samples.to(self.config.device)
-        num_target_samples = target_samples.num_nodes
         means, stds = self.get_mean_and_std(target_samples, num_hops, inductive_inference)
         with torch.inference_mode():
             preds = evaluation.k_hop_query(
                 model=self.target_model,
                 dataset=target_samples,
-                query_nodes=torch.arange(num_target_samples),
+                query_nodes=torch.arange(target_samples.num_nodes),
                 num_hops=num_hops,
                 inductive_split=inductive_inference,
             )
