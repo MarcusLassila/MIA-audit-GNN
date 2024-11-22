@@ -11,7 +11,26 @@ def merge_graphs(graph_A, graph_B):
     x = torch.concat([graph_A.x, graph_B.x])
     y = torch.concat([graph_A.y, graph_B.y])
     edge_index = torch.concat([graph_A.edge_index, graph_B.edge_index + graph_A.num_nodes], dim=1)
-    return Data(x=x, edge_index=edge_index, y=y)
+    train_mask = torch.zeros(graph_A.num_nodes + graph_B.num_nodes, dtype=torch.bool)
+    train_mask[mask_to_index(graph_A.train_mask)] = True
+    train_mask[graph_A.num_nodes + mask_to_index(graph_B.train_mask)] = True
+    val_mask = torch.zeros(graph_A.num_nodes + graph_B.num_nodes, dtype=torch.bool)
+    val_mask[mask_to_index(graph_A.val_mask)] = True
+    val_mask[graph_A.num_nodes + mask_to_index(graph_B.val_mask)] = True
+    test_mask = torch.zeros(graph_A.num_nodes + graph_B.num_nodes, dtype=torch.bool)
+    test_mask[mask_to_index(graph_A.test_mask)] = True
+    test_mask[graph_A.num_nodes + mask_to_index(graph_B.test_mask)] = True
+    data = Data(
+        x=x,
+        edge_index=edge_index,
+        y=y,
+        train_mask=train_mask,
+        val_mask=val_mask,
+        test_mask=test_mask,
+        num_classes=graph_A.num_classes,
+    )
+    data.inductive_mask = train_split_interconnection_mask(data)
+    return data
 
 def train_split_interconnection_mask(dataset):
     mask = []

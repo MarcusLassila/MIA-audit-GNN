@@ -1,6 +1,7 @@
 import attacks
 import datasetup
 import hypertuner
+import lood
 import evaluation
 import trainer
 import utils
@@ -237,6 +238,8 @@ class MembershipInferenceExperiment:
             tags = [] # Used to label attack setups.
             # Train and evaluate target model.
             target_dataset, other_half = datasetup.disjoint_graph_split(self.dataset, train_frac=config.train_frac, val_frac=config.val_frac)
+            lood_instance = lood.LOOD(self.config)
+            lood_instance.measure(target_dataset, 0)
             target_model = self.train_target_model(target_dataset)
             target_scores = {
                 'train_score': evaluation.evaluate_graph_model(
