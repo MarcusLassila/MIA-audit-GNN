@@ -238,8 +238,7 @@ class MembershipInferenceExperiment:
             tags = [] # Used to label attack setups.
             # Train and evaluate target model.
             target_dataset, other_half = datasetup.disjoint_graph_split(self.dataset, train_frac=config.train_frac, val_frac=config.val_frac)
-            lood_instance = lood.LOOD(self.config)
-            lood_instance.measure(target_dataset, 0)
+            # lood.LOOD(self.config).quantify_query_distributions(target_dataset)
             target_model = self.train_target_model(target_dataset)
             target_scores = {
                 'train_score': evaluation.evaluate_graph_model(
@@ -323,6 +322,10 @@ class MembershipInferenceExperiment:
                 tag = make_tag(num_hops, inductive_flag)
                 tags.append(tag)
                 preds = attacker.run_attack(target_samples=target_samples, num_hops=num_hops, inductive_inference=inductive_flag)
+                preds_train = preds[target_samples.train_mask][:2]
+                leakage = lood.LOOD(config=config).information_leakage(dataset=target_samples)
+                utils.plot_leakage_scatter(preds_train, leakage, savepath=f'{config.savedir}/leakage_scatter.png')
+
                 metrics = evaluation.evaluate_binary_classification(preds, truth, config.target_fpr)
                 soft_preds.append(preds)
                 fpr, tpr = metrics['ROC']

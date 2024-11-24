@@ -204,9 +204,10 @@ def plot_histogram_and_fitted_gaussian(x, mean, std, bins=10, savepath=None):
     plt.hist(x=x, bins=bins, density=True)
     plt.grid(True)
     xmin, xmax = plt.xlim()
-    xs = np.linspace(xmin, xmax)
+    xs = np.linspace(xmin, xmax, 100)
     ys = stats.norm.pdf(xs, loc=mean, scale=std)
     plt.plot(xs, ys, label='Gaussian fit')
+    plt.title(f"Mean: {mean:.4f}, Std: {std:.4f}")
     savefig_or_show(savepath)
 
 def plot_fitted_gaussians(means, stds, savepath=None):
@@ -257,5 +258,13 @@ def plot_hinge_histogram(hinge, label_mask, train_mask, savepath=None):
     bins = min(50, 2 * len({x.item() for x in hinge}))
     plt.hist(hinge[train_mask & label_mask], bins=bins)
     plt.hist(hinge[~train_mask & label_mask], bins=bins)
+    plt.grid(True)
+    savefig_or_show(savepath)
+
+def plot_leakage_scatter(attack_preds, info_leakage, savepath=None):
+    indices = torch.arange(attack_preds.shape[0])
+    plt.figure(figsize=(8, 8))
+    plt.scatter(indices, attack_preds, c='r', marker='x')
+    plt.scatter(indices, info_leakage, c='b', marker='o')
     plt.grid(True)
     savefig_or_show(savepath)
