@@ -42,7 +42,7 @@ def evaluate_binary_classification(preds, truth, target_fpr):
         'fixed_FPR_threshold': threshold,
     }
 
-def k_hop_query(model, dataset, query_nodes, num_hops=0, inductive_split=False):
+def k_hop_query(model, dataset, query_nodes, num_hops=0, inductive_split=True):
     '''
     Queries the model for each node in in query_nodes,
     using the local subgraph definded by the "num_hops"-hop neigborhood.

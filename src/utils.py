@@ -92,13 +92,9 @@ def graph_info(dataset):
 
 def tpr_at_fixed_fpr(fpr, tpr, target_fpr, thresholds):
     idx = np.argmax(fpr >= target_fpr)
-    if fpr[idx] != target_fpr:
-        x0, x1 = fpr[idx - 1], fpr[idx]
-        y0, y1 = tpr[idx - 1], tpr[idx]
-        slope = (y1 - y0) / (x1 - x0)
-        return slope * (target_fpr - x0) + y0, thresholds[idx - 1]
-    else:
-        return tpr[idx], thresholds[idx]
+    if fpr[idx] > target_fpr + 1e-6:
+        idx -= 1
+    return tpr[idx], thresholds[idx]
 
 def tpr_at_fixed_fpr_multi(soft_preds, truth, target_fpr):
     truth = truth.bool()
@@ -262,9 +258,7 @@ def plot_hinge_histogram(hinge, label_mask, train_mask, savepath=None):
     savefig_or_show(savepath)
 
 def plot_leakage_scatter(attack_preds, info_leakage, savepath=None):
-    indices = torch.arange(attack_preds.shape[0])
     plt.figure(figsize=(8, 8))
-    plt.scatter(indices, attack_preds, c='r', marker='x')
-    plt.scatter(indices, info_leakage, c='b', marker='o')
+    plt.scatter(attack_preds, info_leakage, c='r', marker='x')
     plt.grid(True)
     savefig_or_show(savepath)

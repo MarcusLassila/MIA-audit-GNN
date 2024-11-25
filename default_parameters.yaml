@@ -1,0 +1,25 @@
+---
+default-parameters:
+  attack: "confidence"
+  dataset: "cora"
+  model: "GCN"
+  epochs_target: 20
+  epochs_shadow: 20
+  experiments: 1
+  hidden_dim_target: [64]
+  query_hops: [0]
+  target_fpr: 0.01
+  lr: 0.01
+  weight_decay: 0.0001
+  dropout: 0.5
+  early_stopping: 0
+  datadir: "./data"
+  savedir: "./results"
+  grid_search: False
+  optimizer: "Adam"
+  make_roc_plots: False
+  inductive_split: True
+  inductive_inference: True
+  train_frac: 0.5
+  val_frac: 0.0
+  seed: 0
