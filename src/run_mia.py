@@ -324,13 +324,14 @@ class MembershipInferenceExperiment:
                 tag = make_tag(num_hops, inductive_flag)
                 tags.append(tag)
                 preds = attacker.run_attack(target_samples=target_samples, num_hops=num_hops, inductive_inference=inductive_flag)
+                metrics = evaluation.evaluate_binary_classification(preds, truth, config.target_fpr)
+
                 num_leakage_nodes = 100
                 leak_nodes = torch.nonzero(target_samples.train_mask).squeeze()[:num_leakage_nodes]
                 preds_train = preds[leak_nodes]
                 leakage = lood.LOOD(config=config).information_leakage(dataset=target_samples, node_index=leak_nodes)
                 utils.plot_leakage_scatter(preds_train, leakage, savepath=f'{config.savedir}/leakage_scatter.png')
 
-                metrics = evaluation.evaluate_binary_classification(preds, truth, config.target_fpr)
                 soft_preds.append(preds)
                 fpr, tpr = metrics['ROC']
                 true_positives.append(metrics['TP'])

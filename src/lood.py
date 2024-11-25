@@ -6,7 +6,7 @@ import numpy as np
 import torch
 import torch.nn.functional as F
 import torch_geometric
-from torch_geometric.utils import subgraph
+from torch_geometric.utils import subgraph, k_hop_subgraph
 from torchmetrics import Accuracy
 from tqdm.auto import tqdm
 
@@ -114,7 +114,7 @@ class LOOD:
         for _ in tqdm(range(num_shadow_models), desc='Training inclusion models'):
             incl_model = self.train_model(dataset, hidden_dims=hidden_dims, dropout=dropout)
             with torch.inference_mode():
-                pred = incl_model(dataset.x, empty_edge_index)[node_index, dataset.y[node_index]]
+                pred = incl_model(dataset.x, dataset.edge_index)[node_index, dataset.y[node_index]]
                 incl_preds.append(pred)
         incl_preds = torch.stack(incl_preds)
         incl_means = incl_preds.mean(dim=0)
@@ -123,15 +123,25 @@ class LOOD:
         assert incl_means.shape == node_index.shape
 
         excl_preds = []
-        for node in node_index:
+        for i in tqdm(range(node_index.shape[0]), desc="Training exclusion models"):
+            node = node_index[i]
             preds = []
             mask = torch.ones(dataset.num_nodes, dtype=torch.bool)
-            mask[node] = False
+            sub_node_index, _, _, _ = k_hop_subgraph(
+                node_idx=[node],
+                num_hops=2,
+                edge_index=dataset.edge_index,
+                num_nodes=dataset.num_nodes,
+                relabel_nodes=False,
+            )
+            #sub_node_index = torch.tensor([node], dtype=torch.long)
+            mask[sub_node_index] = False
             sub_dataset= datasetup.masked_subgraph(dataset, mask)
-            for _ in tqdm(range(num_shadow_models), desc='Training exclusion models'):
+            assert sub_dataset.num_nodes + sub_node_index.shape[0] == dataset.num_nodes
+            for _ in range(num_shadow_models):
                 excl_model = self.train_model(sub_dataset, hidden_dims=hidden_dims, dropout=dropout)
                 with torch.inference_mode():
-                    pred = excl_model(sub_dataset.x, empty_edge_index)[node, dataset.y[node]]
+                    pred = excl_model(dataset.x, dataset.edge_index)[node, dataset.y[node]]
                     preds.append(pred)
             preds = torch.tensor(preds)
             excl_preds.append(preds)
