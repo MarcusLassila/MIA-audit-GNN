@@ -15,28 +15,12 @@ def add_name(params):
 def main():
     with open("config.yaml", "r") as file:
         config = yaml.safe_load(file)
+    with open("default_parameters.yaml", "r") as file:
+        default_params = yaml.safe_load(file)['default-parameters']
     Path('./results').mkdir(parents=True, exist_ok=True)
     train_stat_frames = []
     attack_stat_frames = []
     detection_frames = []
-    default_params = {
-        'datadir': './data',
-        'savedir': './results',
-        'early_stopping': 0,
-        'grid_search': False,
-        'optimizer': 'Adam',
-        'lr': 0.01,
-        'weight_decay': 1e-4,
-        'dropout': 0.5,
-        'experiments': 10,
-        'target_fpr': 0.01,
-        'make_roc_plots': True,
-        'inductive_split': True,
-        'inductive_inference': None,
-        'train_frac': 0.5,
-        'val_frac': 0.0,
-        'seed': 0,
-    }
     for _, params in config.items():
         params = default_params | params
         add_name(params)

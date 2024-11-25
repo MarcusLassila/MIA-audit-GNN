@@ -1,3 +1,4 @@
+import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch_geometric.nn as gnn
@@ -7,16 +8,25 @@ class BaseGNN(nn.Module):
     def __init__(self, dropout=0.0):
         super(BaseGNN, self).__init__()
         self.dropout = dropout
+        self._dropout_during_inference = False
 
     def reset_parameters(self):
         for conv in self.convs:
             conv.reset_parameters()
 
+    @property
+    def dropout_during_inference(self):
+        return self._dropout_during_inference
+
+    @dropout_during_inference.setter
+    def dropout_during_inference(self, value):
+        self._dropout_during_inference = value
+
     def forward(self, x, edge_index):
         for conv in self.convs[:-1]:
             x = conv(x, edge_index)
             x = F.relu(x)
-            x = F.dropout(input=x, p=self.dropout, training=self.training)
+            x = F.dropout(input=x, p=self.dropout, training=self.training or self._dropout_during_inference)
         x = self.convs[-1](x, edge_index)
         return x
 

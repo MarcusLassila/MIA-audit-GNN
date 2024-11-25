@@ -92,13 +92,9 @@ def graph_info(dataset):
 
 def tpr_at_fixed_fpr(fpr, tpr, target_fpr, thresholds):
     idx = np.argmax(fpr >= target_fpr)
-    if fpr[idx] != target_fpr:
-        x0, x1 = fpr[idx - 1], fpr[idx]
-        y0, y1 = tpr[idx - 1], tpr[idx]
-        slope = (y1 - y0) / (x1 - x0)
-        return slope * (target_fpr - x0) + y0, thresholds[idx - 1]
-    else:
-        return tpr[idx], thresholds[idx]
+    if fpr[idx] > target_fpr + 1e-6:
+        idx -= 1
+    return tpr[idx], thresholds[idx]
 
 def tpr_at_fixed_fpr_multi(soft_preds, truth, target_fpr):
     truth = truth.bool()
@@ -204,9 +200,10 @@ def plot_histogram_and_fitted_gaussian(x, mean, std, bins=10, savepath=None):
     plt.hist(x=x, bins=bins, density=True)
     plt.grid(True)
     xmin, xmax = plt.xlim()
-    xs = np.linspace(xmin, xmax)
+    xs = np.linspace(xmin, xmax, 100)
     ys = stats.norm.pdf(xs, loc=mean, scale=std)
     plt.plot(xs, ys, label='Gaussian fit')
+    plt.title(f"Mean: {mean:.4f}, Std: {std:.4f}")
     savefig_or_show(savepath)
 
 def plot_fitted_gaussians(means, stds, savepath=None):
@@ -257,5 +254,11 @@ def plot_hinge_histogram(hinge, label_mask, train_mask, savepath=None):
     bins = min(50, 2 * len({x.item() for x in hinge}))
     plt.hist(hinge[train_mask & label_mask], bins=bins)
     plt.hist(hinge[~train_mask & label_mask], bins=bins)
+    plt.grid(True)
+    savefig_or_show(savepath)
+
+def plot_leakage_scatter(attack_preds, info_leakage, savepath=None):
+    plt.figure(figsize=(8, 8))
+    plt.scatter(attack_preds, info_leakage, c='r', marker='x')
     plt.grid(True)
     savefig_or_show(savepath)

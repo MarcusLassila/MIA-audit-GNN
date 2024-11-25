@@ -1,6 +1,7 @@
 import attacks
 import datasetup
 import hypertuner
+import lood
 import evaluation
 import trainer
 import utils
@@ -57,10 +58,11 @@ class MembershipInferenceExperiment:
         Plot test statistic of nodes against decision threshold for nodes that are identified by the 0-hop attack, but not the k-hop attack, or vice versa.
         '''
         attack_name = attacker.__class__.__name__
+        true_members = target_samples.train_mask.long().cpu().numpy()
         soft_preds_0 = attacker.run_attack(target_samples=target_samples, num_hops=0)
         soft_preds_k = attacker.run_attack(target_samples=target_samples, num_hops=num_hops, inductive_inference=True)
-        metrics_0 = evaluation.evaluate_binary_classification(preds=soft_preds_0, truth=target_samples.train_mask.long(), target_fpr=target_fpr)
-        metrics_k = evaluation.evaluate_binary_classification(preds=soft_preds_k, truth=target_samples.train_mask.long(), target_fpr=target_fpr)
+        metrics_0 = evaluation.evaluate_binary_classification(preds=soft_preds_0, truth=true_members, target_fpr=target_fpr)
+        metrics_k = evaluation.evaluate_binary_classification(preds=soft_preds_k, truth=true_members, target_fpr=target_fpr)
         threshold_0 = metrics_0['fixed_FPR_threshold']
         threshold_k = metrics_k['fixed_FPR_threshold']
         hard_preds_0 = metrics_0['hard_preds']
@@ -75,11 +77,13 @@ class MembershipInferenceExperiment:
                 relabel_nodes=False,
                 num_nodes=target_samples.num_nodes,
             )
-            means[i, 0] = soft_preds_0[node_index].mean()
-            means[i, 1] = soft_preds_k[node_index].mean()
+            sub_node_index = torch.tensor([x for x in node_index if x != node], dtype=torch.long)
+            means[i, 0] = soft_preds_0[sub_node_index].mean()
+            means[i, 1] = soft_preds_k[sub_node_index].mean()
 
         perm_mask = torch.randperm(nodes_of_interest.shape[0])
         node_index = nodes_of_interest[perm_mask][:max_num_plotted_nodes]
+        membership_status = true_members[node_index]
         labels = means[perm_mask][:max_num_plotted_nodes]
         preds_0 = soft_preds_0[node_index]
         preds_k = soft_preds_k[node_index]
@@ -88,14 +92,14 @@ class MembershipInferenceExperiment:
         low, high, diff = min(threshold_0, threshold_k), max(threshold_0, threshold_k), abs(threshold_0 - threshold_k)
         spread = 2
 
-        plt.figure(figsize=(8, 8))
+        plt.figure(figsize=(12, 12))
         plt.scatter(indices, preds_0, label='0-hop')
         plt.scatter(indices, preds_k, label=f'{num_hops}-hop', marker='x')
         plt.plot(indices, torch.ones_like(indices) * threshold_0, label=r'$\gamma$ 0-hop')
         plt.plot(indices, torch.ones_like(indices) * threshold_k, label=rf'$\gamma$ {num_hops}-hop')
         for i in range(max_num_plotted_nodes):
-            plt.text(indices[i], preds_0[i], f'{labels[i, 0]:.1f}', fontsize=12, ha='left', va='bottom')
-            plt.text(indices[i], preds_k[i], f'{labels[i, 1]:.1f}', fontsize=12, ha='right', va='bottom')
+            plt.text(indices[i], preds_0[i], f'{labels[i, 0]:.1f}-{"in" if membership_status[i] else "out"}', fontsize=12, ha='left', va='bottom')
+            plt.text(indices[i], preds_k[i], f'{labels[i, 1]:.1f}-{"in" if membership_status[i] else "out"}', fontsize=12, ha='right', va='bottom')
         plt.xticks(np.arange(indices.shape[0]))
         plt.xlabel('Node id')
         plt.ylabel('Test statistic')
@@ -237,6 +241,7 @@ class MembershipInferenceExperiment:
             tags = [] # Used to label attack setups.
             # Train and evaluate target model.
             target_dataset, other_half = datasetup.disjoint_graph_split(self.dataset, train_frac=config.train_frac, val_frac=config.val_frac)
+            # lood.LOOD(self.config).quantify_query_distributions(target_dataset)
             target_model = self.train_target_model(target_dataset)
             target_scores = {
                 'train_score': evaluation.evaluate_graph_model(
@@ -308,9 +313,8 @@ class MembershipInferenceExperiment:
                 target_samples = target_dataset.clone()
             truth = target_samples.train_mask.long()
 
-            if len(config.query_hops) > 1 and config.experiments == 1:
-                pass
-                # self.visualize_aggregation_effect_on_attack_vulnerabilities(attacker, target_samples, config.target_fpr, num_hops=2)
+            # if config.experiments == 1:
+            #     self.visualize_aggregation_effect_on_attack_vulnerabilities(attacker, target_samples, config.target_fpr, num_hops=2)
 
             soft_preds = []
             true_positives = []
@@ -320,6 +324,12 @@ class MembershipInferenceExperiment:
                 tag = make_tag(num_hops, inductive_flag)
                 tags.append(tag)
                 preds = attacker.run_attack(target_samples=target_samples, num_hops=num_hops, inductive_inference=inductive_flag)
+                num_leakage_nodes = 100
+                leak_nodes = torch.nonzero(target_samples.train_mask).squeeze()[:num_leakage_nodes]
+                preds_train = preds[leak_nodes]
+                leakage = lood.LOOD(config=config).information_leakage(dataset=target_samples, node_index=leak_nodes)
+                utils.plot_leakage_scatter(preds_train, leakage, savepath=f'{config.savedir}/leakage_scatter.png')
+
                 metrics = evaluation.evaluate_binary_classification(preds, truth, config.target_fpr)
                 soft_preds.append(preds)
                 fpr, tpr = metrics['ROC']
