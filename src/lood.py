@@ -15,6 +15,18 @@ def gaussian_kl_divergence(mean_0, std_0, mean_1, std_1):
     var_1 = std_1 ** 2
     return torch.log(std_1 / std_0) - 0.5 + (var_0 + (mean_0 - mean_1) ** 2) / (2 * var_1)
 
+def multi_gaussian_kl_divergence(mean_0, cov_0, mean_1, cov_1):
+    # Better implementation with Cholesky decomposition?
+    inv_cov_1 = torch.linalg.inv(cov_1)
+    det_cov_0 = torch.linalg.det(cov_0)
+    det_cov_1 = torch.linalg.det(cov_1)
+    trace = torch.trace(inv_cov_1 @ cov_0)
+    dim = mean_0.shape[0]
+    mu = mean_1 - mean_0
+    quad = mu.t() @ inv_cov_1 @ mu
+    log = torch.log(det_cov_1 / det_cov_0)
+    return 0.5 * (trace - dim + quad + log)
+
 class LOOD:
     
     def __init__(self, config):
@@ -152,4 +164,51 @@ class LOOD:
         assert excl_means.shape == node_index.shape
 
         info_leakage = gaussian_kl_divergence(incl_means, incl_stds, excl_means, excl_stds)
+        return info_leakage
+
+    def information_leakage_full(self, dataset, node_index, num_shadow_models=50):
+        hidden_dims = self.config.hidden_dim_target
+        dropout = 0.5
+        empty_edge_index = torch.tensor([[],[]], dtype=torch.long)
+        incl_models = []
+        for _ in tqdm(range(num_shadow_models), desc='Training inclusion models'):
+            incl_models.append(self.train_model(dataset, hidden_dims=hidden_dims, dropout=dropout))
+
+        info_leakage = []
+        for i in tqdm(range(node_index.shape[0]), desc="Training exclusion models"):
+            node = node_index[i]
+            incl_preds = []
+            excl_preds = []
+            mask = torch.ones(dataset.num_nodes, dtype=torch.bool)
+            sub_node_index, _, _, _ = k_hop_subgraph(
+                node_idx=[node],
+                num_hops=2,
+                edge_index=dataset.edge_index,
+                num_nodes=dataset.num_nodes,
+                relabel_nodes=False,
+            )
+            #sub_node_index = torch.tensor([node], dtype=torch.long)
+            mask[sub_node_index] = False
+            sub_dataset= datasetup.masked_subgraph(dataset, mask)
+            assert sub_dataset.num_nodes + sub_node_index.shape[0] == dataset.num_nodes
+            for j in range(num_shadow_models):
+                incl_model = incl_models[j]
+                excl_model = self.train_model(sub_dataset, hidden_dims=hidden_dims, dropout=dropout)
+                with torch.inference_mode():
+                    incl_preds.append(incl_model(dataset.x, dataset.edge_index)[node])
+                    excl_preds.append(excl_model(dataset.x, dataset.edge_index)[node])
+            incl_preds = torch.stack(incl_preds)
+            excl_preds = torch.stack(excl_preds)
+            incl_means = incl_preds.mean(dim=0)
+            excl_means = excl_preds.mean(dim=0)
+            incl = incl_preds - incl_means
+            excl = excl_preds - excl_means
+            incl_cov = torch.matmul(incl.t(), incl) / (num_shadow_models - 1)
+            excl_cov = torch.matmul(excl.t(), excl) / (num_shadow_models - 1)
+            assert incl_means.shape == (dataset.num_classes,)
+            assert incl_cov.shape == (dataset.num_classes, dataset.num_classes)
+            assert excl_means.shape == (dataset.num_classes,)
+            assert excl_cov.shape == (dataset.num_classes, dataset.num_classes)
+            info_leakage.append(multi_gaussian_kl_divergence(incl_means, incl_cov, excl_means, excl_cov))
+
         return info_leakage
