@@ -39,7 +39,7 @@ def evaluate_binary_classification(preds, truth, target_fpr):
         'TP': true_positives,
         'soft_preds': preds,
         'hard_preds': hard_preds,
-        'fixed_FPR_threshold': threshold,
+        'threshold': threshold,
     }
 
 def k_hop_query(model, dataset, query_nodes, num_hops=0, inductive_split=True):
@@ -55,13 +55,15 @@ def k_hop_query(model, dataset, query_nodes, num_hops=0, inductive_split=True):
     model.eval()
     if not torch.is_tensor(query_nodes):
         query_nodes = torch.tensor(query_nodes, dtype=torch.int64)
+    if query_nodes.shape == ():
+        query_nodes.unsqueeze(dim=0)
     with torch.inference_mode():
         if num_hops == 0:
             empty_edge_index = torch.tensor([[],[]], dtype=torch.int64).to(dataset.edge_index.device)
             predictions = model(dataset.x[query_nodes], empty_edge_index)
         elif num_hops == model.num_layers:
             edge_index = dataset.edge_index[:, dataset.inductive_mask] if inductive_split else dataset.edge_index
-            predictions = model(dataset.x[query_nodes], edge_index)
+            predictions = model(dataset.x, edge_index)[query_nodes]
         else:
             edge_index = dataset.edge_index[:, dataset.inductive_mask] if inductive_split else dataset.edge_index
             predictions = []

@@ -63,8 +63,8 @@ class MembershipInferenceExperiment:
         soft_preds_k = attacker.run_attack(target_samples=target_samples, num_hops=num_hops, inductive_inference=True)
         metrics_0 = evaluation.evaluate_binary_classification(preds=soft_preds_0, truth=true_members, target_fpr=target_fpr)
         metrics_k = evaluation.evaluate_binary_classification(preds=soft_preds_k, truth=true_members, target_fpr=target_fpr)
-        threshold_0 = metrics_0['fixed_FPR_threshold']
-        threshold_k = metrics_k['fixed_FPR_threshold']
+        threshold_0 = metrics_0['threshold']
+        threshold_k = metrics_k['threshold']
         hard_preds_0 = metrics_0['hard_preds']
         hard_preds_k = metrics_k['hard_preds']
         nodes_of_interest = torch.tensor((hard_preds_0 ^ hard_preds_k).nonzero()[0], dtype=torch.long)
@@ -108,6 +108,32 @@ class MembershipInferenceExperiment:
         elif attack_name == "RMIA":
             plt.ylim(0.0, 1.0)
         plt.legend()
+        utils.savefig_or_show(savepath)
+
+    def analyze_correlation_with_information_leakage(self, attacker, target_samples, target_fpr, num_hops=2):
+        true_members = target_samples.train_mask.long().cpu().numpy()
+        soft_preds_0 = attacker.run_attack(target_samples=target_samples, num_hops=0)
+        soft_preds_k = attacker.run_attack(target_samples=target_samples, num_hops=num_hops, inductive_inference=True)
+        metrics_0 = evaluation.evaluate_binary_classification(preds=soft_preds_0, truth=true_members, target_fpr=target_fpr)
+        metrics_k = evaluation.evaluate_binary_classification(preds=soft_preds_k, truth=true_members, target_fpr=target_fpr)
+        hard_preds_0 = metrics_0['hard_preds']
+        hard_preds_k = metrics_k['hard_preds']
+        nodes_of_interest = torch.from_numpy(((hard_preds_0 ^ hard_preds_k) & true_members).nonzero()[0])
+        xs = torch.arange(nodes_of_interest.shape[0])
+        lood_instance = lood.LOOD(config=self.config)
+        leakage_0 = lood_instance.information_leakage(dataset=target_samples, node_index=nodes_of_interest, num_hops=0)
+        leakage_k = lood_instance.information_leakage(dataset=target_samples, node_index=nodes_of_interest, num_hops=num_hops)
+        norm = torch.max(leakage_0, leakage_k).max()
+        leakage_0 = leakage_0 / norm
+        leakage_k = leakage_k / norm
+        plt.figure(figsize=(12, 12))
+        plt.scatter(xs, leakage_0, marker='x', label='leak 0')
+        plt.scatter(xs, leakage_k, marker='x', label=f'leak {num_hops}')
+        plt.scatter(xs, soft_preds_0[nodes_of_interest], marker='o', label='pred 0')
+        plt.scatter(xs, soft_preds_k[nodes_of_interest], marker='o', label=f'pred {num_hops}')
+        plt.legend()
+        plt.grid(True)
+        savepath=f'{self.config.savedir}/leakage_correlation.png'
         utils.savefig_or_show(savepath)
 
     def train_target_model(self, dataset, plot_training_results=True, compare_with_mlp=True):
@@ -313,8 +339,8 @@ class MembershipInferenceExperiment:
                 target_samples = target_dataset.clone()
             truth = target_samples.train_mask.long()
 
-            # if config.experiments == 1:
-            #     self.visualize_aggregation_effect_on_attack_vulnerabilities(attacker, target_samples, config.target_fpr, num_hops=2)
+            if config.experiments == 1:
+                self.analyze_correlation_with_information_leakage(attacker, target_samples, config.target_fpr, num_hops=2)
 
             soft_preds = []
             true_positives = []
@@ -325,15 +351,6 @@ class MembershipInferenceExperiment:
                 tags.append(tag)
                 preds = attacker.run_attack(target_samples=target_samples, num_hops=num_hops, inductive_inference=inductive_flag)
                 metrics = evaluation.evaluate_binary_classification(preds, truth, config.target_fpr)
-
-                num_leakage_nodes = 10
-                leak_nodes = torch.nonzero(target_samples.train_mask).squeeze()[:num_leakage_nodes]
-                preds_train = preds[leak_nodes]
-                leakage_full = lood.LOOD(config=config).information_leakage_full(dataset=target_samples, node_index=leak_nodes)
-                leakage = lood.LOOD(config=config).information_leakage(dataset=target_samples, node_index=leak_nodes)
-                utils.plot_leakage_scatter(preds_train, leakage_full, savepath=f'{config.savedir}/leakage_full_scatter.png')
-                utils.plot_leakage_scatter(preds_train, leakage, savepath=f'{config.savedir}/leakage_scatter.png')
-
                 soft_preds.append(preds)
                 fpr, tpr = metrics['ROC']
                 true_positives.append(metrics['TP'])

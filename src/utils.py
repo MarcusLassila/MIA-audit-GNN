@@ -256,9 +256,3 @@ def plot_hinge_histogram(hinge, label_mask, train_mask, savepath=None):
     plt.hist(hinge[~train_mask & label_mask], bins=bins)
     plt.grid(True)
     savefig_or_show(savepath)
-
-def plot_leakage_scatter(attack_preds, info_leakage, savepath=None):
-    plt.figure(figsize=(8, 8))
-    plt.scatter(attack_preds, info_leakage, c='r', marker='x')
-    plt.grid(True)
-    savefig_or_show(savepath)

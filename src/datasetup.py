@@ -296,7 +296,7 @@ def disjoint_node_split(dataset, v2=False):
         node_index_B = node_index_complement(node_index_A, dataset.num_nodes)
     return node_index_A, node_index_B
 
-def disjoint_graph_split(graph, train_frac, val_frac, v2=False):
+def disjoint_graph_split(graph, train_frac, val_frac, v2=True):
     '''
     Split the graph dataset in two rougly equal sized disjoint subgraphs.
     '''
