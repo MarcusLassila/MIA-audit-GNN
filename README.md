@@ -44,7 +44,3 @@ Alternatively, run "src/run_mia.py" which only run one MIA simulation experiment
 ### Test
 
 run "python -m unittest"
-
-### Issues
-
-* Reference models in RMIA are not trained such that each sample z in the population dataset is included in half the reference models. Will this maintain graph structure?
