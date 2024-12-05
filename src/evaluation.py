@@ -60,13 +60,13 @@ def k_hop_query(model, dataset, query_nodes, num_hops=0, inductive_split=True):
     with torch.inference_mode():
         if num_hops == 0:
             empty_edge_index = torch.tensor([[],[]], dtype=torch.int64).to(dataset.edge_index.device)
-            predictions = model(dataset.x[query_nodes], empty_edge_index)
+            preds = model(dataset.x[query_nodes], empty_edge_index)
         elif num_hops == model.num_layers:
             edge_index = dataset.edge_index[:, dataset.inductive_mask] if inductive_split else dataset.edge_index
-            predictions = model(dataset.x, edge_index)[query_nodes]
+            preds = model(dataset.x, edge_index)[query_nodes]
         else:
             edge_index = dataset.edge_index[:, dataset.inductive_mask] if inductive_split else dataset.edge_index
-            predictions = []
+            preds = []
             for v in query_nodes:
                 node_index, sub_edge_index, v_idx, _ = k_hop_subgraph(
                     node_idx=v.item(),
@@ -76,10 +76,10 @@ def k_hop_query(model, dataset, query_nodes, num_hops=0, inductive_split=True):
                     num_nodes=dataset.num_nodes,
                 )
                 pred = model(dataset.x[node_index], sub_edge_index)[v_idx].squeeze()
-                predictions.append(pred)
-            predictions = torch.stack(predictions)
-    assert predictions.shape == torch.Size([len(query_nodes), dataset.num_classes])
-    return predictions
+                preds.append(pred)
+            preds = torch.stack(preds)
+    assert preds.shape == (len(query_nodes), dataset.num_classes)
+    return preds
 
 def evaluate_graph_model(model, dataset, mask, criterion, inductive_inference):
     model.eval()

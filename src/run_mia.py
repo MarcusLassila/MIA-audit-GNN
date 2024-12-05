@@ -118,19 +118,25 @@ class MembershipInferenceExperiment:
         metrics_k = evaluation.evaluate_binary_classification(preds=soft_preds_k, truth=true_members, target_fpr=target_fpr)
         hard_preds_0 = metrics_0['hard_preds']
         hard_preds_k = metrics_k['hard_preds']
+
         nodes_of_interest = torch.from_numpy(((hard_preds_0 ^ hard_preds_k) & true_members).nonzero()[0])
+        mask = torch.randperm(nodes_of_interest.shape[0])[:20]
+        nodes_of_interest = nodes_of_interest[mask]
+        preds_0 = soft_preds_0[nodes_of_interest]
+        preds_k = soft_preds_k[nodes_of_interest]
         xs = torch.arange(nodes_of_interest.shape[0])
         lood_instance = lood.LOOD(config=self.config)
         leakage_0 = lood_instance.information_leakage(dataset=target_samples, node_index=nodes_of_interest, num_hops=0)
         leakage_k = lood_instance.information_leakage(dataset=target_samples, node_index=nodes_of_interest, num_hops=num_hops)
-        norm = torch.max(leakage_0, leakage_k).max()
-        leakage_0 = leakage_0 / norm
-        leakage_k = leakage_k / norm
+
+        preds_0, preds_k = utils.min_max_normalization(preds_0, preds_k)
+        leakage_0, leakage_k = utils.min_max_normalization(leakage_0, leakage_k)
+
         plt.figure(figsize=(12, 12))
         plt.scatter(xs, leakage_0, marker='x', label='leak 0')
         plt.scatter(xs, leakage_k, marker='x', label=f'leak {num_hops}')
-        plt.scatter(xs, soft_preds_0[nodes_of_interest], marker='o', label='pred 0')
-        plt.scatter(xs, soft_preds_k[nodes_of_interest], marker='o', label=f'pred {num_hops}')
+        plt.scatter(xs, preds_0, marker='o', label='pred 0')
+        plt.scatter(xs, preds_k, marker='o', label=f'pred {num_hops}')
         plt.legend()
         plt.grid(True)
         savepath=f'{self.config.savedir}/leakage_correlation.png'
@@ -408,13 +414,13 @@ if __name__ == '__main__':
     parser.add_argument("--weight-decay", default=1e-4, type=float)
     parser.add_argument("--dropout", default=0.5, type=float)
     parser.add_argument("--early-stopping", default=0, type=int)
-    parser.add_argument("--hidden-dim-target", default=[32], type=lambda x: [*map(int, x.split(','))])
+    parser.add_argument("--hidden-dim-target", default=[64], type=lambda x: [*map(int, x.split(','))])
     parser.add_argument("--hidden-dim-mlp-attack", default=[256, 64], type=lambda x: [*map(int, x.split(','))])
     parser.add_argument("--query-hops", default=[0], type=lambda x: [*map(int, x.split(','))])
     parser.add_argument("--experiments", default=1, type=int)
     parser.add_argument("--target-fpr", default=0.01, type=float)
     parser.add_argument("--optimizer", default="Adam", type=str)
-    parser.add_argument("--num-shadow-models", default=32, type=int)
+    parser.add_argument("--num-shadow-models", default=64, type=int)
     parser.add_argument("--rmia-gamma", default=2.0, type=float)
     parser.add_argument("--name", default="unnamed", type=str)
     parser.add_argument("--datadir", default="./data", type=str)

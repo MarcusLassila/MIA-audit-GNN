@@ -33,8 +33,10 @@ class LOOD:
     def __init__(self, config):
         self.config = config
 
-    def train_model(self, dataset, hidden_dims, dropout, disable_tqdm=True):
+    def train_model(self, dataset, hidden_dims=None, dropout=None, disable_tqdm=True):
         config = self.config
+        hidden_dims = config.hidden_dim_target if hidden_dims is None else hidden_dims
+        dropout = config.dropout if dropout is None else dropout
         model = utils.fresh_model(
             model_type=self.config.model,
             num_features=dataset.num_features,
@@ -67,7 +69,7 @@ class LOOD:
 
         preds = []
         edge_index = torch.tensor([[],[]], dtype=torch.bool)
-        for _ in tqdm(range(5000), desc="Training shadow models"):
+        for _ in tqdm(range(10000), desc="Training shadow models"):
             model = self.train_model(dataset, hidden_dims=[64], dropout=0.0)
             with torch.inference_mode():
                 preds.append(model(dataset.x, edge_index)[0, dataset.y[0]])
@@ -80,7 +82,7 @@ class LOOD:
 
         preds = []
         edge_index = torch.tensor([[],[]], dtype=torch.bool)
-        for _ in tqdm(range(50), desc="Training shadow models"):
+        for _ in tqdm(range(256), desc="Training shadow models"):
             model = self.train_model(dataset, hidden_dims=[64], dropout=0.0)
             with torch.inference_mode():
                 preds.append(model(dataset.x, edge_index)[0, dataset.y[0]])
@@ -119,13 +121,11 @@ class LOOD:
         print(f'mean {mean:.4f}, std: {std:.4f}')
         utils.plot_histogram_and_fitted_gaussian(preds, mean, std, bins=50, savepath=f'{config.savedir}/mc_dropout.png')
 
-    def information_leakage(self, dataset, node_index, num_hops=0, num_shadow_models=32):
-        hidden_dims = self.config.hidden_dim_target
-        dropout = 0.5
+    def information_leakage(self, dataset, node_index, num_hops=0, num_shadow_models=256):
         row_idx = torch.arange(node_index.shape[0])
         in_confs = []
         for _ in tqdm(range(num_shadow_models), desc='Training inclusion models'):
-            in_model = self.train_model(dataset, hidden_dims=hidden_dims, dropout=dropout)
+            in_model = self.train_model(dataset)
             pred = evaluation.k_hop_query(
                 model=in_model,
                 dataset=dataset,
@@ -142,7 +142,7 @@ class LOOD:
         assert in_means.shape == node_index.shape
 
         out_confs = []
-        for i in tqdm(range(node_index.shape[0]), desc="Training exclusion models"):
+        for i in tqdm(row_idx, desc="Training exclusion models"):
             node = node_index[i].unsqueeze(dim=0)
             confs = []
             mask = torch.ones(dataset.num_nodes, dtype=torch.bool)
@@ -158,7 +158,7 @@ class LOOD:
             sub_dataset= datasetup.masked_subgraph(dataset, mask)
             assert sub_dataset.num_nodes + sub_node_index.shape[0] == dataset.num_nodes
             for _ in range(num_shadow_models):
-                out_model = self.train_model(sub_dataset, hidden_dims=hidden_dims, dropout=dropout)
+                out_model = self.train_model(sub_dataset)
                 pred = evaluation.k_hop_query(
                     model=out_model,
                     dataset=dataset,
@@ -179,12 +179,11 @@ class LOOD:
         info_leakage = gaussian_kl_divergence(in_means, in_stds, out_means, out_stds)
         return info_leakage
 
-    def information_leakage_full(self, dataset, node_index, num_hops=0, num_shadow_models=32):
-        hidden_dims = self.config.hidden_dim_target
-        dropout = 0.5
+    def information_leakage_full(self, dataset, node_index, num_hops=0, num_shadow_models=256):
+
         in_models = []
         for _ in tqdm(range(num_shadow_models), desc='Training inclusion models'):
-            in_models.append(self.train_model(dataset, hidden_dims=hidden_dims, dropout=dropout))
+            in_models.append(self.train_model(dataset))
 
         info_leakage = []
         for i in tqdm(range(node_index.shape[0]), desc="Training exclusion models"):
@@ -204,7 +203,7 @@ class LOOD:
             sub_dataset= datasetup.masked_subgraph(dataset, mask)
             assert sub_dataset.num_nodes + sub_node_index.shape[0] == dataset.num_nodes
             for in_model in in_models:
-                out_model = self.train_model(sub_dataset, hidden_dims=hidden_dims, dropout=dropout)
+                out_model = self.train_model(sub_dataset)
                 in_pred = evaluation.k_hop_query(
                     model=in_model,
                     dataset=dataset,
@@ -219,7 +218,7 @@ class LOOD:
                     num_hops=num_hops,
                     inductive_split=True,
                 ).squeeze()
-                assert in_pred.shape == (dataset.num_classes,)
+                assert in_pred.shape == out_pred.shape == (dataset.num_classes,)
                 in_preds.append(in_pred)
                 out_preds.append(out_pred)
             in_preds = torch.stack(in_preds)
@@ -236,4 +235,4 @@ class LOOD:
             assert out_cov.shape == (dataset.num_classes, dataset.num_classes)
             info_leakage.append(multi_gaussian_kl_divergence(in_means, in_cov, out_means, out_cov))
 
-        return info_leakage
+        return torch.tensor(info_leakage)

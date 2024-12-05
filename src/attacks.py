@@ -242,7 +242,7 @@ class LiRA:
     '''
     The (offline) likelihood ratio attack from "Membership Inference Attacks From First Principles"
     '''
-    EPS = 1e-6
+    EPS = 1e-8
 
     def __init__(self, target_model, population, config):
         target_model.eval()
@@ -298,7 +298,7 @@ class LiRA:
                 # Approximate logits of confidence values using the hinge loss.
                 hinges.append(utils.hinge_loss(preds, target_samples.y))
         hinges = torch.stack(hinges)
-        assert hinges.shape == torch.Size([len(self.shadow_models), target_samples.num_nodes])
+        assert hinges.shape == (len(self.shadow_models), target_samples.num_nodes)
         means = hinges.mean(dim=0)
         stds = hinges.std(dim=0)
         if self.config.experiments == 1:
@@ -306,7 +306,7 @@ class LiRA:
                 x=hinges[:,0].cpu().numpy(),
                 mean=means[0].cpu().numpy(),
                 std=stds[0].cpu().numpy(),
-                bins=max(len(self.shadow_models) // 8, 1),
+                bins=min(self.config.num_shadow_models // 4, 50),
                 savepath="./results/LiRA_gaussian_fit_histogram.png",
             )
         return means, stds

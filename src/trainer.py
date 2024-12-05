@@ -46,6 +46,8 @@ def train_gnn(model, dataset, config: TrainConfig, disable_tqdm=False, inductive
     dataset.to(config.device)
     if inductive_split:
         edge_mask = dataset.inductive_mask
+    else:
+        edge_mask = None
     if config.early_stopping and dataset.val_mask.sum().item() == 0:
         raise Exception('Early stopping not possible without a validation set!')
     optimizer = config.optimizer(model.parameters(), lr=config.lr, weight_decay=config.weight_decay)

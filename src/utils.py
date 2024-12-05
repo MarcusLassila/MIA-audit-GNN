@@ -116,6 +116,14 @@ def tpr_at_fixed_fpr_multi(soft_preds, truth, target_fpr):
             best_thresholds = ts
     return best_tpr, best_thresholds
 
+def min_max_normalization(*args):
+    low = torch.inf
+    high = -torch.inf
+    for arg in args:
+        low = min(low, arg.min())
+        high = max(high, arg.max())
+    return tuple((arg - low) / (high - low) for arg in args)
+
 def plot_graph(graph):
     graph = to_networkx(graph)
     plt.figure(figsize=(10,8))
