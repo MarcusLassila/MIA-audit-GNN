@@ -272,7 +272,8 @@ class MembershipInferenceExperiment:
 
             tags = [] # Used to label attack setups.
             # Train and evaluate target model.
-            target_dataset, other_half = datasetup.disjoint_graph_split(self.dataset, train_frac=config.train_frac, val_frac=config.val_frac)
+            target_dataset, other_half = datasetup.disjoint_graph_split(self.dataset, train_frac=config.train_frac, val_frac=config.val_frac, v2=True)
+            full_population = self.dataset
             # lood.LOOD(self.config).quantify_query_distributions(target_dataset)
             target_model = self.train_target_model(target_dataset)
             target_scores = {
@@ -345,7 +346,7 @@ class MembershipInferenceExperiment:
                 target_samples = target_dataset.clone()
             truth = target_samples.train_mask.long()
 
-            if config.experiments == 1:
+            if config.experiments == 0:
                 self.analyze_correlation_with_information_leakage(attacker, target_samples, config.target_fpr, num_hops=2)
 
             soft_preds = []
