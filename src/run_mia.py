@@ -132,6 +132,7 @@ class MembershipInferenceExperiment:
         utils.savefig_or_show(savepath)
 
     def analyze_correlation_with_information_leakage(self, attacker, target_samples, target_fpr, num_hops=2):
+        config = self.config
         true_members = target_samples.train_mask.long().cpu().numpy()
         soft_preds_0 = attacker.run_attack(target_samples=target_samples, num_hops=0)
         soft_preds_k = attacker.run_attack(target_samples=target_samples, num_hops=num_hops, inductive_inference=True)
@@ -147,44 +148,81 @@ class MembershipInferenceExperiment:
         preds_k = soft_preds_k[nodes_of_interest]
         xs = torch.arange(nodes_of_interest.shape[0])
         lood_instance = lood.LOOD(config=self.config)
-        leakage_0, mem_0 = lood_instance.information_leakage(dataset=target_samples, node_index=nodes_of_interest, num_hops=0)
-        leakage_k, mem_k = lood_instance.information_leakage(dataset=target_samples, node_index=nodes_of_interest, num_hops=num_hops)
+        leak_0, memo_0 = lood_instance.information_leakage(dataset=target_samples, node_index=nodes_of_interest, num_hops=0)
+        leak_k, memo_k = lood_instance.information_leakage(dataset=target_samples, node_index=nodes_of_interest, num_hops=num_hops)
+
+        savedir = config.savedir + '/information_leakage'
+        prefix = '_'.join([config.dataset, config.model, config.attack])
 
         plt.figure(figsize=(12, 12))
-        plt.scatter(preds_0, mem_0)
+        plt.scatter(preds_0, leak_0)
+        plt.xlabel('pred')
+        plt.ylabel('KL Leakage')
+        plt.title('0-hop')
+        plt.grid(True)
+        savepath=f'{savedir}/{prefix}_leak_0_correlation.png'
+        utils.savefig_or_show(savepath)
+        plt.figure(figsize=(12, 12))
+
+        plt.scatter(preds_k, leak_k)
+        plt.xlabel('pred')
+        plt.ylabel('KL Leakage')
+        plt.title(f'{num_hops}-hop')
+        plt.grid(True)
+        savepath=f'{savedir}/{prefix}_leak_{num_hops}_correlation.png'
+        utils.savefig_or_show(savepath)
+
+        plt.figure(figsize=(12, 12))
+        plt.scatter(preds_0, memo_0)
         plt.xlabel('pred')
         plt.ylabel('Memorization')
         plt.title('0-hop')
         plt.grid(True)
-        savepath=f'{self.config.savedir}/attack_mem_0_correlation.png'
+        savepath=f'{savedir}/{prefix}_memo_0_correlation.png'
         utils.savefig_or_show(savepath)
-        plt.scatter(preds_k, mem_k)
+
+        plt.figure(figsize=(12, 12))
+        plt.scatter(preds_k, memo_k)
         plt.xlabel('pred')
         plt.ylabel('Memorization')
         plt.title(f'{num_hops}-hop')
         plt.grid(True)
-        savepath=f'{self.config.savedir}/attack_mem_{num_hops}_correlation.png'
+        savepath=f'{savedir}/{prefix}_memo_{num_hops}_correlation.png'
         utils.savefig_or_show(savepath)
 
         preds_0, preds_k = utils.min_max_normalization(preds_0, preds_k)
-        mem_0, mem_k = utils.min_max_normalization(mem_0, mem_k)
+        memo_0, memo_k = utils.min_max_normalization(memo_0, memo_k)
+        leak_0, leak_k = utils.min_max_normalization(leak_0, leak_k)
 
         new_size = 15
         xs = xs[:new_size]
-        mem_0 = mem_0[:new_size]
-        mem_k = mem_k[:new_size]
+        memo_0 = memo_0[:new_size]
+        memo_k = memo_k[:new_size]
+        leak_0 = leak_0[:new_size]
+        leak_k = leak_k[:new_size]
         preds_0 = preds_0[:new_size]
         preds_k = preds_k[:new_size]
 
         plt.figure(figsize=(12, 12))
-        plt.scatter(xs, mem_0, marker='x', label='mem 0')
-        plt.scatter(xs, mem_k, marker='x', label=f'mem {num_hops}')
+        plt.scatter(xs, memo_0, marker='x', label='memo 0')
+        plt.scatter(xs, memo_k, marker='x', label=f'memo {num_hops}')
         plt.scatter(xs, preds_0, marker='o', label='pred 0')
         plt.scatter(xs, preds_k, marker='o', label=f'pred {num_hops}')
         plt.legend()
         plt.xticks(np.arange(new_size))
         plt.grid(True)
-        savepath=f'{self.config.savedir}/mem_correlation.png'
+        savepath=f'{savedir}/{prefix}_memo_correlation.png'
+        utils.savefig_or_show(savepath)
+
+        plt.figure(figsize=(12, 12))
+        plt.scatter(xs, leak_0, marker='x', label='leak 0')
+        plt.scatter(xs, leak_k, marker='x', label=f'leak {num_hops}')
+        plt.scatter(xs, preds_0, marker='o', label='pred 0')
+        plt.scatter(xs, preds_k, marker='o', label=f'pred {num_hops}')
+        plt.legend()
+        plt.xticks(np.arange(new_size))
+        plt.grid(True)
+        savepath=f'{savedir}/{prefix}_leak_correlation.png'
         utils.savefig_or_show(savepath)
 
     def train_target_model(self, dataset, plot_training_results=True, compare_with_mlp=True):
@@ -393,8 +431,8 @@ class MembershipInferenceExperiment:
 
             if config.experiments == 1:
                 #self.visualize_embedding_distribution(target_model, target_samples, attacker, config.target_fpr, num_hops=2)
-                #self.analyze_correlation_with_information_leakage(attacker, target_samples, config.target_fpr, num_hops=2)
-                self.visualize_aggregation_effect_on_attack_vulnerabilities(attacker, target_samples, config.target_fpr)
+                self.analyze_correlation_with_information_leakage(attacker, target_samples, config.target_fpr, num_hops=2)
+                #self.visualize_aggregation_effect_on_attack_vulnerabilities(attacker, target_samples, config.target_fpr)
 
             soft_preds = []
             true_positives = []
