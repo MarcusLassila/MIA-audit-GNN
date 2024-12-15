@@ -98,6 +98,8 @@ def tpr_at_fixed_fpr(fpr, tpr, target_fpr, thresholds):
 
 def tpr_at_fixed_fpr_multi(soft_preds, truth, target_fpr):
     truth = truth.bool()
+    num_pos = truth.sum().item()
+    num_neg = truth.shape[0] - num_pos
     thresholds = []
     for soft_pred in soft_preds:
         fpr, tpr, threshold = roc_curve(y_true=truth, y_score=soft_pred)
@@ -109,8 +111,8 @@ def tpr_at_fixed_fpr_multi(soft_preds, truth, target_fpr):
         hard_pred = torch.zeros(soft_preds.shape[1], dtype=torch.bool)
         for soft_pred, threshold in zip(soft_preds, ts):
             hard_pred |= soft_pred >= threshold
-        fpr = (hard_pred & ~truth).sum().item() / (~truth).sum().item()
-        tpr = (hard_pred & truth).sum().item() / truth.sum().item()
+        fpr = (hard_pred & ~truth).sum().item() / num_neg
+        tpr = (hard_pred & truth).sum().item() / num_pos
         if fpr <= target_fpr and tpr > best_tpr:
             best_tpr = tpr
             best_thresholds = ts

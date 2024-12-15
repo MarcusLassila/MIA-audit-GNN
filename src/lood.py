@@ -124,6 +124,7 @@ class LOOD:
     def information_leakage(self, dataset, node_index, num_hops=0, num_shadow_models=256):
         row_idx = torch.arange(node_index.shape[0])
         in_confs = []
+        in_match = []
         for _ in tqdm(range(num_shadow_models), desc='Training inclusion models'):
             in_model = self.train_model(dataset)
             pred = evaluation.k_hop_query(
@@ -134,17 +135,23 @@ class LOOD:
                 inductive_split=True,
             )
             conf = pred[row_idx, dataset.y[node_index]]
+            match = (pred.argmax(dim=1) == dataset.y[node_index]).float()
             in_confs.append(conf)
+            in_match.append(match)
         in_confs = torch.stack(in_confs)
+        in_memo = torch.stack(in_match).mean(dim=0)
         in_means = in_confs.mean(dim=0)
         in_stds = in_confs.std(dim=0)
         assert in_confs.shape == (num_shadow_models, node_index.shape[0])
         assert in_means.shape == node_index.shape
+        assert in_memo.shape == node_index.shape
 
         out_confs = []
+        out_match = []
         for i in tqdm(row_idx, desc="Training exclusion models"):
             node = node_index[i].unsqueeze(dim=0)
             confs = []
+            match = []
             mask = torch.ones(dataset.num_nodes, dtype=torch.bool)
             # sub_node_index, _, _, _ = k_hop_subgraph(
             #     node_idx=[node],
@@ -167,17 +174,23 @@ class LOOD:
                     inductive_split=True,
                 ).squeeze()
                 assert pred.shape == (dataset.num_classes,)
+                match.append((pred.argmax() == dataset.y[node]).float())
                 confs.append(pred[dataset.y[node]])
             confs = torch.tensor(confs)
+            match = torch.tensor(match)
             out_confs.append(confs)
+            out_match.append(match)
         out_confs = torch.stack(out_confs)
+        out_memo = torch.stack(out_match).mean(dim=1)
         out_means = out_confs.mean(dim=1)
         out_stds = out_confs.std(dim=1)
         assert out_confs.shape == (node_index.shape[0], num_shadow_models)
         assert out_means.shape == node_index.shape
+        assert out_memo.shape == node_index.shape
 
-        info_leakage = gaussian_kl_divergence(in_means, in_stds, out_means, out_stds)
-        return info_leakage
+        kl_leakage = gaussian_kl_divergence(in_means, in_stds, out_means, out_stds)
+        memo = in_memo - out_memo
+        return kl_leakage, memo
 
     def information_leakage_full(self, dataset, node_index, num_hops=0, num_shadow_models=256):
 

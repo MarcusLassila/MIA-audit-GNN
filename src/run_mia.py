@@ -25,39 +25,61 @@ class MembershipInferenceExperiment:
         self.criterion = Accuracy(task="multiclass", num_classes=self.dataset.num_classes).to(self.config.device)
         print(utils.graph_info(self.dataset))
 
-    def visualize_embedding_distribution(self):
+    def visualize_embedding_distribution(self, target_model, target_samples, attacker, target_fpr, num_hops=2):
+        # TODO: plot embeddings
         config = self.config
-        dataset = datasetup.remasked_graph(self.dataset, train_frac=config.train_frac, val_frac=config.val_frac, stratify=self.dataset.y)
-        savepath = f'{config.savedir}/embeddings/features.png'
-        train_mask = ~dataset.test_mask
-        utils.plot_embedding_2D_scatter(dataset.x, dataset.y, train_mask, savepath=savepath)
-        target_model = self.train_target_model(dataset)
-        target_model.eval()
-        query_nodes = torch.arange(0, dataset.num_nodes)
-        savedir = f'{config.savedir}/embeddings'
-        for query_hops in config.query_hops:
-            savepath = f'{savedir}/emb_scatter_2D_{query_hops}hops_{config.name}.png'
-            with torch.inference_mode():
-                embs = evaluation.k_hop_query(
-                    model=target_model,
-                    dataset=dataset,
-                    query_nodes=query_nodes,
-                    num_hops=query_hops,
-                    inductive_split=config.inductive_inference,
-                ).cpu()
-                dataset.to('cpu')
-                hinge = utils.hinge_loss(embs, dataset.y)
-                utils.plot_embedding_2D_scatter(embs=embs, y=dataset.y, train_mask=train_mask, savepath=savepath)
-                for label in range(dataset.num_classes):
-                    label_mask = dataset.y == label
-                    savepath = f'{savedir}/hinge_hist_class{label}_{config.name}.png'
-                    utils.plot_hinge_histogram(hinge, label_mask=label_mask, train_mask=train_mask, savepath=savepath)
+        true_members = target_samples.train_mask.long().cpu().numpy()
+        query_nodes = torch.arange(target_samples.num_nodes)
+        emb = evaluation.k_hop_query(
+            model=target_model,
+            dataset=target_samples,
+            query_nodes=query_nodes,
+            num_hops=0,
+            inductive_split=True,
+        )
+        soft_preds_0 = attacker.run_attack(target_samples=target_samples, num_hops=0)
+        soft_preds_k = attacker.run_attack(target_samples=target_samples, num_hops=num_hops, inductive_inference=True)
+        metrics_0 = evaluation.evaluate_binary_classification(preds=soft_preds_0, truth=true_members, target_fpr=target_fpr)
+        metrics_k = evaluation.evaluate_binary_classification(preds=soft_preds_k, truth=true_members, target_fpr=target_fpr)
+        hard_preds_0 = metrics_0['hard_preds']
+        hard_preds_k = metrics_k['hard_preds']
+        nodes_0 = torch.tensor((hard_preds_0 & (1 ^ hard_preds_k) & true_members).nonzero()[0], dtype=torch.long)
+        nodes_k = torch.tensor((hard_preds_k & (1 ^ hard_preds_0) & true_members).nonzero()[0], dtype=torch.long)
+        nodes_of_interest = torch.tensor(((hard_preds_0 | hard_preds_k) & true_members).nonzero()[0], dtype=torch.long)
+        labels, counts = torch.unique(target_samples.y[nodes_of_interest], return_counts=True)
+        most_vuln_label = labels[counts.argmax()]
+        nodes_0_singe_label = nodes_0[target_samples.y[nodes_0] == most_vuln_label]
+        nodes_k_singe_label = nodes_k[target_samples.y[nodes_k] == most_vuln_label]
 
-    def visualize_aggregation_effect_on_attack_vulnerabilities(self, attacker, target_samples, target_fpr, num_hops=2, max_num_plotted_nodes=10):
+        utils.plot_embedding_2D_scatter(emb)
+
+        def cross_cosine_sim(index_a, index_b, emb):
+            avg_cross_sim = 0
+            l = 0
+            for a in index_a:
+                for b in index_b:
+                    if a == b:
+                        continue
+                    avg_cross_sim += F.cosine_similarity(emb[a], emb[b], dim=-1).item()
+                    l += 1
+            if l == 0:
+                return 1.0
+            avg_cross_sim /= l
+            return avg_cross_sim
+
+        avg_cross_sim = cross_cosine_sim(nodes_0_singe_label, nodes_k_singe_label, emb)
+        avg_0_sim = cross_cosine_sim(nodes_0_singe_label, nodes_0_singe_label, emb)
+        avg_k_sim = cross_cosine_sim(nodes_k_singe_label, nodes_k_singe_label, emb)
+        print(f'Comparing cosine simularities of embeddings for class {most_vuln_label}')
+        print(f'average cross sim: {avg_cross_sim:.4f}')
+        print(f'average 0 sim: {avg_0_sim:.4f}')
+        print(f'average {num_hops} sim: {avg_k_sim:.4f}')
+
+    def visualize_aggregation_effect_on_attack_vulnerabilities(self, attacker, target_samples, target_fpr, num_hops=2, max_num_plotted_nodes=15):
         '''
         Plot test statistic of nodes against decision threshold for nodes that are identified by the 0-hop attack, but not the k-hop attack, or vice versa.
         '''
-        attack_name = attacker.__class__.__name__
+        config = self.config
         true_members = target_samples.train_mask.long().cpu().numpy()
         soft_preds_0 = attacker.run_attack(target_samples=target_samples, num_hops=0)
         soft_preds_k = attacker.run_attack(target_samples=target_samples, num_hops=num_hops, inductive_inference=True)
@@ -67,7 +89,7 @@ class MembershipInferenceExperiment:
         threshold_k = metrics_k['threshold']
         hard_preds_0 = metrics_0['hard_preds']
         hard_preds_k = metrics_k['hard_preds']
-        nodes_of_interest = torch.tensor((hard_preds_0 ^ hard_preds_k).nonzero()[0], dtype=torch.long)
+        nodes_of_interest = torch.tensor(((hard_preds_0 ^ hard_preds_k) & true_members).nonzero()[0], dtype=torch.long)
         means = torch.zeros(size=(nodes_of_interest.shape[0], 2))
         for i, node in enumerate(nodes_of_interest):
             node_index, _, _, _ = k_hop_subgraph(
@@ -77,9 +99,8 @@ class MembershipInferenceExperiment:
                 relabel_nodes=False,
                 num_nodes=target_samples.num_nodes,
             )
-            sub_node_index = torch.tensor([x for x in node_index if x != node], dtype=torch.long)
-            means[i, 0] = soft_preds_0[sub_node_index].mean()
-            means[i, 1] = soft_preds_k[sub_node_index].mean()
+            means[i, 0] = soft_preds_0[node_index].mean()
+            means[i, 1] = soft_preds_k[node_index].mean()
 
         perm_mask = torch.randperm(nodes_of_interest.shape[0])
         node_index = nodes_of_interest[perm_mask][:max_num_plotted_nodes]
@@ -88,7 +109,7 @@ class MembershipInferenceExperiment:
         preds_0 = soft_preds_0[node_index]
         preds_k = soft_preds_k[node_index]
         indices = torch.arange(1, max_num_plotted_nodes + 1)
-        savepath = f'{self.config.savedir}/{self.config.name}_{attack_name}_node_vulnerabilities.png'
+        savepath = f'{self.config.savedir}/{self.config.name}_{config.attack}_node_vulnerabilities.png'
         low, high, diff = min(threshold_0, threshold_k), max(threshold_0, threshold_k), abs(threshold_0 - threshold_k)
         spread = 2
 
@@ -103,9 +124,9 @@ class MembershipInferenceExperiment:
         plt.xticks(np.arange(indices.shape[0]))
         plt.xlabel('Node id')
         plt.ylabel('Test statistic')
-        if attack_name == "LiRA":
+        if config.attack == "lira":
             plt.ylim(low - spread * diff, high + spread * diff)
-        elif attack_name == "RMIA":
+        elif config.attack == "rmia":
             plt.ylim(0.0, 1.0)
         plt.legend()
         utils.savefig_or_show(savepath)
@@ -120,26 +141,50 @@ class MembershipInferenceExperiment:
         hard_preds_k = metrics_k['hard_preds']
 
         nodes_of_interest = torch.from_numpy(((hard_preds_0 ^ hard_preds_k) & true_members).nonzero()[0])
-        mask = torch.randperm(nodes_of_interest.shape[0])[:20]
+        mask = torch.randperm(nodes_of_interest.shape[0])[:50]
         nodes_of_interest = nodes_of_interest[mask]
         preds_0 = soft_preds_0[nodes_of_interest]
         preds_k = soft_preds_k[nodes_of_interest]
         xs = torch.arange(nodes_of_interest.shape[0])
         lood_instance = lood.LOOD(config=self.config)
-        leakage_0 = lood_instance.information_leakage(dataset=target_samples, node_index=nodes_of_interest, num_hops=0)
-        leakage_k = lood_instance.information_leakage(dataset=target_samples, node_index=nodes_of_interest, num_hops=num_hops)
-
-        preds_0, preds_k = utils.min_max_normalization(preds_0, preds_k)
-        leakage_0, leakage_k = utils.min_max_normalization(leakage_0, leakage_k)
+        leakage_0, mem_0 = lood_instance.information_leakage(dataset=target_samples, node_index=nodes_of_interest, num_hops=0)
+        leakage_k, mem_k = lood_instance.information_leakage(dataset=target_samples, node_index=nodes_of_interest, num_hops=num_hops)
 
         plt.figure(figsize=(12, 12))
-        plt.scatter(xs, leakage_0, marker='x', label='leak 0')
-        plt.scatter(xs, leakage_k, marker='x', label=f'leak {num_hops}')
+        plt.scatter(preds_0, mem_0)
+        plt.xlabel('pred')
+        plt.ylabel('Memorization')
+        plt.title('0-hop')
+        plt.grid(True)
+        savepath=f'{self.config.savedir}/attack_mem_0_correlation.png'
+        utils.savefig_or_show(savepath)
+        plt.scatter(preds_k, mem_k)
+        plt.xlabel('pred')
+        plt.ylabel('Memorization')
+        plt.title(f'{num_hops}-hop')
+        plt.grid(True)
+        savepath=f'{self.config.savedir}/attack_mem_{num_hops}_correlation.png'
+        utils.savefig_or_show(savepath)
+
+        preds_0, preds_k = utils.min_max_normalization(preds_0, preds_k)
+        mem_0, mem_k = utils.min_max_normalization(mem_0, mem_k)
+
+        new_size = 15
+        xs = xs[:new_size]
+        mem_0 = mem_0[:new_size]
+        mem_k = mem_k[:new_size]
+        preds_0 = preds_0[:new_size]
+        preds_k = preds_k[:new_size]
+
+        plt.figure(figsize=(12, 12))
+        plt.scatter(xs, mem_0, marker='x', label='mem 0')
+        plt.scatter(xs, mem_k, marker='x', label=f'mem {num_hops}')
         plt.scatter(xs, preds_0, marker='o', label='pred 0')
         plt.scatter(xs, preds_k, marker='o', label=f'pred {num_hops}')
         plt.legend()
+        plt.xticks(np.arange(new_size))
         plt.grid(True)
-        savepath=f'{self.config.savedir}/leakage_correlation.png'
+        savepath=f'{self.config.savedir}/mem_correlation.png'
         utils.savefig_or_show(savepath)
 
     def train_target_model(self, dataset, plot_training_results=True, compare_with_mlp=True):
@@ -346,8 +391,10 @@ class MembershipInferenceExperiment:
                 target_samples = target_dataset.clone()
             truth = target_samples.train_mask.long()
 
-            if config.experiments == 0:
-                self.analyze_correlation_with_information_leakage(attacker, target_samples, config.target_fpr, num_hops=2)
+            if config.experiments == 1:
+                #self.visualize_embedding_distribution(target_model, target_samples, attacker, config.target_fpr, num_hops=2)
+                #self.analyze_correlation_with_information_leakage(attacker, target_samples, config.target_fpr, num_hops=2)
+                self.visualize_aggregation_effect_on_attack_vulnerabilities(attacker, target_samples, config.target_fpr)
 
             soft_preds = []
             true_positives = []
