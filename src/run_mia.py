@@ -300,16 +300,6 @@ class MembershipInferenceExperiment:
             )
         return target_model
 
-    def query_generator(self):
-        for num_hops in self.config.query_hops:
-            if num_hops == 0:
-                yield (num_hops, True)
-            elif self.config.inductive_inference is None:
-                yield (num_hops, True)
-                yield (num_hops, False)
-            else:
-                yield (num_hops, self.config.inductive_inference)
-
     def parse_train_stats(self, train_stats):
         return pd.DataFrame({
             'train_acc': [utils.stat_repr(train_stats['train_scores'])],
@@ -338,27 +328,16 @@ class MembershipInferenceExperiment:
                 i += 1
         return pd.DataFrame(detection_table, index=[config.name])
 
-    def run(self):
+    def make_target(self, evaluate_target=True, return_split_index=False):
         config = self.config
-        train_stats = defaultdict(list)
-        attack_stats = defaultdict(list)
-        detection_stats = []
-
-        def make_tag(num_hops: int, inductive_flag: bool):
-            return f'{num_hops}{"I" if inductive_flag else "T"}'
-
-        for i_experiment in range(1, config.experiments + 1):
-            print(f'Running experiment {i_experiment}/{config.experiments}.')
-
-            # Use fixed random seeds such that each experimental configuration is evaluated on the same dataset
-            set_seed(i_experiment)
-
-            tags = [] # Used to label attack setups.
-            # Train and evaluate target model.
-            target_dataset, other_half = datasetup.disjoint_graph_split(self.dataset, train_frac=config.train_frac, val_frac=config.val_frac, v2=True)
-            full_population = self.dataset
-            # lood.LOOD(self.config).quantify_query_distributions(target_dataset)
-            target_model = self.train_target_model(target_dataset)
+        target_dataset, other_half, target_index, other_index = datasetup.disjoint_graph_split(
+            self.dataset,
+            train_frac=config.train_frac,
+            val_frac=config.val_frac,
+            v2=True
+        )
+        target_model = self.train_target_model(target_dataset)
+        if evaluate_target:
             target_scores = {
                 'train_score': evaluation.evaluate_graph_model(
                     model=target_model,
@@ -375,52 +354,93 @@ class MembershipInferenceExperiment:
                     inductive_inference=config.inductive_split,
                 ),
             }
+        else:
+            target_scores = None
+        return target_model, target_dataset, other_half, target_index, other_index, target_scores
+
+    def get_attacker(self, target_model, population):
+        '''
+        Return an instance of the attack class specified by config.attack
+        '''
+        config = self.config
+        match config.attack:
+            case "basic-mlp":
+                if config.split == 'sampled':
+                    shadow_dataset = datasetup.sample_subgraph(
+                        self.dataset,
+                        num_nodes=self.dataset.num_nodes//2,
+                        train_frac=config.train_frac,
+                        val_frac=config.val_frac
+                    )
+                else:
+                    shadow_dataset = population.clone()
+                attacker = attacks.BasicMLPAttack(
+                    target_model=target_model,
+                    shadow_dataset=shadow_dataset,
+                    config=config,
+                )
+            case "improved-mlp":
+                attacker = attacks.ImprovedMLPAttack(
+                    target_model=target_model,
+                    population=population,
+                    queries=[0, 2],
+                    config=config,
+                )
+            case "confidence":
+                attacker = attacks.ConfidenceAttack(
+                    target_model=target_model,
+                    config=config,
+                )
+            case "lira":
+                # In offline LiRA, the shadow models are trained on datasets that does not contain the target sample.
+                # Therefore we make a disjoint split and train shadow models on one part, and attack samples of the other part.
+                attacker = attacks.LiRA(
+                    target_model=target_model,
+                    population=population,
+                    config=config,
+                )
+            case "rmia":
+                attacker = attacks.RMIA(
+                    target_model=target_model,
+                    population=population,
+                    config=config,
+                )
+            case _:
+                raise AttributeError(f"No attack named {config.attack}")
+        return attacker
+
+    def run_query_experiment(self):
+        config = self.config
+        train_stats = defaultdict(list)
+        attack_stats = defaultdict(list)
+        detection_stats = []
+
+        def make_tag(num_hops: int, inductive_flag: bool):
+            return f'{num_hops}{"I" if inductive_flag else "T"}'
+        
+        def query_generator():
+            for num_hops in config.query_hops:
+                if num_hops == 0:
+                    yield (num_hops, True)
+                elif config.inductive_inference is None:
+                    yield (num_hops, True)
+                    yield (num_hops, False)
+                else:
+                    yield (num_hops, config.inductive_inference)
+
+        for i_experiment in range(1, config.num_experiments + 1):
+            print(f'Running experiment {i_experiment}/{config.num_experiments}.')
+
+            # Use fixed random seeds such that each experimental configuration is evaluated on the same dataset
+            set_seed(i_experiment)
+
+            tags = [] # Used to label attack setups.
+            # Train and evaluate target model.
+            target_model, target_dataset, other_half, _, _, target_scores = self.make_target()
             train_stats['train_scores'].append(target_scores['train_score'])
             train_stats['test_scores'].append(target_scores['test_score'])
-            match config.attack:
-                case "basic-mlp":
-                    if config.split == 'sampled':
-                        shadow_dataset = datasetup.sample_subgraph(
-                            self.dataset,
-                            num_nodes=self.dataset.num_nodes//2,
-                            train_frac=config.train_frac,
-                            val_frac=config.val_frac
-                        )
-                    else:
-                        shadow_dataset = other_half.clone()
-                    attacker = attacks.BasicMLPAttack(
-                        target_model=target_model,
-                        shadow_dataset=shadow_dataset,
-                        config=config,
-                    )
-                case "improved-mlp":
-                    attacker = attacks.ImprovedMLPAttack(
-                        target_model=target_model,
-                        population=other_half,
-                        queries=[0, 2],
-                        config=config,
-                    )
-                case "confidence":
-                    attacker = attacks.ConfidenceAttack(
-                        target_model=target_model,
-                        config=config,
-                    )
-                case "lira":
-                    # In offline LiRA, the shadow models are trained on datasets that does not contain the target sample.
-                    # Therefore we make a disjoint split and train shadow models on one part, and attack samples of the other part.
-                    attacker = attacks.LiRA(
-                        target_model=target_model,
-                        population=other_half,
-                        config=config,
-                    )
-                case "rmia":
-                    attacker = attacks.RMIA(
-                        target_model=target_model,
-                        population=other_half,
-                        config=config,
-                    )
-                case _:
-                    raise AttributeError(f"No attack named {config.attack}")
+
+            attacker = self.get_attacker(target_model=target_model, population=other_half)
 
             # Remove validation mask from target samples
             if target_dataset.val_mask.sum().item() > 0:
@@ -429,7 +449,7 @@ class MembershipInferenceExperiment:
                 target_samples = target_dataset.clone()
             truth = target_samples.train_mask.long()
 
-            if config.experiments == 1:
+            if config.num_experiments == 1:
                 #self.visualize_embedding_distribution(target_model, target_samples, attacker, config.target_fpr, num_hops=2)
                 self.analyze_correlation_with_information_leakage(attacker, target_samples, config.target_fpr, num_hops=2)
                 #self.visualize_aggregation_effect_on_attack_vulnerabilities(attacker, target_samples, config.target_fpr)
@@ -438,7 +458,7 @@ class MembershipInferenceExperiment:
             true_positives = []
 
             # Run attack using the specified set of k-hop neighborhood queries.
-            for num_hops, inductive_flag in self.query_generator():
+            for num_hops, inductive_flag in query_generator():
                 tag = make_tag(num_hops, inductive_flag)
                 tags.append(tag)
                 preds = attacker.run_attack(target_samples=target_samples, num_hops=num_hops, inductive_inference=inductive_flag)
@@ -471,6 +491,54 @@ class MembershipInferenceExperiment:
         detection_df = self.parse_detection_stats(detection_stats, tags)
         return train_stats_df, attack_stats_df, detection_df
 
+    def run_monte_carlo_inference_experiment(self):
+        config = self.config
+        train_stats = defaultdict(list)
+        attack_stats = defaultdict(list)
+
+        for i_experiment in range(1, config.num_experiments + 1):
+            print(f'Running experiment {i_experiment}/{config.num_experiments}.')
+
+            # Use fixed random seeds such that each experimental configuration is evaluated on the same dataset
+            set_seed(i_experiment)
+
+            # Train and evaluate target model.
+            target_model, target_dataset, other_half, _, _, target_scores = self.make_target()
+            train_stats['train_scores'].append(target_scores['train_score'])
+            train_stats['test_scores'].append(target_scores['test_score'])
+
+            attacker = self.get_attacker(target_model=target_model, population=other_half)
+
+            # Remove validation mask from target samples
+            if target_dataset.val_mask.sum().item() > 0:
+                target_samples = datasetup.masked_subgraph(target_dataset, ~target_dataset.val_mask)
+            else:
+                target_samples = target_dataset.clone()
+            truth = target_samples.train_mask.long()
+
+            monte_carlo_masks = []
+            monte_carlo_masks.append(torch.zeros(target_samples.edge_index.shape[1], dtype=torch.bool)) # Always include the 0-hop query
+            for _ in range(config.mc_inference_samples):
+                monte_carlo_masks.append(datasetup.random_edge_mask(target_samples, 0.75))
+
+            preds = attacker.run_attack(target_samples=target_samples, inductive_inference=config.inductive_inference, monte_carlo_masks=monte_carlo_masks)
+            metrics = evaluation.evaluate_binary_classification(preds, truth, config.target_fpr)
+            fpr, tpr = metrics['ROC']
+            attack_stats[f'FPR'].append(fpr)
+            attack_stats[f'TPR'].append(tpr)
+            attack_stats[f'AUC'].append(metrics['AUC'])
+            attack_stats[f'TPR@{config.target_fpr}FPR'].append(metrics['TPR@FPR'])
+
+        if config.make_roc_plots:
+            savepath = f'{config.savedir}/{config.name}_roc_loglog.png'
+            fprs = attack_stats[f'FPR']
+            tprs = attack_stats[f'TPR']
+            utils.plot_multi_roc_loglog(fprs, tprs, savepath=savepath)
+
+        train_stats_df = self.parse_train_stats(train_stats)
+        attack_stats_df = self.parse_attack_stats(attack_stats)
+        return train_stats_df, attack_stats_df
+
 def set_seed(seed):
     np.random.seed(seed)
     torch.random.manual_seed(seed)
@@ -480,8 +548,11 @@ def main(config):
     config['dataset'] = config['dataset'].lower()
     config['device'] = 'cuda' if torch.cuda.is_available() else 'cpu'
     mie = MembershipInferenceExperiment(config)
-    # mie.visualize_embedding_distribution()
-    return mie.run()
+    match config['experiment']:
+        case 'query':
+            return mie.run_query_experiment()
+        case 'mc-inference':
+            return mie.run_monte_carlo_inference_experiment()
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
@@ -503,11 +574,13 @@ if __name__ == '__main__':
     parser.add_argument("--hidden-dim-target", default=[64], type=lambda x: [*map(int, x.split(','))])
     parser.add_argument("--hidden-dim-mlp-attack", default=[256, 64], type=lambda x: [*map(int, x.split(','))])
     parser.add_argument("--query-hops", default=[0], type=lambda x: [*map(int, x.split(','))])
-    parser.add_argument("--experiments", default=1, type=int)
+    parser.add_argument("--experiment", default="query", type=str)
+    parser.add_argument("--num-experiments", default=1, type=int)
     parser.add_argument("--target-fpr", default=0.01, type=float)
     parser.add_argument("--optimizer", default="Adam", type=str)
     parser.add_argument("--num-shadow-models", default=64, type=int)
     parser.add_argument("--rmia-gamma", default=2.0, type=float)
+    parser.add_argument("--mc-inference-samples", default=0, type=int)
     parser.add_argument("--name", default="unnamed", type=str)
     parser.add_argument("--datadir", default="./data", type=str)
     parser.add_argument("--savedir", default="./results", type=str)
@@ -526,7 +599,11 @@ if __name__ == '__main__':
     print(utils.Config(config))
     print()
 
-    train_df, stat_df, detection_df = main(config)
+    ret = main(config)
+    if config['experiment'] == 'query':
+        train_df, stat_df, detection_df = ret
+    elif config['experiment'] == 'mc-inference':
+        train_df, stat_df = ret
     print('Target training statistics:')
     print(train_df)
     print('Attack performance statistics:')

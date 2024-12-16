@@ -300,10 +300,10 @@ def disjoint_graph_split(graph, train_frac, val_frac, v2=True):
     '''
     Split the graph dataset in two rougly equal sized disjoint subgraphs.
     '''
-    target_index, shadow_index = disjoint_node_split(graph, v2=v2)
-    target_graph = extract_subgraph(graph, target_index, train_frac=train_frac, val_frac=val_frac)
-    shadow_graph = extract_subgraph(graph, shadow_index, train_frac=train_frac, val_frac=val_frac)
-    return target_graph, shadow_graph
+    index_A, index_B = disjoint_node_split(graph, v2=v2)
+    graph_A = extract_subgraph(graph, index_A, train_frac=train_frac, val_frac=val_frac)
+    graph_B = extract_subgraph(graph, index_B, train_frac=train_frac, val_frac=val_frac)
+    return graph_A, graph_B, index_A, index_B
 
 def parse_dataset(root, name):
     match name:
@@ -351,8 +351,8 @@ def test_split():
     fractions_B = []
     for _ in tqdm(range(20), desc='Computing datasplit statistics'):
         data_A, data_B = disjoint_graph_split(dataset, v2=False)
-        average_degree_A = utils.average_degree(data_A)
-        average_degree_B = utils.average_degree(data_B)
+        average_degree_A, _, _ = utils.average_degree(data_A)
+        average_degree_B, _, _ = utils.average_degree(data_B)
         frac_A = utils.fraction_isolated_nodes(data_A)
         frac_B = utils.fraction_isolated_nodes(data_B)
         degree_A.append(average_degree_A)

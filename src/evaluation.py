@@ -42,7 +42,7 @@ def evaluate_binary_classification(preds, truth, target_fpr):
         'threshold': threshold,
     }
 
-def k_hop_query(model, dataset, query_nodes, num_hops=0, inductive_split=True):
+def k_hop_query(model, dataset, query_nodes, num_hops=0, inductive_split=True, monte_carlo_masks=None):
     '''
     Queries the model for each node in in query_nodes,
     using the local subgraph definded by the "num_hops"-hop neigborhood.
@@ -58,7 +58,16 @@ def k_hop_query(model, dataset, query_nodes, num_hops=0, inductive_split=True):
     if query_nodes.shape == ():
         query_nodes.unsqueeze(dim=0)
     with torch.inference_mode():
-        if num_hops == 0:
+        if monte_carlo_masks is not None:
+            preds = []
+            for edge_mask in monte_carlo_masks:
+                if inductive_split:
+                    edge_mask = edge_mask & dataset.inductive_mask
+                sampled_edge_index = dataset.edge_index[:, edge_mask]
+                preds.append(model(dataset.x, sampled_edge_index)[query_nodes])
+            preds = torch.stack(preds)
+            preds = preds.mean(dim=0)
+        elif num_hops == 0:
             empty_edge_index = torch.tensor([[],[]], dtype=torch.int64).to(dataset.edge_index.device)
             preds = model(dataset.x[query_nodes], empty_edge_index)
         elif num_hops == model.num_layers:

@@ -225,7 +225,7 @@ class ConfidenceAttack:
         self.target_model = target_model
         self.config = config
     
-    def run_attack(self, target_samples, num_hops=0, inductive_inference=True):
+    def run_attack(self, target_samples, num_hops=0, inductive_inference=True, monte_carlo_masks=None):
         row_idx = torch.arange(target_samples.num_nodes)
         with torch.inference_mode():
             preds = evaluation.k_hop_query(
@@ -234,6 +234,7 @@ class ConfidenceAttack:
                 query_nodes=row_idx,
                 num_hops=num_hops,
                 inductive_split=inductive_inference,
+                monte_carlo_masks=monte_carlo_masks,
             )
             confidences = preds[row_idx, target_samples.y] # Unnormalized for numerical stability
         return confidences
@@ -284,7 +285,7 @@ class LiRA:
             shadow_model.eval()
             self.shadow_models.append(shadow_model)
     
-    def get_mean_and_std(self, target_samples, num_hops, inductive_inference):
+    def get_mean_and_std(self, target_samples, num_hops, inductive_inference, monte_carlo_masks):
         hinges = []
         for shadow_model in self.shadow_models:
             with torch.inference_mode():
@@ -294,6 +295,7 @@ class LiRA:
                     query_nodes=torch.arange(target_samples.num_nodes),
                     num_hops=num_hops,
                     inductive_split=inductive_inference,
+                    monte_carlo_masks=monte_carlo_masks,
                 )
                 # Approximate logits of confidence values using the hinge loss.
                 hinges.append(utils.hinge_loss(preds, target_samples.y))
@@ -301,19 +303,18 @@ class LiRA:
         assert hinges.shape == (len(self.shadow_models), target_samples.num_nodes)
         means = hinges.mean(dim=0)
         stds = hinges.std(dim=0)
-        if self.config.experiments == 1:
-            utils.plot_histogram_and_fitted_gaussian(
-                x=hinges[:,0].cpu().numpy(),
-                mean=means[0].cpu().numpy(),
-                std=stds[0].cpu().numpy(),
-                bins=min(self.config.num_shadow_models // 4, 50),
-                savepath="./results/LiRA_gaussian_fit_histogram.png",
-            )
+        utils.plot_histogram_and_fitted_gaussian(
+            x=hinges[:,0].cpu().numpy(),
+            mean=means[0].cpu().numpy(),
+            std=stds[0].cpu().numpy(),
+            bins=min(self.config.num_shadow_models // 4, 50),
+            savepath="./results/LiRA_gaussian_fit_histogram.png",
+        )
         return means, stds
 
-    def run_attack(self, target_samples, num_hops=0, inductive_inference=True):
+    def run_attack(self, target_samples, num_hops=0, inductive_inference=True, monte_carlo_masks=None):
         target_samples.to(self.config.device)
-        means, stds = self.get_mean_and_std(target_samples, num_hops, inductive_inference)
+        means, stds = self.get_mean_and_std(target_samples, num_hops, inductive_inference, monte_carlo_masks)
         with torch.inference_mode():
             preds = evaluation.k_hop_query(
                 model=self.target_model,
@@ -321,6 +322,7 @@ class LiRA:
                 query_nodes=torch.arange(target_samples.num_nodes),
                 num_hops=num_hops,
                 inductive_split=inductive_inference,
+                monte_carlo_masks=monte_carlo_masks,
             )
             target_hinges = utils.hinge_loss(preds, target_samples.y)
 
@@ -436,6 +438,7 @@ class RMIA:
                         dataset=dataset,
                         query_nodes=row_idx,
                         num_hops=0,
+                        inductive_split=self.config.inductive_inference,
                     )
                     confidences.append(F.softmax(preds, dim=1)[row_idx, dataset.y])
 

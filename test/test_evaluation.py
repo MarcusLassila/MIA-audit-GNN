@@ -19,7 +19,7 @@ class TestEvaluation(unittest.TestCase):
             config = utils.Config(yaml.safe_load(file)['default-parameters'])
             config.device = 'cpu'
         dataset = datasetup.parse_dataset(config.datadir, 'cora')
-        target_dataset, other_half = datasetup.disjoint_graph_split(dataset, train_frac=config.train_frac, val_frac=config.val_frac)
+        target_dataset, _, _, _ = datasetup.disjoint_graph_split(dataset, train_frac=config.train_frac, val_frac=config.val_frac)
         criterion = Accuracy(task="multiclass", num_classes=dataset.num_classes)
         target_model = utils.fresh_model(
             model_type=config.model,
