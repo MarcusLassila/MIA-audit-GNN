@@ -354,6 +354,9 @@ class RMIA:
         self.partition_population()
         self.train_shadow_models()
         self.offline_a = self.select_offline_a()
+        self.monte_carlo_masks = []
+        for _ in range(config.mc_inference_samples):
+            self.monte_carlo_masks.append(datasetup.random_edge_mask(self.population, 0.8))
         print("offline_a:", self.offline_a)
 
     def partition_population(self, unbiased_in_expectation=True):
@@ -451,7 +454,7 @@ class RMIA:
                 best_offline_a = offline_a
         return best_offline_a
 
-    def ratio(self, target_samples, num_hops, inductive_inference, interp_from_out_models):
+    def ratio(self, target_samples, num_hops, inductive_inference, monte_carlo_masks, interp_from_out_models):
         row_idx = torch.arange(target_samples.num_nodes)
         shadow_confidences = []
         for shadow_model in self.shadow_models:
@@ -462,6 +465,7 @@ class RMIA:
                     query_nodes=row_idx,
                     num_hops=num_hops,
                     inductive_split=inductive_inference,
+                    monte_carlo_masks=monte_carlo_masks,
                 )
                 shadow_confidences.append(F.softmax(preds, dim=1)[row_idx, target_samples.y])
         shadow_confidences = torch.stack(shadow_confidences)
@@ -479,17 +483,21 @@ class RMIA:
                 query_nodes=row_idx,
                 num_hops=num_hops,
                 inductive_split=inductive_inference,
+                monte_carlo_masks=monte_carlo_masks,
             )
             target_confidence = F.softmax(preds, dim=1)[row_idx, target_samples.y]
         assert pr.shape == target_confidence.shape == (target_samples.num_nodes,)
         return target_confidence / pr
 
-    def score(self, target_samples, num_hops, inductive_inference):
-        ratioX = self.ratio(target_samples, num_hops, inductive_inference, interp_from_out_models=True)
-        ratioZ = self.ratio(self.population, num_hops, inductive_inference, interp_from_out_models=False)
+    def score(self, target_samples, num_hops, inductive_inference, monte_carlo_masks):
+        ratioX = self.ratio(target_samples, num_hops, inductive_inference, monte_carlo_masks, interp_from_out_models=True)
+        if monte_carlo_masks is not None:
+            ratioZ = self.ratio(self.population, num_hops, inductive_inference, self.monte_carlo_masks, interp_from_out_models=False)
+        else:
+            ratioZ = self.ratio(self.population, num_hops, inductive_inference, None, interp_from_out_models=False)
         return torch.tensor([(x > ratioZ * self.gamma).float().mean().item() for x in ratioX])
 
-    def run_attack(self, target_samples, num_hops=0, inductive_inference=True):
+    def run_attack(self, target_samples, num_hops=0, inductive_inference=True, monte_carlo_masks=None):
         target_samples.to(self.config.device)
         self.population.to(self.config.device)
-        return self.score(target_samples, num_hops, inductive_inference)
+        return self.score(target_samples, num_hops, inductive_inference, monte_carlo_masks)

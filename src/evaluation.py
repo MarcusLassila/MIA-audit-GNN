@@ -66,7 +66,7 @@ def k_hop_query(model, dataset, query_nodes, num_hops=0, inductive_split=True, m
                 sampled_edge_index = dataset.edge_index[:, edge_mask]
                 preds.append(model(dataset.x, sampled_edge_index)[query_nodes])
             preds = torch.stack(preds)
-            preds = preds.mean(dim=0)
+            preds = preds.median(dim=0).values # median works slightly better than mean
         elif num_hops == 0:
             empty_edge_index = torch.tensor([[],[]], dtype=torch.int64).to(dataset.edge_index.device)
             preds = model(dataset.x[query_nodes], empty_edge_index)

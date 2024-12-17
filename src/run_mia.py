@@ -12,8 +12,9 @@ import numpy as np
 import matplotlib.pyplot as plt
 import torch
 import torch.nn.functional as F
-from torch_geometric.utils import k_hop_subgraph
+from torch_geometric.utils import k_hop_subgraph, index_to_mask
 from torchmetrics import Accuracy
+from tqdm.auto import tqdm
 from collections import defaultdict
 from itertools import combinations
 
@@ -516,18 +517,58 @@ class MembershipInferenceExperiment:
                 target_samples = target_dataset.clone()
             truth = target_samples.train_mask.long()
 
-            monte_carlo_masks = []
-            monte_carlo_masks.append(torch.zeros(target_samples.edge_index.shape[1], dtype=torch.bool)) # Always include the 0-hop query
-            for _ in range(config.mc_inference_samples):
-                monte_carlo_masks.append(datasetup.random_edge_mask(target_samples, 0.75))
-
-            preds = attacker.run_attack(target_samples=target_samples, inductive_inference=config.inductive_inference, monte_carlo_masks=monte_carlo_masks)
+            # Approximate training mask
+            preds = attacker.run_attack(target_samples=target_samples, num_hops=0)
             metrics = evaluation.evaluate_binary_classification(preds, truth, config.target_fpr)
             fpr, tpr = metrics['ROC']
+            attack_stats[f'0hop_FPR'].append(fpr)
+            attack_stats[f'0hop_TPR'].append(tpr)
+            attack_stats[f'0hop_AUC'].append(metrics['AUC'])
+            attack_stats[f'0hop_TPR@{config.target_fpr}FPR'].append(metrics['TPR@FPR'])
+
+            n = 1000
+            sorted_preds = preds.argsort(dim=0, descending=True)
+            # for n in tqdm(range(50, 601, 50), desc='testing n'):
+            print('n =', n)
+            top_n = sorted_preds[:n]
+            bottom_n = sorted_preds[-n:]
+            top_mask = index_to_mask(top_n, size=target_samples.num_nodes)
+            bottom_mask = index_to_mask(bottom_n, size=target_samples.num_nodes)
+            print(f'correct in: {(top_mask & target_samples.train_mask).sum().item() / n:.4f}')
+            print(f'correct out: {(bottom_mask & target_samples.test_mask).sum().item() / n:.4f}')
+
+            approximate_edge_mask = []
+            for a, b in target_samples.edge_index.T:
+                approximate_edge_mask.append(top_mask[a] and top_mask[b] or bottom_mask[a] and bottom_mask[b])
+            approximate_edge_mask = torch.tensor(approximate_edge_mask)
+
+            simplified_target_samples = target_samples.clone()
+            simplified_target_samples.edge_index = simplified_target_samples.edge_index[:, approximate_edge_mask]
+            print(target_samples.edge_index.shape[1], simplified_target_samples.edge_index.shape[1])
+            assert target_samples.edge_index.shape[1] > simplified_target_samples.edge_index.shape[1]
+
+            monte_carlo_masks = []
+            #monte_carlo_masks.append(torch.zeros(simplified_target_samples.edge_index.shape[1], dtype=torch.bool)) # Always include the 0-hop query
+            for _ in range(config.mc_inference_samples):
+                #monte_carlo_masks.append(approximate_edge_mask)
+                monte_carlo_masks.append(datasetup.random_edge_mask(simplified_target_samples, 0.8))
+
+            preds = attacker.run_attack(target_samples=simplified_target_samples, inductive_inference=False, monte_carlo_masks=monte_carlo_masks)
+            metrics = evaluation.evaluate_binary_classification(preds, truth, config.target_fpr)
+            fpr, tpr = metrics['ROC']
+            print(f'{n}: {metrics['TPR@FPR']:.4f}\n')
             attack_stats[f'FPR'].append(fpr)
             attack_stats[f'TPR'].append(tpr)
             attack_stats[f'AUC'].append(metrics['AUC'])
             attack_stats[f'TPR@{config.target_fpr}FPR'].append(metrics['TPR@FPR'])
+
+            preds = attacker.run_attack(target_samples=target_samples, num_hops=2, inductive_inference=True)
+            metrics = evaluation.evaluate_binary_classification(preds, truth, config.target_fpr)
+            fpr, tpr = metrics['ROC']
+            attack_stats[f'2hop_FPR'].append(fpr)
+            attack_stats[f'2hop_TPR'].append(tpr)
+            attack_stats[f'2hop_AUC'].append(metrics['AUC'])
+            attack_stats[f'2hop_TPR@{config.target_fpr}FPR'].append(metrics['TPR@FPR'])
 
         if config.make_roc_plots:
             savepath = f'{config.savedir}/{config.name}_roc_loglog.png'
@@ -604,6 +645,8 @@ if __name__ == '__main__':
         train_df, stat_df, detection_df = ret
     elif config['experiment'] == 'mc-inference':
         train_df, stat_df = ret
+
+    pd.set_option('display.max_columns', 500)
     print('Target training statistics:')
     print(train_df)
     print('Attack performance statistics:')
