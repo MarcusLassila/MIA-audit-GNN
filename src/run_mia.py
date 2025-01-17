@@ -12,6 +12,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import torch
 import torch.nn.functional as F
+from torch_geometric.data import Data
 from torch_geometric.utils import k_hop_subgraph, index_to_mask
 from torchmetrics import Accuracy
 from tqdm.auto import tqdm
@@ -92,25 +93,49 @@ class MembershipInferenceExperiment:
         hard_preds_k = metrics_k['hard_preds']
         nodes_of_interest = torch.tensor(((hard_preds_0 ^ hard_preds_k) & true_members).nonzero()[0], dtype=torch.long)
         means = torch.zeros(size=(nodes_of_interest.shape[0], 2))
+        avg_deg = torch.zeros(size=(nodes_of_interest.shape[0], 2))
         for i, node in enumerate(nodes_of_interest):
-            node_index, _, _, _ = k_hop_subgraph(
+            node_index, edge_index, center_node, _ = k_hop_subgraph(
                 node_idx=node.item(),
                 num_hops=num_hops,
                 edge_index=target_samples.edge_index[:, target_samples.inductive_mask],
-                relabel_nodes=False,
+                relabel_nodes=True,
                 num_nodes=target_samples.num_nodes,
             )
+            subgraph = Data(
+                x=target_samples.x[node_index],
+                edge_index=edge_index,
+                y=target_samples.y[node_index],
+                num_classes=target_samples.num_classes,
+            )
+            if hard_preds_0[node]:
+                title = '0-hop'
+            elif hard_preds_k[node]:
+                title = '2-hop'
+            else:
+                raise
+            utils.plot_k_hop_subgraph(
+                subgraph,
+                center_node,
+                soft_preds_0[node_index],
+                soft_preds_k[node_index],
+                hard_preds_0[node_index],
+                hard_preds_k[node_index],
+                title,
+            )
+            avg_deg[i, 0] = utils.average_degree(subgraph)
+            avg_deg[i, 1] = utils.average_degree(subgraph)
             means[i, 0] = soft_preds_0[node_index].mean()
             means[i, 1] = soft_preds_k[node_index].mean()
 
         perm_mask = torch.randperm(nodes_of_interest.shape[0])
         node_index = nodes_of_interest[perm_mask][:max_num_plotted_nodes]
         membership_status = true_members[node_index]
-        labels = means[perm_mask][:max_num_plotted_nodes]
+        labels = avg_deg[perm_mask][:max_num_plotted_nodes] #means[perm_mask][:max_num_plotted_nodes]
         preds_0 = soft_preds_0[node_index]
         preds_k = soft_preds_k[node_index]
         indices = torch.arange(1, max_num_plotted_nodes + 1)
-        savepath = f'{self.config.savedir}/{self.config.name}_{config.attack}_node_vulnerabilities.png'
+        savepath = f'{self.config.savedir}/{self.config.name}_{config.attack}_node_vuln_avg_deg.png'
         low, high, diff = min(threshold_0, threshold_k), max(threshold_0, threshold_k), abs(threshold_0 - threshold_k)
         spread = 2
 
@@ -452,8 +477,8 @@ class MembershipInferenceExperiment:
 
             if config.num_experiments == 1:
                 #self.visualize_embedding_distribution(target_model, target_samples, attacker, config.target_fpr, num_hops=2)
-                self.analyze_correlation_with_information_leakage(attacker, target_samples, config.target_fpr, num_hops=2)
-                #self.visualize_aggregation_effect_on_attack_vulnerabilities(attacker, target_samples, config.target_fpr)
+                #self.analyze_correlation_with_information_leakage(attacker, target_samples, config.target_fpr, num_hops=2)
+                self.visualize_aggregation_effect_on_attack_vulnerabilities(attacker, target_samples, config.target_fpr)
 
             soft_preds = []
             true_positives = []

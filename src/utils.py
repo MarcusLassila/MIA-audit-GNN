@@ -133,6 +133,20 @@ def plot_graph(graph):
     plt.title(graph.name)
     plt.show()
 
+def plot_k_hop_subgraph(data, center_node, soft_preds_0, soft_preds_k, hard_preds_0, hard_preds_k, title):
+    graph = to_networkx(data)
+    node_colors = ['lightblue'] * graph.number_of_nodes()
+    node_to_highlight = center_node
+    node_colors[node_to_highlight] = 'red'
+    labels = {
+        i: f'{soft_preds_0[i].item():.1f}|{soft_preds_k[i].item():.1f}|{hard_preds_0[i].item()}-{hard_preds_k[i].item()}|{data.y[i].item()}'
+        for i in range(data.num_nodes)
+    }
+    plt.figure(figsize=(10,8))
+    plt.title(title)
+    nx.draw(graph, labels=labels, node_size=500, node_color=node_colors, with_labels=True, arrows=False)
+    plt.show()
+
 def plot_training_results(res, name, savedir):
     epochs = np.array([*range(len(res['train_loss']))])
     plt.figure(figsize=(15, 15))
