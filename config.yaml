@@ -1,32 +1,29 @@
 ---
-rmia-flickr-GCN:
-  attack: "rmia"
-  dataset: "flickr"
-  model: "GCN"
-  epochs_target: 100
-  epochs_shadow: 100
-  experiments: 1
-  hidden_dim_target: [512]
-  query_hops: [0, 2]
-  transductive: false
-  target_fpr: 0.01
-  lr: 0.001
-  weight_decay: 0.00001
-  dropout: 0.5
-  num_shadow_models: 32
-  rmia_gamma: 2.0
-lira-flickr-GCN:
+lira-cora-GCN:
   attack: "lira"
-  dataset: "flickr"
+  dataset: "cora"
   model: "GCN"
-  epochs_target: 100
-  epochs_shadow: 100
-  experiments: 1
-  hidden_dim_target: [512]
+  epochs_target: 20
+  epochs_shadow: 20
+  num_experiments: 10
+  hidden_dim_target: [64]
   query_hops: [0, 2]
-  transductive: false
-  target_fpr: 0.01
-  lr: 0.001
-  weight_decay: 0.00001
+  target_fpr: 0.001
+  lr: 0.01
+  weight_decay: 0.0001
   dropout: 0.5
-  num_shadow_models: 32
+  num_shadow_models: 64
+lira-citeseer-GCN:
+  attack: "lira"
+  dataset: "citeseer"
+  model: "GCN"
+  epochs_target: 20
+  epochs_shadow: 20
+  num_experiments: 10
+  hidden_dim_target: [64]
+  query_hops: [0, 2]
+  target_fpr: 0.001
+  lr: 0.01
+  weight_decay: 0.0001
+  dropout: 0.5
+  num_shadow_models: 64

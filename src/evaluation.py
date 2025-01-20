@@ -3,7 +3,7 @@ import utils
 
 import numpy as np
 import torch
-from torch_geometric.utils import k_hop_subgraph
+from torch_geometric.utils import k_hop_subgraph, subgraph
 from sklearn.metrics import roc_curve, roc_auc_score
 from itertools import combinations
 
@@ -42,7 +42,7 @@ def evaluate_binary_classification(preds, truth, target_fpr):
         'threshold': threshold,
     }
 
-def k_hop_query(model, dataset, query_nodes, num_hops=0, inductive_split=True, monte_carlo_masks=None):
+def k_hop_query(model, dataset, query_nodes, num_hops=0, inductive_split=True, monte_carlo_masks=None, filter_on_class=False):
     '''
     Queries the model for each node in in query_nodes,
     using the local subgraph definded by the "num_hops"-hop neigborhood.
@@ -57,24 +57,27 @@ def k_hop_query(model, dataset, query_nodes, num_hops=0, inductive_split=True, m
         query_nodes = torch.tensor(query_nodes, dtype=torch.int64)
     if query_nodes.shape == ():
         query_nodes.unsqueeze(dim=0)
+    edge_mask = torch.ones(dataset.edge_index.shape[1], dtype=torch.bool)
+    if inductive_split:
+        edge_mask = edge_mask & dataset.inductive_mask
+    if filter_on_class: # TODO: Only dependent on dataset: move to datasetup
+        for i, (a, b) in enumerate(dataset.edge_index.t()):
+            if dataset.y[a] != dataset.y[b]:
+                edge_mask[i] == False
+    edge_index = dataset.edge_index[:, edge_mask]
     with torch.inference_mode():
         if monte_carlo_masks is not None:
             preds = []
-            for edge_mask in monte_carlo_masks:
-                if inductive_split:
-                    edge_mask = edge_mask & dataset.inductive_mask
-                sampled_edge_index = dataset.edge_index[:, edge_mask]
-                preds.append(model(dataset.x, sampled_edge_index)[query_nodes])
+            for sampled_edge_mask in monte_carlo_masks:
+                preds.append(model(dataset.x, edge_index[:, sampled_edge_mask])[query_nodes])
             preds = torch.stack(preds)
             preds = preds.median(dim=0).values # median works slightly better than mean
         elif num_hops == 0:
             empty_edge_index = torch.tensor([[],[]], dtype=torch.int64).to(dataset.edge_index.device)
             preds = model(dataset.x[query_nodes], empty_edge_index)
         elif num_hops == model.num_layers:
-            edge_index = dataset.edge_index[:, dataset.inductive_mask] if inductive_split else dataset.edge_index
             preds = model(dataset.x, edge_index)[query_nodes]
         else:
-            edge_index = dataset.edge_index[:, dataset.inductive_mask] if inductive_split else dataset.edge_index
             preds = []
             for v in query_nodes:
                 node_index, sub_edge_index, v_idx, _ = k_hop_subgraph(

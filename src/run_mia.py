@@ -89,11 +89,15 @@ class MembershipInferenceExperiment:
         metrics_k = evaluation.evaluate_binary_classification(preds=soft_preds_k, truth=true_members, target_fpr=target_fpr)
         threshold_0 = metrics_0['threshold']
         threshold_k = metrics_k['threshold']
-        hard_preds_0 = metrics_0['hard_preds']
-        hard_preds_k = metrics_k['hard_preds']
-        nodes_of_interest = torch.tensor(((hard_preds_0 ^ hard_preds_k) & true_members).nonzero()[0], dtype=torch.long)
+        hard_preds_0 = torch.from_numpy(metrics_0['hard_preds'])
+        hard_preds_k = torch.from_numpy(metrics_k['hard_preds'])
+        nodes_of_interest = (hard_preds_0 ^ hard_preds_k).nonzero()
+        if nodes_of_interest.nelement() == 0:
+            print(f'0-hop and {num_hops}-hop predicted identically.')
+            return
+        #avg_deg = torch.zeros(size=(nodes_of_interest.shape[0], 2))
         means = torch.zeros(size=(nodes_of_interest.shape[0], 2))
-        avg_deg = torch.zeros(size=(nodes_of_interest.shape[0], 2))
+        #classfrac = torch.zeros(size=(nodes_of_interest.shape[0], 2))
         for i, node in enumerate(nodes_of_interest):
             node_index, edge_index, center_node, _ = k_hop_subgraph(
                 node_idx=node.item(),
@@ -108,34 +112,44 @@ class MembershipInferenceExperiment:
                 y=target_samples.y[node_index],
                 num_classes=target_samples.num_classes,
             )
+            assert torch.allclose(subgraph.x[center_node], target_samples.x[node])
+            assert torch.equal(subgraph.y[center_node], target_samples.y[node])
             if hard_preds_0[node]:
                 title = '0-hop'
             elif hard_preds_k[node]:
                 title = '2-hop'
             else:
                 raise
-            utils.plot_k_hop_subgraph(
-                subgraph,
-                center_node,
-                soft_preds_0[node_index],
-                soft_preds_k[node_index],
-                hard_preds_0[node_index],
-                hard_preds_k[node_index],
-                title,
-            )
-            avg_deg[i, 0] = utils.average_degree(subgraph)
-            avg_deg[i, 1] = utils.average_degree(subgraph)
+            if true_members[node]:
+                title += ' TP'
+            else:
+                title += ' FP'
+
+            #avg_deg[i, 0] = utils.average_degree(subgraph)
+            #avg_deg[i, 1] = utils.average_degree(subgraph)
+            #classfrac[i, 0] = (subgraph.y == subgraph.y[center_node]).sum() / subgraph.num_nodes
+            #classfrac[i, 1] = (subgraph.y == subgraph.y[center_node]).sum() / subgraph.num_nodes
             means[i, 0] = soft_preds_0[node_index].mean()
             means[i, 1] = soft_preds_k[node_index].mean()
+            title += f' [{means[i, 0]:.2f}, {means[i, 1]:.2f}]'
+            # utils.plot_k_hop_subgraph(
+            #     subgraph,
+            #     center_node,
+            #     soft_preds_0[node_index],
+            #     soft_preds_k[node_index],
+            #     hard_preds_0[node_index],
+            #     hard_preds_k[node_index],
+            #     title,
+            # )
 
         perm_mask = torch.randperm(nodes_of_interest.shape[0])
         node_index = nodes_of_interest[perm_mask][:max_num_plotted_nodes]
         membership_status = true_members[node_index]
-        labels = avg_deg[perm_mask][:max_num_plotted_nodes] #means[perm_mask][:max_num_plotted_nodes]
+        labels = means[perm_mask][:max_num_plotted_nodes]
         preds_0 = soft_preds_0[node_index]
         preds_k = soft_preds_k[node_index]
         indices = torch.arange(1, max_num_plotted_nodes + 1)
-        savepath = f'{self.config.savedir}/{self.config.name}_{config.attack}_node_vuln_avg_deg.png'
+        savepath = f'{self.config.savedir}/{self.config.name}_{config.attack}_node_vuln_temp.png'
         low, high, diff = min(threshold_0, threshold_k), max(threshold_0, threshold_k), abs(threshold_0 - threshold_k)
         spread = 2
 
@@ -354,7 +368,7 @@ class MembershipInferenceExperiment:
                 i += 1
         return pd.DataFrame(detection_table, index=[config.name])
 
-    def make_target(self, evaluate_target=True, return_split_index=False):
+    def make_target(self, evaluate_target=True):
         config = self.config
         target_dataset, other_half, target_index, other_index = datasetup.disjoint_graph_split(
             self.dataset,
@@ -449,8 +463,8 @@ class MembershipInferenceExperiment:
                 if num_hops == 0:
                     yield (num_hops, True)
                 elif config.inductive_inference is None:
-                    yield (num_hops, True)
-                    yield (num_hops, False)
+                    for p in True, False:
+                        yield (num_hops, p)
                 else:
                     yield (num_hops, config.inductive_inference)
 
@@ -479,6 +493,7 @@ class MembershipInferenceExperiment:
                 #self.visualize_embedding_distribution(target_model, target_samples, attacker, config.target_fpr, num_hops=2)
                 #self.analyze_correlation_with_information_leakage(attacker, target_samples, config.target_fpr, num_hops=2)
                 self.visualize_aggregation_effect_on_attack_vulnerabilities(attacker, target_samples, config.target_fpr)
+                pass
 
             soft_preds = []
             true_positives = []
@@ -551,7 +566,7 @@ class MembershipInferenceExperiment:
             attack_stats[f'0hop_AUC'].append(metrics['AUC'])
             attack_stats[f'0hop_TPR@{config.target_fpr}FPR'].append(metrics['TPR@FPR'])
 
-            n = 1000
+            n = 200
             sorted_preds = preds.argsort(dim=0, descending=True)
             # for n in tqdm(range(50, 601, 50), desc='testing n'):
             print('n =', n)

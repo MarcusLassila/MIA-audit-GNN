@@ -31,13 +31,15 @@ Alternatively, run "src/run_mia.py" which only run one MIA simulation experiment
 * --hidden-dim-mlp-attack: Dimensions of the hidden layers in the MLP of the basic-mlp attack model. Input is given as a comma separeted list, e.g. 128,64,32.
 * --rmia-gamma: Threshold on likelihood ratio to count as evidence of membership in RMIA attack (see parameter gamma in "Low-Cost High-Power Membership Inference Attacks" paper).
 * --query-hops: List of the k-hops to use during inference in the attacks.
-* --experiments: Number of times to repeat the whole attack experiment (including retraining target model) and average results over.
+* --num-experiments: Number of times to repeat the whole attack experiment (including retraining target model) and average results over.
+* --experiment: Type of experiment to run
+    * "query": experiment to test how 0-hop and 2-hop queries perform.
+    * "mc-inference": experiment to test how sampled queries perform when exact neighborhood is unknown.
 * --optimizer: Will call getattr(torch.optim, optimizer) so it better exist in torch.optim.
 * --num-shadow-models: For LiRA.
 * --datadir: Path to save dataset.
 * --savedir: Path to store results.
 * --name: Name to add to result files.
-* --experiments: Number of samples (retraining target, shadow and attack models) to compute result statistics over.
 * --train-frac: Fraction of training nodes, applicable to all graphs used for training (e.g. target graph, shadow graphs etc.).
 * --val-frac: Fraction of validation nodes, applicable to all graphs used for training (e.g. target graph, shadow graphs etc.).
 
