@@ -11,6 +11,7 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 import torch
+import torch.nn as nn
 import torch.nn.functional as F
 from torch_geometric.data import Data
 from torch_geometric.utils import k_hop_subgraph, index_to_mask
@@ -294,7 +295,7 @@ class MembershipInferenceExperiment:
             device=config.device,
             epochs=config.epochs_target,
             early_stopping=config.early_stopping,
-            loss_fn=F.cross_entropy,
+            loss_fn=nn.CrossEntropyLoss(reduction='mean'),
             lr=lr,
             weight_decay=weight_decay,
             optimizer=getattr(torch.optim, config.optimizer),

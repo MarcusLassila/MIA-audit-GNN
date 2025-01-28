@@ -11,6 +11,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch_geometric.nn import MLP
+from torch_geometric.data import Data
+from torch_geometric.utils import subgraph, k_hop_subgraph
 from torch.utils.data import DataLoader, TensorDataset
 from torchmetrics import Accuracy
 from tqdm.auto import tqdm
@@ -501,3 +503,90 @@ class RMIA:
         target_samples.to(self.config.device)
         self.population.to(self.config.device)
         return self.score(target_samples, num_hops, inductive_inference, monte_carlo_masks)
+
+class BayesOptimalMembershipInference:
+    
+    def __init__(self, target_model, graph, loss_fn, config):
+        self.target_model = target_model
+        self.graph = graph
+        self.loss_fn = loss_fn
+        self.config = config
+        self.shadow_models = []
+        self.train_shadow_models()
+
+    def train_shadow_models(self):
+        config = self.config
+        criterion = Accuracy(task="multiclass", num_classes=self.population.num_classes).to(config.device)
+        train_config = trainer.TrainConfig(
+            criterion=criterion,
+            device=config.device,
+            epochs=config.epochs_shadow,
+            early_stopping=config.early_stopping,
+            loss_fn=self.loss_fn,
+            lr=config.lr,
+            weight_decay=config.weight_decay,
+            optimizer=getattr(torch.optim, config.optimizer),
+        )
+        for _ in tqdm(range(config.num_shadow_models), desc=f"Training {config.num_shadow_models} shadow models for BayesOptimalMembershipInference"):
+            shadow_dataset = datasetup.remasked_graph(self.graph, train_frac=0.5, val_frac=0.0)
+            shadow_model = utils.fresh_model(
+                model_type=config.model,
+                num_features=shadow_dataset.num_features,
+                hidden_dims=config.hidden_dim_target,
+                num_classes=shadow_dataset.num_classes,
+                dropout=config.dropout,
+            )
+            _ = trainer.train_gnn(
+                model=shadow_model,
+                dataset=shadow_dataset,
+                config=train_config,
+                disable_tqdm=True,
+                inductive_split=config.inductive_split,
+            )
+            shadow_model.eval()
+            self.shadow_models.append(shadow_model)
+
+    def masked_subgraph(self, node_mask):
+        edge_index = subgraph(
+            subset=node_mask,
+            edge_index=self.graph.edge_index,
+            relabel_nodes=True,
+        )
+        return Data(
+            x=self.graph.x[node_mask],
+            edge_index=edge_index,
+            y=self.graph.y[node_mask],
+            num_classes=self.graph.num_classes,
+        )
+
+    def log_Z(self, subgraph):
+        losses = torch.tensor([
+            self.loss_fn(shadow_model(subgraph.x, subgraph.edge_index), subgraph.y)
+            for shadow_model in self.shadow_models
+        ])
+        return torch.min(losses)
+
+    def log_model_posterior(self, subgraph, target_node_idx):
+        loss_term = -self.loss_fn(self.target_model(subgraph.x, subgraph.edge_index), subgraph.y)
+        log_Z_term = -self.log_Z(subgraph, )
+        return loss_term + log_Z_term
+
+    def run_attack(self):
+        # Assume prior is 1/2 for now
+        num_sampled_graphs = 10 # TODO: Move to config
+        preds = []
+        for node_idx in range(self.num_nodes):
+            summand = 0.0
+            for _ in range(num_sampled_graphs):
+                node_mask = torch.randint(0, 2, size=self.num_nodes).bool()
+                node_mask[node_idx] = True
+                subgraph_in = self.masked_subgraph(node_mask)
+                log_posterior_in = self.log_model_posterior(subgraph=subgraph_in, target_node_idx=node_idx)
+                node_mask[node_idx] = False
+                subgraph_out = self.masked_subgraph(node_mask)
+                log_posterior_out = self.log_model_posterior(subgraph=subgraph_out, target_node_idx=node_idx)
+                summand += torch.sigmoid(log_posterior_in - log_posterior_out)
+            test_statistic = summand / num_sampled_graphs
+            preds.append(test_statistic)
+        preds = torch.tensor(preds)
+        return preds
