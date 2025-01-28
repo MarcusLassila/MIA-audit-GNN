@@ -516,7 +516,7 @@ class BayesOptimalMembershipInference:
 
     def train_shadow_models(self):
         config = self.config
-        criterion = Accuracy(task="multiclass", num_classes=self.population.num_classes).to(config.device)
+        criterion = Accuracy(task="multiclass", num_classes=self.graph.num_classes).to(config.device)
         train_config = trainer.TrainConfig(
             criterion=criterion,
             device=config.device,
@@ -547,7 +547,7 @@ class BayesOptimalMembershipInference:
             self.shadow_models.append(shadow_model)
 
     def masked_subgraph(self, node_mask):
-        edge_index = subgraph(
+        edge_index, _ = subgraph(
             subset=node_mask,
             edge_index=self.graph.edge_index,
             relabel_nodes=True,
@@ -567,18 +567,25 @@ class BayesOptimalMembershipInference:
         return torch.min(losses)
 
     def log_model_posterior(self, subgraph, target_node_idx):
+        # Only loss values over the k-hop neighborhood is necessary (for a k-layer GNN)
+        # but we compute loss values over all node for simplicity
         loss_term = -self.loss_fn(self.target_model(subgraph.x, subgraph.edge_index), subgraph.y)
-        log_Z_term = -self.log_Z(subgraph, )
+        log_Z_term = -self.log_Z(subgraph)
         return loss_term + log_Z_term
 
     def run_attack(self):
         # Assume prior is 1/2 for now
         num_sampled_graphs = 10 # TODO: Move to config
         preds = []
-        for node_idx in range(self.num_nodes):
+        node_masks = []
+        for _ in range(num_sampled_graphs):
+            node_mask = torch.randint(0, 2, size=(self.graph.num_nodes,)).bool()
+            node_masks.append(node_mask)
+        
+        for node_idx in tqdm(range(self.graph.num_nodes), desc="Running membership inference over all nodes"):
             summand = 0.0
-            for _ in range(num_sampled_graphs):
-                node_mask = torch.randint(0, 2, size=self.num_nodes).bool()
+            for node_mask in node_masks:
+                temp = node_mask[node_idx]
                 node_mask[node_idx] = True
                 subgraph_in = self.masked_subgraph(node_mask)
                 log_posterior_in = self.log_model_posterior(subgraph=subgraph_in, target_node_idx=node_idx)
@@ -586,6 +593,7 @@ class BayesOptimalMembershipInference:
                 subgraph_out = self.masked_subgraph(node_mask)
                 log_posterior_out = self.log_model_posterior(subgraph=subgraph_out, target_node_idx=node_idx)
                 summand += torch.sigmoid(log_posterior_in - log_posterior_out)
+                node_mask[node_idx] = temp
             test_statistic = summand / num_sampled_graphs
             preds.append(test_statistic)
         preds = torch.tensor(preds)

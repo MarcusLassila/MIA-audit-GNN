@@ -1,0 +1,222 @@
+import attacks
+import datasetup
+import hypertuner
+import lood
+import evaluation
+import trainer
+import utils
+
+import argparse
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+from torch_geometric.data import Data
+from torch_geometric.utils import k_hop_subgraph, index_to_mask
+from torchmetrics import Accuracy
+from tqdm.auto import tqdm
+from collections import defaultdict
+
+class MembershipInferenceExperiment:
+
+    def __init__(self, config):
+        self.config = utils.Config(config)
+        self.dataset = datasetup.parse_dataset(root=self.config.datadir, name=self.config.dataset)
+        self.criterion = Accuracy(task="multiclass", num_classes=self.dataset.num_classes).to(self.config.device)
+        self.loss_fn = nn.CrossEntropyLoss(reduction='mean')
+        print(utils.graph_info(self.dataset))
+    
+    def train_target_model(self, dataset, plot_training_results=True):
+        config = self.config
+
+        if self.config.grid_search:
+            opt_hyperparams = hypertuner.grid_search(
+                dataset=dataset,
+                model_type=self.config.model,
+                epochs=self.config.epochs_target,
+                early_stopping=self.config.early_stopping,
+                optimizer=self.config.optimizer,
+                inductive_split=config.inductive_split,
+            )
+            print(f'Grid search results: {opt_hyperparams}')
+            lr, weight_decay, dropout, hidden_dim = opt_hyperparams.values()
+        else:
+            lr, weight_decay, dropout, hidden_dim = config.lr, config.weight_decay, config.dropout, config.hidden_dim_target
+
+        target_model = utils.fresh_model(
+            model_type=self.config.model,
+            num_features=dataset.num_features,
+            hidden_dims=hidden_dim,
+            num_classes=dataset.num_classes,
+            dropout=dropout,
+        )
+        train_config = trainer.TrainConfig(
+            criterion=self.criterion,
+            device=config.device,
+            epochs=config.epochs_target,
+            early_stopping=config.early_stopping,
+            loss_fn=self.loss_fn,
+            lr=lr,
+            weight_decay=weight_decay,
+            optimizer=getattr(torch.optim, config.optimizer),
+        )
+        train_res = trainer.train_gnn(
+            model=target_model,
+            dataset=dataset,
+            config=train_config,
+            inductive_split=config.inductive_split
+        )
+        evaluation.evaluate_graph_training(
+            model=target_model,
+            dataset=dataset,
+            criterion=train_config.criterion,
+            inductive_inference=config.inductive_split,
+            training_results=train_res if plot_training_results else None,
+            plot_title="Target model",
+            savedir=config.savedir,
+        )
+        return target_model
+
+    def get_attacker(self, target_model):
+        '''
+        Return an instance of the attack class specified by config.attack
+        '''
+        config = self.config
+        match config.attack:
+            case "bayes-optimal":
+                attacker = attacks.BayesOptimalMembershipInference(
+                    target_model=target_model,
+                    graph=self.dataset,
+                    loss_fn=self.loss_fn,
+                    config=config,
+                )
+            case _:
+                raise AttributeError(f"No attack named {config.attack}")
+        return attacker
+    
+    def parse_train_stats(self, train_stats):
+        return pd.DataFrame({
+            'train_acc': [utils.stat_repr(train_stats['train_scores'])],
+            'test_acc': [utils.stat_repr(train_stats['test_scores'])],
+        }, index=[self.config.name])
+
+    def parse_attack_stats(self, attack_stats):
+        config = self.config
+        stats = defaultdict(list)
+        for key, value in attack_stats.items():
+            if isinstance(value[0], float):
+                stats[f'{key}'].append(utils.stat_repr(value))
+        return pd.DataFrame(stats, index=[config.name])
+
+    def run_bayes_optimal_experiment(self):
+        config = self.config
+        train_stats = defaultdict(list)
+        attack_stats = defaultdict(list)
+
+        for i_experiment in range(1, config.num_experiments + 1):
+            print(f'Running experiment {i_experiment}/{config.num_experiments}')
+
+            # Use fixed random seeds such that each experimental configuration is evaluated on the same dataset
+            set_seed(i_experiment)
+
+            datasetup.add_masks(self.dataset, train_frac=0.5, val_frac=0.0)
+            target_model = self.train_target_model(self.dataset)
+            attacker = self.get_attacker(target_model)
+            target_scores = {
+                'train_score': evaluation.evaluate_graph_model(
+                    model=target_model,
+                    dataset=self.dataset,
+                    mask=self.dataset.train_mask,
+                    criterion=self.criterion,
+                    inductive_inference=config.inductive_split,
+                ),
+                'test_score': evaluation.evaluate_graph_model(
+                    model=target_model,
+                    dataset=self.dataset,
+                    mask=self.dataset.test_mask,
+                    criterion=self.criterion,
+                    inductive_inference=config.inductive_split,
+                ),
+            }
+            train_stats['train_scores'].append(target_scores['train_score'])
+            train_stats['test_scores'].append(target_scores['test_score'])
+
+            truth = self.dataset.train_mask.long()
+            preds = attacker.run_attack()
+            metrics = evaluation.evaluate_binary_classification(preds, truth, config.target_fpr)
+            fpr, tpr = metrics['ROC']
+            attack_stats[f'FPR'].append(fpr)
+            attack_stats[f'TPR'].append(tpr)
+            attack_stats[f'AUC'].append(metrics['AUC'])
+            attack_stats[f'TPR@{config.target_fpr}FPR'].append(metrics['TPR@FPR'])
+
+        if config.make_roc_plots:
+            savepath = f'{config.savedir}/{config.name}_roc_loglog.png'
+            fprs = attack_stats[f'FPR']
+            tprs = attack_stats[f'TPR']
+            utils.plot_multi_roc_loglog(fprs, tprs, savepath=savepath)
+
+        train_stats_df = self.parse_train_stats(train_stats)
+        attack_stats_df = self.parse_attack_stats(attack_stats)
+        return train_stats_df, attack_stats_df
+
+def set_seed(seed):
+    np.random.seed(seed)
+    torch.random.manual_seed(seed)
+
+def main(config):
+    set_seed(config['seed'])
+    config['dataset'] = config['dataset'].lower()
+    config['device'] = 'cuda' if torch.cuda.is_available() else 'cpu'
+    mie = MembershipInferenceExperiment(config)
+    return mie.run_bayes_optimal_experiment()
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--attack", default="bayes-optimal", type=str)
+    parser.add_argument("--dataset", default="cora", type=str)
+    parser.add_argument("--inductive-split", action=argparse.BooleanOptionalAction)
+    parser.add_argument("--inductive-inference", action=argparse.BooleanOptionalAction)
+    parser.add_argument("--model", default="GCN", type=str)
+    parser.add_argument("--batch-size", default=32, type=int)
+    parser.add_argument("--epochs-target", default=20, type=int)
+    parser.add_argument("--epochs-shadow", default=20, type=int)
+    parser.add_argument("--grid-search", action=argparse.BooleanOptionalAction)
+    parser.add_argument("--lr", default=1e-2, type=float)
+    parser.add_argument("--weight-decay", default=1e-4, type=float)
+    parser.add_argument("--dropout", default=0.0, type=float)
+    parser.add_argument("--early-stopping", default=0, type=int)
+    parser.add_argument("--hidden-dim-target", default=[64], type=lambda x: [*map(int, x.split(','))])
+    parser.add_argument("--num-experiments", default=1, type=int)
+    parser.add_argument("--target-fpr", default=0.01, type=float)
+    parser.add_argument("--optimizer", default="Adam", type=str)
+    parser.add_argument("--num-shadow-models", default=64, type=int)
+    parser.add_argument("--rmia-gamma", default=2.0, type=float)
+    parser.add_argument("--name", default="unnamed", type=str)
+    parser.add_argument("--datadir", default="./data", type=str)
+    parser.add_argument("--savedir", default="./results", type=str)
+    parser.add_argument("--train-frac", default=0.5, type=float)
+    parser.add_argument("--val-frac", default=0.0, type=float)
+    parser.add_argument("--seed", default=0, type=int)
+    args = parser.parse_args()
+    config = vars(args)
+    config['make_roc_plots'] = True
+    config['name'] = config['dataset'] + '_' + config['model']
+    if config['inductive_split'] is None:
+        config['inductive_split'] = True
+    if config['inductive_inference'] is None:
+        config['inductive_inference'] = True
+    print('Running MIA experiment v2.')
+    print(utils.Config(config))
+    print()
+
+    ret = main(config)
+    train_df, stat_df = ret
+
+    pd.set_option('display.max_columns', 500)
+    print('Target training statistics:')
+    print(train_df)
+    print('Attack performance statistics:')
+    print(stat_df)

@@ -240,6 +240,18 @@ def remasked_graph(graph, train_frac, val_frac, stratify=None):
     data.inductive_mask = train_split_interconnection_mask(data)
     return data
 
+def add_masks(graph, train_frac, val_frac, stratify=None):
+    train_mask, val_mask, test_mask = train_val_test_masks(
+        num_nodes=graph.num_nodes,
+        train_frac=train_frac,
+        val_frac=val_frac,
+        stratify=stratify,
+    )
+    graph.train_mask = train_mask
+    graph.val_mask = val_mask
+    graph.test_mask = test_mask
+    graph.inductive_mask = train_split_interconnection_mask(graph)
+
 def extract_subgraph(graph, node_index, train_frac, val_frac):
     '''
     Constructs a subgraph of dataset consisting of the nodes indexed in node_index with the edges linking them.

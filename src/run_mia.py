@@ -18,7 +18,6 @@ from torch_geometric.utils import k_hop_subgraph, index_to_mask
 from torchmetrics import Accuracy
 from tqdm.auto import tqdm
 from collections import defaultdict
-from itertools import combinations
 
 class MembershipInferenceExperiment:
 
@@ -26,6 +25,7 @@ class MembershipInferenceExperiment:
         self.config = utils.Config(config)
         self.dataset = datasetup.parse_dataset(root=self.config.datadir, name=self.config.dataset)
         self.criterion = Accuracy(task="multiclass", num_classes=self.dataset.num_classes).to(self.config.device)
+        self.loss_fn = nn.CrossEntropyLoss(reduction='mean')
         print(utils.graph_info(self.dataset))
 
     def visualize_aggregation_effect_on_attack_vulnerabilities(self, attacker, target_samples, target_fpr, num_hops=2, max_num_plotted_nodes=15):
@@ -239,7 +239,7 @@ class MembershipInferenceExperiment:
             device=config.device,
             epochs=config.epochs_target,
             early_stopping=config.early_stopping,
-            loss_fn=nn.CrossEntropyLoss(reduction='mean'),
+            loss_fn=self.loss_fn,
             lr=lr,
             weight_decay=weight_decay,
             optimizer=getattr(torch.optim, config.optimizer),
@@ -305,7 +305,7 @@ class MembershipInferenceExperiment:
             self.dataset,
             train_frac=config.train_frac,
             val_frac=config.val_frac,
-            v2=True
+            v2=True,
         )
         target_model = self.train_target_model(target_dataset)
         if evaluate_target:
@@ -544,6 +544,7 @@ class MembershipInferenceExperiment:
         train_stats_df = self.parse_train_stats(train_stats)
         attack_stats_df = self.parse_attack_stats(attack_stats)
         return train_stats_df, attack_stats_df
+
 
 def set_seed(seed):
     np.random.seed(seed)
