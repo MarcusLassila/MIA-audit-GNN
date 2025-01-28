@@ -28,56 +28,6 @@ class MembershipInferenceExperiment:
         self.criterion = Accuracy(task="multiclass", num_classes=self.dataset.num_classes).to(self.config.device)
         print(utils.graph_info(self.dataset))
 
-    def visualize_embedding_distribution(self, target_model, target_samples, attacker, target_fpr, num_hops=2):
-        # TODO: plot embeddings
-        config = self.config
-        true_members = target_samples.train_mask.long().cpu().numpy()
-        query_nodes = torch.arange(target_samples.num_nodes)
-        emb = evaluation.k_hop_query(
-            model=target_model,
-            dataset=target_samples,
-            query_nodes=query_nodes,
-            num_hops=0,
-            inductive_split=True,
-        )
-        soft_preds_0 = attacker.run_attack(target_samples=target_samples, num_hops=0)
-        soft_preds_k = attacker.run_attack(target_samples=target_samples, num_hops=num_hops, inductive_inference=True)
-        metrics_0 = evaluation.evaluate_binary_classification(preds=soft_preds_0, truth=true_members, target_fpr=target_fpr)
-        metrics_k = evaluation.evaluate_binary_classification(preds=soft_preds_k, truth=true_members, target_fpr=target_fpr)
-        hard_preds_0 = metrics_0['hard_preds']
-        hard_preds_k = metrics_k['hard_preds']
-        nodes_0 = torch.tensor((hard_preds_0 & (1 ^ hard_preds_k) & true_members).nonzero()[0], dtype=torch.long)
-        nodes_k = torch.tensor((hard_preds_k & (1 ^ hard_preds_0) & true_members).nonzero()[0], dtype=torch.long)
-        nodes_of_interest = torch.tensor(((hard_preds_0 | hard_preds_k) & true_members).nonzero()[0], dtype=torch.long)
-        labels, counts = torch.unique(target_samples.y[nodes_of_interest], return_counts=True)
-        most_vuln_label = labels[counts.argmax()]
-        nodes_0_singe_label = nodes_0[target_samples.y[nodes_0] == most_vuln_label]
-        nodes_k_singe_label = nodes_k[target_samples.y[nodes_k] == most_vuln_label]
-
-        utils.plot_embedding_2D_scatter(emb)
-
-        def cross_cosine_sim(index_a, index_b, emb):
-            avg_cross_sim = 0
-            l = 0
-            for a in index_a:
-                for b in index_b:
-                    if a == b:
-                        continue
-                    avg_cross_sim += F.cosine_similarity(emb[a], emb[b], dim=-1).item()
-                    l += 1
-            if l == 0:
-                return 1.0
-            avg_cross_sim /= l
-            return avg_cross_sim
-
-        avg_cross_sim = cross_cosine_sim(nodes_0_singe_label, nodes_k_singe_label, emb)
-        avg_0_sim = cross_cosine_sim(nodes_0_singe_label, nodes_0_singe_label, emb)
-        avg_k_sim = cross_cosine_sim(nodes_k_singe_label, nodes_k_singe_label, emb)
-        print(f'Comparing cosine simularities of embeddings for class {most_vuln_label}')
-        print(f'average cross sim: {avg_cross_sim:.4f}')
-        print(f'average 0 sim: {avg_0_sim:.4f}')
-        print(f'average {num_hops} sim: {avg_k_sim:.4f}')
-
     def visualize_aggregation_effect_on_attack_vulnerabilities(self, attacker, target_samples, target_fpr, num_hops=2, max_num_plotted_nodes=15):
         '''
         Plot test statistic of nodes against decision threshold for nodes that are identified by the 0-hop attack, but not the k-hop attack, or vice versa.
@@ -96,9 +46,7 @@ class MembershipInferenceExperiment:
         if nodes_of_interest.nelement() == 0:
             print(f'0-hop and {num_hops}-hop predicted identically.')
             return
-        #avg_deg = torch.zeros(size=(nodes_of_interest.shape[0], 2))
         means = torch.zeros(size=(nodes_of_interest.shape[0], 2))
-        #classfrac = torch.zeros(size=(nodes_of_interest.shape[0], 2))
         for i, node in enumerate(nodes_of_interest):
             node_index, edge_index, center_node, _ = k_hop_subgraph(
                 node_idx=node.item(),
@@ -126,22 +74,18 @@ class MembershipInferenceExperiment:
             else:
                 title += ' FP'
 
-            #avg_deg[i, 0] = utils.average_degree(subgraph)
-            #avg_deg[i, 1] = utils.average_degree(subgraph)
-            #classfrac[i, 0] = (subgraph.y == subgraph.y[center_node]).sum() / subgraph.num_nodes
-            #classfrac[i, 1] = (subgraph.y == subgraph.y[center_node]).sum() / subgraph.num_nodes
             means[i, 0] = soft_preds_0[node_index].mean()
             means[i, 1] = soft_preds_k[node_index].mean()
             title += f' [{means[i, 0]:.2f}, {means[i, 1]:.2f}]'
-            # utils.plot_k_hop_subgraph(
-            #     subgraph,
-            #     center_node,
-            #     soft_preds_0[node_index],
-            #     soft_preds_k[node_index],
-            #     hard_preds_0[node_index],
-            #     hard_preds_k[node_index],
-            #     title,
-            # )
+            utils.plot_k_hop_subgraph(
+                subgraph,
+                center_node,
+                soft_preds_0[node_index],
+                soft_preds_k[node_index],
+                hard_preds_0[node_index],
+                hard_preds_k[node_index],
+                title,
+            )
 
         perm_mask = torch.randperm(nodes_of_interest.shape[0])
         node_index = nodes_of_interest[perm_mask][:max_num_plotted_nodes]
@@ -355,20 +299,6 @@ class MembershipInferenceExperiment:
                 stats[f'{key}'].append(utils.stat_repr(value))
         return pd.DataFrame(stats, index=[config.name])
 
-    def parse_detection_stats(self, detection_stats, tags):
-        config = self.config
-        detection_table = defaultdict(list)
-        detection_counts = np.stack(detection_stats)
-        detection_counts_mean = np.mean(detection_counts, axis=0)
-        detection_counts_std = np.std(detection_counts, axis=0)
-        i = 0
-        for r in range(1, len(tags) + 1):
-            for idx in combinations(range(len(tags)), r):
-                key = '+'.join(tags[j] for j in idx)
-                detection_table[key].append(f'{detection_counts_mean[i]:.2f} ({detection_counts_std[i]:.2f})')
-                i += 1
-        return pd.DataFrame(detection_table, index=[config.name])
-
     def make_target(self, evaluate_target=True):
         config = self.config
         target_dataset, other_half, target_index, other_index = datasetup.disjoint_graph_split(
@@ -454,7 +384,6 @@ class MembershipInferenceExperiment:
         config = self.config
         train_stats = defaultdict(list)
         attack_stats = defaultdict(list)
-        detection_stats = []
 
         def make_tag(num_hops: int, inductive_flag: bool):
             return f'{num_hops}{"I" if inductive_flag else "T"}'
@@ -491,9 +420,8 @@ class MembershipInferenceExperiment:
             truth = target_samples.train_mask.long()
 
             if config.num_experiments == 1:
-                #self.visualize_embedding_distribution(target_model, target_samples, attacker, config.target_fpr, num_hops=2)
                 #self.analyze_correlation_with_information_leakage(attacker, target_samples, config.target_fpr, num_hops=2)
-                self.visualize_aggregation_effect_on_attack_vulnerabilities(attacker, target_samples, config.target_fpr)
+                #self.visualize_aggregation_effect_on_attack_vulnerabilities(attacker, target_samples, config.target_fpr)
                 pass
 
             soft_preds = []
@@ -518,9 +446,6 @@ class MembershipInferenceExperiment:
                 multi_tpr, _ = utils.tpr_at_fixed_fpr_multi(soft_preds, truth, config.target_fpr)
                 attack_stats[f'TPR@{config.target_fpr}FPR_multi'].append(multi_tpr)
 
-            detection_counts = np.array(evaluation.inclusions(true_positives), dtype=np.int64)
-            detection_stats.append(detection_counts)
-
         if config.make_roc_plots:
             for tag in tags:
                 savepath = f'{config.savedir}/{config.name}_{tag}_roc_loglog.png'
@@ -530,8 +455,7 @@ class MembershipInferenceExperiment:
 
         train_stats_df = self.parse_train_stats(train_stats)
         attack_stats_df = self.parse_attack_stats(attack_stats)
-        detection_df = self.parse_detection_stats(detection_stats, tags)
-        return train_stats_df, attack_stats_df, detection_df
+        return train_stats_df, attack_stats_df
 
     def run_monte_carlo_inference_experiment(self):
         config = self.config
@@ -682,16 +606,10 @@ if __name__ == '__main__':
     print()
 
     ret = main(config)
-    if config['experiment'] == 'query':
-        train_df, stat_df, detection_df = ret
-    elif config['experiment'] == 'mc-inference':
-        train_df, stat_df = ret
+    train_df, stat_df = ret
 
     pd.set_option('display.max_columns', 500)
     print('Target training statistics:')
     print(train_df)
     print('Attack performance statistics:')
     print(stat_df)
-    if len(config['query_hops']) > 1:
-        print('Node detection count set differences:')
-        print(detection_df)

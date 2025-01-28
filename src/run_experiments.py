@@ -20,7 +20,6 @@ def main():
     Path('./results').mkdir(parents=True, exist_ok=True)
     train_stat_frames = []
     attack_stat_frames = []
-    detection_frames = []
     for _, params in config.items():
         params = default_params | params
         add_name(params)
@@ -29,13 +28,11 @@ def main():
         for k, v in params.items():
             print(f'{k}: {v}')
         print()
-        train_stats_df, attack_stats_df, detection_df = run_mia.main(params)
+        train_stats_df, attack_stats_df = run_mia.main(params)
         train_stat_frames.append(train_stats_df)
         attack_stat_frames.append(attack_stats_df)
-        detection_frames.append(detection_df)
     pd.concat(train_stat_frames).to_csv(f'{default_params["savedir"]}/train_statistics.csv', sep=',')
     pd.concat(attack_stat_frames).to_csv(f'{default_params["savedir"]}/attack_statistics.csv', sep=',')
-    pd.concat(detection_frames).to_csv(f'{default_params["savedir"]}/detection_statistics.csv', sep=',')
 
 if __name__ == "__main__":
     main()
