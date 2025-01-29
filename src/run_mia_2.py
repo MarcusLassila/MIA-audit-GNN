@@ -25,7 +25,7 @@ class MembershipInferenceExperiment:
         self.config = utils.Config(config)
         self.dataset = datasetup.parse_dataset(root=self.config.datadir, name=self.config.dataset)
         self.criterion = Accuracy(task="multiclass", num_classes=self.dataset.num_classes).to(self.config.device)
-        self.loss_fn = nn.CrossEntropyLoss(reduction='mean')
+        self.loss_fn = nn.CrossEntropyLoss(reduction='sum')
         print(utils.graph_info(self.dataset))
     
     def train_target_model(self, dataset, plot_training_results=True):
