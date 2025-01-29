@@ -12,7 +12,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch_geometric.nn import MLP
 from torch_geometric.data import Data
-from torch_geometric.utils import subgraph, k_hop_subgraph
+from torch_geometric.utils import subgraph, k_hop_subgraph, degree
 from torch.utils.data import DataLoader, TensorDataset
 from torchmetrics import Accuracy
 from tqdm.auto import tqdm
@@ -562,22 +562,23 @@ class BayesOptimalMembershipInference:
     def log_model_posterior(self, subgraph, target_node_idx):
         # Only loss values over the k-hop neighborhood is necessary (for a k-layer GNN)
         # but we compute loss values over all node for simplicity
+        _ = target_node_idx # Only necessary if computing k-hop neighborhood
         with torch.inference_mode():
-            loss_term = -self.loss_fn(self.target_model(subgraph.x, subgraph.edge_index), subgraph.y)
-            shadow_losses = torch.tensor([
-                self.loss_fn(shadow_model(subgraph.x, subgraph.edge_index), subgraph.y)
+            loss_term = self.loss_fn(self.target_model(subgraph.x, subgraph.edge_index), subgraph.y)
+            neg_loss = torch.tensor([
+                -self.loss_fn(shadow_model(subgraph.x, subgraph.edge_index), subgraph.y)
                 for shadow_model in self.shadow_models
             ])
-            log_Z_term = -torch.min(shadow_losses)
-        return loss_term + log_Z_term
+            log_Z_term = neg_loss.logsumexp(0) - np.log(self.config.num_shadow_models)
+        return -loss_term - log_Z_term
 
-    def run_attack(self):
+    def run_attack(self, target_node_index):
         # Assume prior is 1/2 for now
         num_sampled_graphs = 10 # TODO: Move to config
         preds = []
-        for node_idx in tqdm(range(self.graph.num_nodes), desc="Running membership inference over all nodes"):
-            summand = 0.0
-            for node_mask in range(num_sampled_graphs):
+        for node_idx in tqdm(target_node_index, total=len(target_node_index), desc="Running membership inference over all nodes"):
+            samples = []
+            for _ in range(num_sampled_graphs):
                 node_mask = torch.randint(0, 2, size=(self.graph.num_nodes,)).bool()
                 node_mask[node_idx] = True
                 subgraph_in = self.masked_subgraph(node_mask)
@@ -585,8 +586,23 @@ class BayesOptimalMembershipInference:
                 node_mask[node_idx] = False
                 subgraph_out = self.masked_subgraph(node_mask)
                 log_posterior_out = self.log_model_posterior(subgraph=subgraph_out, target_node_idx=node_idx)
-                summand += torch.sigmoid(log_posterior_in - log_posterior_out)
-            test_statistic = summand / num_sampled_graphs
+                samples.append(torch.sigmoid(log_posterior_in - log_posterior_out))
+            samples = torch.tensor(samples)
+            test_statistic = samples.mean()
+            # print(f'node {node_idx}: {test_statistic:.4f} ({samples.std():.4f}), degree {degree(self.graph.edge_index[0], num_nodes=self.graph.num_nodes, dtype=torch.long)[node_idx]}', flush=True)
             preds.append(test_statistic)
         preds = torch.tensor(preds)
+        return preds
+
+class ConfidenceAttack2:
+
+    def __init__(self, target_model, graph, config):
+        self.target_model = target_model
+        self.graph = graph
+        self.config = config
+
+    def run_attack(self, target_node_index):
+        empty_edge_index = torch.tensor([[],[]], dtype=torch.long)
+        with torch.inference_mode():
+            preds = self.target_model(self.graph.x, empty_edge_index)[target_node_index, self.graph.y[target_node_index]]
         return preds

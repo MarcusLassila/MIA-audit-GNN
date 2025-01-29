@@ -92,6 +92,12 @@ class MembershipInferenceExperiment:
                     loss_fn=self.loss_fn,
                     config=config,
                 )
+            case "confidence":
+                attacker = attacks.ConfidenceAttack2(
+                    target_model=target_model,
+                    graph=self.dataset,
+                    config=config,
+                )
             case _:
                 raise AttributeError(f"No attack named {config.attack}")
         return attacker
@@ -144,8 +150,19 @@ class MembershipInferenceExperiment:
             train_stats['test_scores'].append(target_scores['test_score'])
 
             truth = self.dataset.train_mask.long()
-            preds = attacker.run_attack()
-            metrics = evaluation.evaluate_binary_classification(preds, truth, config.target_fpr)
+            num_targets = 300
+            positives = truth.nonzero().squeeze()
+            negatives = (truth ^ 1).nonzero().squeeze()
+            perm_mask = torch.randperm(positives.shape[0])
+            positives = positives[perm_mask][:num_targets // 2]
+            perm_mask = torch.randperm(negatives.shape[0])
+            negatives = negatives[perm_mask][:num_targets // 2]
+            perm_mask = torch.randperm(num_targets)
+            target_node_index = torch.concat((positives, negatives))[perm_mask]
+            assert target_node_index.shape == (300,)
+
+            preds = attacker.run_attack(target_node_index=target_node_index)
+            metrics = evaluation.evaluate_binary_classification(preds, truth[target_node_index], config.target_fpr)
             fpr, tpr = metrics['ROC']
             attack_stats[f'FPR'].append(fpr)
             attack_stats[f'TPR'].append(tpr)
@@ -203,7 +220,7 @@ if __name__ == '__main__':
     args = parser.parse_args()
     config = vars(args)
     config['make_roc_plots'] = True
-    config['name'] = config['dataset'] + '_' + config['model']
+    config['name'] = config['dataset'] + '_' + config['model'] + '_' + config['attack']
     if config['inductive_split'] is None:
         config['inductive_split'] = True
     if config['inductive_inference'] is None:

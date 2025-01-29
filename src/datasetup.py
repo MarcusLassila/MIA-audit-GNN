@@ -241,6 +241,9 @@ def remasked_graph(graph, train_frac, val_frac, stratify=None):
     return data
 
 def add_masks(graph, train_frac, val_frac, stratify=None):
+    '''
+    Mutate graph to add new train/val/test masks.
+    '''
     train_mask, val_mask, test_mask = train_val_test_masks(
         num_nodes=graph.num_nodes,
         train_frac=train_frac,
