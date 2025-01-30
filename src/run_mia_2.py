@@ -98,6 +98,13 @@ class MembershipInferenceExperiment:
                     graph=self.dataset,
                     config=config,
                 )
+            case "lira":
+                attacker = attacks.LiraOnline(
+                    target_model=target_model,
+                    graph=self.dataset,
+                    loss_fn=self.loss_fn,
+                    config=config,
+                )
             case _:
                 raise AttributeError(f"No attack named {config.attack}")
         return attacker
@@ -127,7 +134,7 @@ class MembershipInferenceExperiment:
             # Use fixed random seeds such that each experimental configuration is evaluated on the same dataset
             set_seed(i_experiment)
 
-            datasetup.add_masks(self.dataset, train_frac=0.5, val_frac=0.0)
+            datasetup.add_masks(self.dataset, train_frac=config.train_frac, val_frac=config.val_frac)
             target_model = self.train_target_model(self.dataset)
             attacker = self.get_attacker(target_model)
             target_scores = {
@@ -150,16 +157,17 @@ class MembershipInferenceExperiment:
             train_stats['test_scores'].append(target_scores['test_score'])
 
             truth = self.dataset.train_mask.long()
-            num_targets = 300
-            positives = truth.nonzero().squeeze()
-            negatives = (truth ^ 1).nonzero().squeeze()
-            perm_mask = torch.randperm(positives.shape[0])
-            positives = positives[perm_mask][:num_targets // 2]
-            perm_mask = torch.randperm(negatives.shape[0])
-            negatives = negatives[perm_mask][:num_targets // 2]
-            perm_mask = torch.randperm(num_targets)
-            target_node_index = torch.concat((positives, negatives))[perm_mask]
-            assert target_node_index.shape == (300,)
+            # num_targets = 300
+            # positives = truth.nonzero().squeeze()
+            # negatives = (truth ^ 1).nonzero().squeeze()
+            # perm_mask = torch.randperm(positives.shape[0])
+            # positives = positives[perm_mask][:num_targets // 2]
+            # perm_mask = torch.randperm(negatives.shape[0])
+            # negatives = negatives[perm_mask][:num_targets // 2]
+            # perm_mask = torch.randperm(num_targets)
+            #target_node_index = torch.concat((positives, negatives))[perm_mask]
+            #assert target_node_index.shape == (300,)
+            target_node_index = torch.arange(self.dataset.num_nodes)
 
             preds = attacker.run_attack(target_node_index=target_node_index)
             metrics = evaluation.evaluate_binary_classification(preds, truth[target_node_index], config.target_fpr)
@@ -198,18 +206,19 @@ if __name__ == '__main__':
     parser.add_argument("--inductive-inference", action=argparse.BooleanOptionalAction)
     parser.add_argument("--model", default="GCN", type=str)
     parser.add_argument("--batch-size", default=32, type=int)
-    parser.add_argument("--epochs-target", default=20, type=int)
-    parser.add_argument("--epochs-shadow", default=20, type=int)
+    parser.add_argument("--epochs-target", default=15, type=int)
+    parser.add_argument("--epochs-shadow", default=15, type=int)
     parser.add_argument("--grid-search", action=argparse.BooleanOptionalAction)
     parser.add_argument("--lr", default=1e-2, type=float)
     parser.add_argument("--weight-decay", default=1e-4, type=float)
-    parser.add_argument("--dropout", default=0.0, type=float)
+    parser.add_argument("--dropout", default=0.5, type=float)
     parser.add_argument("--early-stopping", default=0, type=int)
-    parser.add_argument("--hidden-dim-target", default=[64], type=lambda x: [*map(int, x.split(','))])
+    parser.add_argument("--hidden-dim-target", default=[32], type=lambda x: [*map(int, x.split(','))])
     parser.add_argument("--num-experiments", default=1, type=int)
-    parser.add_argument("--target-fpr", default=0.01, type=float)
+    parser.add_argument("--target-fpr", default=0.001, type=float)
     parser.add_argument("--optimizer", default="Adam", type=str)
     parser.add_argument("--num-shadow-models", default=64, type=int)
+    parser.add_argument("--num-sampled-graphs", default=10, type=int)
     parser.add_argument("--rmia-gamma", default=2.0, type=float)
     parser.add_argument("--name", default="unnamed", type=str)
     parser.add_argument("--datadir", default="./data", type=str)

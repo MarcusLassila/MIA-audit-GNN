@@ -17,6 +17,7 @@ from torch.utils.data import DataLoader, TensorDataset
 from torchmetrics import Accuracy
 from tqdm.auto import tqdm
 import copy
+from collections import defaultdict
 
 class BasicMLPAttack:
 
@@ -572,13 +573,14 @@ class BayesOptimalMembershipInference:
             log_Z_term = neg_loss.logsumexp(0) - np.log(self.config.num_shadow_models)
         return -loss_term - log_Z_term
 
-    def run_attack(self, target_node_index):
-        # Assume prior is 1/2 for now
-        num_sampled_graphs = 10 # TODO: Move to config
+    def run_attack(self, target_node_index, prior=0.5):
         preds = []
+        
         for node_idx in tqdm(target_node_index, total=len(target_node_index), desc="Running membership inference over all nodes"):
             samples = []
-            for _ in range(num_sampled_graphs):
+            posteriors_in = []
+            posteriors_out = []
+            for _ in range(self.config.num_sampled_graphs):
                 node_mask = torch.randint(0, 2, size=(self.graph.num_nodes,)).bool()
                 node_mask[node_idx] = True
                 subgraph_in = self.masked_subgraph(node_mask)
@@ -586,9 +588,18 @@ class BayesOptimalMembershipInference:
                 node_mask[node_idx] = False
                 subgraph_out = self.masked_subgraph(node_mask)
                 log_posterior_out = self.log_model_posterior(subgraph=subgraph_out, target_node_idx=node_idx)
-                samples.append(torch.sigmoid(log_posterior_in - log_posterior_out))
+                samples.append(torch.sigmoid(log_posterior_in - log_posterior_out + np.log(prior) - np.log(1 - prior)))
+                posteriors_in.append(log_posterior_in)
+                posteriors_out.append(log_posterior_out)
             samples = torch.tensor(samples)
             test_statistic = samples.mean()
+            posteriors_in = torch.tensor(posteriors_in)
+            posteriors_out = torch.tensor(posteriors_out)
+            print('train status:', self.graph.train_mask[node_idx], flush=True)
+            print('prob:', torch.sigmoid(posteriors_in.mean() - posteriors_out.mean()))
+            print('test stat:', test_statistic)
+            utils.plot_histogram_and_fitted_gaussian(posteriors_in, posteriors_in.mean(), posteriors_in.std(), bins=50)
+            utils.plot_histogram_and_fitted_gaussian(posteriors_out, posteriors_out.mean(), posteriors_out.std(), bins=50)
             # print(f'node {node_idx}: {test_statistic:.4f} ({samples.std():.4f}), degree {degree(self.graph.edge_index[0], num_nodes=self.graph.num_nodes, dtype=torch.long)[node_idx]}', flush=True)
             preds.append(test_statistic)
         preds = torch.tensor(preds)
@@ -606,3 +617,94 @@ class ConfidenceAttack2:
         with torch.inference_mode():
             preds = self.target_model(self.graph.x, empty_edge_index)[target_node_index, self.graph.y[target_node_index]]
         return preds
+
+class LiraOnline:
+    
+    def __init__(self, target_model, graph, loss_fn, config):
+        self.target_model = target_model
+        self.graph = graph
+        self.loss_fn = loss_fn
+        self.config = config
+        self.shadow_models = [] # Pairs of shadow models and its corresponding training mask
+        self.train_shadow_models()
+    
+    def train_shadow_models(self):
+        config = self.config
+        criterion = Accuracy(task="multiclass", num_classes=self.graph.num_classes).to(config.device)
+        train_config = trainer.TrainConfig(
+            criterion=criterion,
+            device=config.device,
+            epochs=config.epochs_shadow,
+            early_stopping=config.early_stopping,
+            loss_fn=self.loss_fn,
+            lr=config.lr,
+            weight_decay=config.weight_decay,
+            optimizer=getattr(torch.optim, config.optimizer),
+        )
+        for _ in tqdm(range(config.num_shadow_models), desc=f"Training {config.num_shadow_models} shadow models for Lira online"):
+            shadow_dataset = datasetup.remasked_graph(self.graph, train_frac=0.5, val_frac=0.0)
+            shadow_model = utils.fresh_model(
+                model_type=config.model,
+                num_features=shadow_dataset.num_features,
+                hidden_dims=config.hidden_dim_target,
+                num_classes=shadow_dataset.num_classes,
+                dropout=config.dropout,
+            )
+            _ = trainer.train_gnn(
+                model=shadow_model,
+                dataset=shadow_dataset,
+                config=train_config,
+                disable_tqdm=True,
+                inductive_split=config.inductive_split,
+            )
+            shadow_model.eval()
+            self.shadow_models.append((shadow_model, shadow_dataset.train_mask))
+    
+    def query_shadow_models(self):
+        hinges_in = defaultdict(list)
+        hinges_out = defaultdict(list)
+        empty_edge_index = torch.tensor([[],[]], dtype=torch.long)
+        with torch.inference_mode():
+            for shadow_model, train_mask in self.shadow_models:
+                preds = shadow_model(self.graph.x, empty_edge_index)
+                # Approximate logits of confidence values using the hinge loss.
+                hinges = utils.hinge_loss(preds, self.graph.y)
+                for node_idx in range(self.graph.num_nodes):
+                    if train_mask[node_idx]:
+                        hinges_in[node_idx].append(hinges[node_idx])
+                    else:
+                        hinges_out[node_idx].append(hinges[node_idx])
+        mean_in = torch.zeros(self.graph.num_nodes)
+        std_in = torch.zeros(self.graph.num_nodes)
+        mean_out = torch.zeros(self.graph.num_nodes)
+        std_out = torch.zeros(self.graph.num_nodes)
+        for node_idx, hinge_list in hinges_in.items():
+            hinges = torch.tensor(hinge_list)
+            mean_in[node_idx] = hinges.mean()
+            std_in[node_idx] = hinges.std()
+        for node_idx, hinge_list in hinges_out.items():
+            hinges = torch.tensor(hinge_list)
+            mean_out[node_idx] = hinges.mean()
+            std_out[node_idx] = hinges.std()
+        assert mean_in.shape == std_in.shape == mean_out.shape == std_out.shape == (self.graph.num_nodes,)
+        return mean_in, std_in, mean_out, std_out
+
+    def run_attack(self, target_node_index):
+        _ = target_node_index # Use all nodes for now
+        empty_edge_index = torch.tensor([[],[]], dtype=torch.long)
+        mean_in, std_in, mean_out, std_out = self.query_shadow_models()
+        with torch.inference_mode():
+            preds = self.target_model(self.graph.x, empty_edge_index)
+            target_hinges = utils.hinge_loss(preds, self.graph.y)
+        p_in = norm.logpdf(
+            target_hinges.cpu().numpy(),
+            loc=mean_in.cpu().numpy(),
+            scale=std_in.cpu().numpy() + LiRA.EPS,
+        )
+        p_out = norm.logpdf(
+            target_hinges.cpu().numpy(),
+            loc=mean_out.cpu().numpy(),
+            scale=std_out.cpu().numpy() + LiRA.EPS,
+        )
+        assert p_in.shape == p_out.shape == (self.graph.num_nodes,)
+        return torch.tensor(p_in - p_out)
