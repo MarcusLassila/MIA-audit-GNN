@@ -560,6 +560,27 @@ class BayesOptimalMembershipInference:
             num_classes=self.graph.num_classes,
         )
 
+    def get_random_node_mask(self, frac_ones=0.5):
+        return ~(torch.randint(0, int(1 / frac_ones + 1e-6), size=(self.graph.num_nodes,)).bool())
+
+    def evaluate_mask(self, mask):
+        subgraph = self.masked_subgraph(mask)
+        with torch.inference_mode():
+            log_p = -self.loss_fn(self.target_model(subgraph.x, subgraph.edge_index), subgraph.y)
+        return log_p, subgraph
+
+    def sample_subgraph_MCMC(self, prev_log_p, prev_mask, prev_subgraph, eps=0.1):
+        u = np.random.rand()
+        mask = self.get_random_node_mask(frac_ones=eps) ^ prev_mask
+        log_p, subgraph = self.evaluate_mask(mask)
+        crit = torch.exp(log_p - prev_log_p).item()
+        if crit > u:
+            #print(f'accept: {crit:.4f}')
+            return log_p, mask, subgraph
+        else:
+            #print(f'reject: {crit:.4f}')
+            return prev_log_p, prev_mask, prev_subgraph
+
     def log_model_posterior(self, subgraph):
         # Only loss values over the k-hop neighborhood is necessary (for a k-layer GNN)
         # but we compute loss values over all node for simplicity
@@ -597,8 +618,13 @@ class BayesOptimalMembershipInference:
         preds = []
         samples = torch.zeros(size=(target_node_index.shape[0], config.num_sampled_graphs))
         for i in tqdm(range(config.num_sampled_graphs), desc="Monte Carlo estimation over sampled graphs"):
-            node_mask = torch.randint(0, 2, size=(self.graph.num_nodes,)).bool()
-            subgraph_in = self.masked_subgraph(node_mask)
+            if i % 10 == 0:
+                node_mask = self.get_random_node_mask(frac_ones=0.5)
+                log_p, subgraph_in = self.evaluate_mask(node_mask)
+                for _ in range(1000): # Burn-in 
+                    log_p, node_mask, subgraph_in = self.sample_subgraph_MCMC(prev_log_p=log_p, prev_mask=node_mask, prev_subgraph=subgraph_in, eps=0.01)
+            for _ in range(1000):
+                log_p, node_mask, subgraph_in = self.sample_subgraph_MCMC(prev_log_p=log_p, prev_mask=node_mask, prev_subgraph=subgraph_in, eps=0.01)
             log_posterior_in = self.log_model_posterior(subgraph=subgraph_in)
             for j, node_idx in enumerate(target_node_index):
                 node_mask[node_idx] = not node_mask[node_idx]
