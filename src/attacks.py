@@ -529,7 +529,7 @@ class BayesOptimalMembershipInference:
             optimizer=getattr(torch.optim, config.optimizer),
         )
         for _ in tqdm(range(config.num_shadow_models), desc=f"Training {config.num_shadow_models} shadow models for BayesOptimalMembershipInference"):
-            shadow_dataset = datasetup.remasked_graph(self.graph, train_frac=0.5, val_frac=0.0)
+            shadow_dataset = datasetup.remasked_graph(self.graph, train_frac=config.train_frac, val_frac=config.val_frac)
             shadow_model = utils.fresh_model(
                 model_type=config.model,
                 num_features=shadow_dataset.num_features,
@@ -560,10 +560,9 @@ class BayesOptimalMembershipInference:
             num_classes=self.graph.num_classes,
         )
 
-    def log_model_posterior(self, subgraph, target_node_idx):
+    def log_model_posterior(self, subgraph):
         # Only loss values over the k-hop neighborhood is necessary (for a k-layer GNN)
         # but we compute loss values over all node for simplicity
-        _ = target_node_idx # Only necessary if computing k-hop neighborhood
         with torch.inference_mode():
             loss_term = self.loss_fn(self.target_model(subgraph.x, subgraph.edge_index), subgraph.y)
             neg_loss = torch.tensor([
@@ -573,36 +572,45 @@ class BayesOptimalMembershipInference:
             log_Z_term = neg_loss.logsumexp(0) - np.log(self.config.num_shadow_models)
         return -loss_term - log_Z_term
 
+    # def run_attack(self, target_node_index, prior=0.5):
+    #     preds = []
+    #     for node_idx in tqdm(target_node_index, total=len(target_node_index), desc="Running membership inference over all nodes"):
+    #         samples = []
+    #         for _ in range(self.config.num_sampled_graphs):
+    #             node_mask = torch.randint(0, 2, size=(self.graph.num_nodes,)).bool()
+    #             node_mask[node_idx] = True
+    #             subgraph_in = self.masked_subgraph(node_mask)
+    #             log_posterior_in = self.log_model_posterior(subgraph=subgraph_in)
+    #             node_mask[node_idx] = False
+    #             subgraph_out = self.masked_subgraph(node_mask)
+    #             log_posterior_out = self.log_model_posterior(subgraph=subgraph_out)
+    #             # No need to apply sigmoid since it is a monotone increasing function, but nice to get probabilities
+    #             samples.append(torch.sigmoid(log_posterior_in - log_posterior_out + np.log(prior) - np.log(1 - prior)))
+    #         samples = torch.tensor(samples)
+    #         test_statistic = samples.mean()
+    #         preds.append(test_statistic)
+    #     preds = torch.tensor(preds)
+    #     return preds
+    
     def run_attack(self, target_node_index, prior=0.5):
+        config = self.config
         preds = []
-        
-        for node_idx in tqdm(target_node_index, total=len(target_node_index), desc="Running membership inference over all nodes"):
-            samples = []
-            posteriors_in = []
-            posteriors_out = []
-            for _ in range(self.config.num_sampled_graphs):
-                node_mask = torch.randint(0, 2, size=(self.graph.num_nodes,)).bool()
-                node_mask[node_idx] = True
-                subgraph_in = self.masked_subgraph(node_mask)
-                log_posterior_in = self.log_model_posterior(subgraph=subgraph_in, target_node_idx=node_idx)
-                node_mask[node_idx] = False
+        samples = torch.zeros(size=(target_node_index.shape[0], config.num_sampled_graphs))
+        for i in tqdm(range(config.num_sampled_graphs), desc="Monte Carlo estimation over sampled graphs"):
+            node_mask = torch.randint(0, 2, size=(self.graph.num_nodes,)).bool()
+            subgraph_in = self.masked_subgraph(node_mask)
+            log_posterior_in = self.log_model_posterior(subgraph=subgraph_in)
+            for j, node_idx in enumerate(target_node_index):
+                node_mask[node_idx] = not node_mask[node_idx]
                 subgraph_out = self.masked_subgraph(node_mask)
-                log_posterior_out = self.log_model_posterior(subgraph=subgraph_out, target_node_idx=node_idx)
-                samples.append(torch.sigmoid(log_posterior_in - log_posterior_out + np.log(prior) - np.log(1 - prior)))
-                posteriors_in.append(log_posterior_in)
-                posteriors_out.append(log_posterior_out)
-            samples = torch.tensor(samples)
-            test_statistic = samples.mean()
-            posteriors_in = torch.tensor(posteriors_in)
-            posteriors_out = torch.tensor(posteriors_out)
-            print('train status:', self.graph.train_mask[node_idx], flush=True)
-            print('prob:', torch.sigmoid(posteriors_in.mean() - posteriors_out.mean()))
-            print('test stat:', test_statistic)
-            utils.plot_histogram_and_fitted_gaussian(posteriors_in, posteriors_in.mean(), posteriors_in.std(), bins=50)
-            utils.plot_histogram_and_fitted_gaussian(posteriors_out, posteriors_out.mean(), posteriors_out.std(), bins=50)
-            # print(f'node {node_idx}: {test_statistic:.4f} ({samples.std():.4f}), degree {degree(self.graph.edge_index[0], num_nodes=self.graph.num_nodes, dtype=torch.long)[node_idx]}', flush=True)
-            preds.append(test_statistic)
-        preds = torch.tensor(preds)
+                log_posterior_out = self.log_model_posterior(subgraph=subgraph_out)
+                if node_mask[node_idx]:
+                    samples[j][i] = torch.sigmoid(log_posterior_out - log_posterior_in + np.log(prior) - np.log(1 - prior))
+                else:
+                    samples[j][i] = torch.sigmoid(log_posterior_in - log_posterior_out + np.log(prior) - np.log(1 - prior))
+                node_mask[node_idx] = not node_mask[node_idx]
+        preds = samples.mean(dim=1)
+        assert preds.shape == target_node_index.shape
         return preds
 
 class ConfidenceAttack2:
@@ -642,7 +650,7 @@ class LiraOnline:
             optimizer=getattr(torch.optim, config.optimizer),
         )
         for _ in tqdm(range(config.num_shadow_models), desc=f"Training {config.num_shadow_models} shadow models for Lira online"):
-            shadow_dataset = datasetup.remasked_graph(self.graph, train_frac=0.5, val_frac=0.0)
+            shadow_dataset = datasetup.remasked_graph(self.graph, train_frac=config.train_frac, val_frac=config.val_frac)
             shadow_model = utils.fresh_model(
                 model_type=config.model,
                 num_features=shadow_dataset.num_features,
@@ -660,42 +668,42 @@ class LiraOnline:
             shadow_model.eval()
             self.shadow_models.append((shadow_model, shadow_dataset.train_mask))
     
-    def query_shadow_models(self):
+    def query_shadow_models(self, target_node_index):
         hinges_in = defaultdict(list)
         hinges_out = defaultdict(list)
+        num_target_nodes = target_node_index.shape[0]
         empty_edge_index = torch.tensor([[],[]], dtype=torch.long)
         with torch.inference_mode():
             for shadow_model, train_mask in self.shadow_models:
-                preds = shadow_model(self.graph.x, empty_edge_index)
+                preds = shadow_model(self.graph.x[target_node_index], empty_edge_index)
                 # Approximate logits of confidence values using the hinge loss.
-                hinges = utils.hinge_loss(preds, self.graph.y)
-                for node_idx in range(self.graph.num_nodes):
+                hinges = utils.hinge_loss(preds, self.graph.y[target_node_index])
+                for idx, node_idx in enumerate(target_node_index):
                     if train_mask[node_idx]:
-                        hinges_in[node_idx].append(hinges[node_idx])
+                        hinges_in[idx].append(hinges[idx])
                     else:
-                        hinges_out[node_idx].append(hinges[node_idx])
-        mean_in = torch.zeros(self.graph.num_nodes)
-        std_in = torch.zeros(self.graph.num_nodes)
-        mean_out = torch.zeros(self.graph.num_nodes)
-        std_out = torch.zeros(self.graph.num_nodes)
-        for node_idx, hinge_list in hinges_in.items():
+                        hinges_out[idx].append(hinges[idx])
+        mean_in = torch.zeros(num_target_nodes)
+        std_in = torch.zeros(num_target_nodes)
+        mean_out = torch.zeros(num_target_nodes)
+        std_out = torch.zeros(num_target_nodes)
+        for idx, hinge_list in hinges_in.items():
             hinges = torch.tensor(hinge_list)
-            mean_in[node_idx] = hinges.mean()
-            std_in[node_idx] = hinges.std()
-        for node_idx, hinge_list in hinges_out.items():
+            mean_in[idx] = hinges.mean()
+            std_in[idx] = hinges.std()
+        for idx, hinge_list in hinges_out.items():
             hinges = torch.tensor(hinge_list)
-            mean_out[node_idx] = hinges.mean()
-            std_out[node_idx] = hinges.std()
-        assert mean_in.shape == std_in.shape == mean_out.shape == std_out.shape == (self.graph.num_nodes,)
+            mean_out[idx] = hinges.mean()
+            std_out[idx] = hinges.std()
+        assert mean_in.shape == std_in.shape == mean_out.shape == std_out.shape == (num_target_nodes,)
         return mean_in, std_in, mean_out, std_out
 
     def run_attack(self, target_node_index):
-        _ = target_node_index # Use all nodes for now
         empty_edge_index = torch.tensor([[],[]], dtype=torch.long)
-        mean_in, std_in, mean_out, std_out = self.query_shadow_models()
+        mean_in, std_in, mean_out, std_out = self.query_shadow_models(target_node_index)
         with torch.inference_mode():
-            preds = self.target_model(self.graph.x, empty_edge_index)
-            target_hinges = utils.hinge_loss(preds, self.graph.y)
+            preds = self.target_model(self.graph.x[target_node_index], empty_edge_index)
+            target_hinges = utils.hinge_loss(preds, self.graph.y[target_node_index])
         p_in = norm.logpdf(
             target_hinges.cpu().numpy(),
             loc=mean_in.cpu().numpy(),
@@ -706,5 +714,5 @@ class LiraOnline:
             loc=mean_out.cpu().numpy(),
             scale=std_out.cpu().numpy() + LiRA.EPS,
         )
-        assert p_in.shape == p_out.shape == (self.graph.num_nodes,)
+        assert p_in.shape == p_out.shape == (target_node_index.shape[0],)
         return torch.tensor(p_in - p_out)
