@@ -512,8 +512,16 @@ class BayesOptimalMembershipInference:
         self.graph = graph
         self.loss_fn = loss_fn
         self.config = config
-        self.shadow_models = []
-        self.train_shadow_models()
+        #self.shadow_models = []
+        self.zero_hop_attacker = LiraOnline(
+            target_model=target_model,
+            graph=graph,
+            loss_fn=loss_fn,
+            config=config,
+        )
+        self.zero_hop_probs = self.zero_hop_attacker.run_attack(torch.arange(self.graph.num_nodes)).sigmoid()
+        self.shadow_models = [shadow_model for shadow_model, _ in self.zero_hop_attacker.shadow_models]
+        #self.train_shadow_models()
 
     def train_shadow_models(self):
         config = self.config
@@ -581,6 +589,11 @@ class BayesOptimalMembershipInference:
             #print(f'reject: {crit:.4f}')
             return prev_log_p, prev_mask, prev_subgraph
 
+    def sample_node_mask_zero_hop_MIA(self):
+        random_ref = torch.rand(size=(self.graph.num_nodes,))
+        node_mask = self.zero_hop_probs > random_ref
+        return node_mask
+
     def log_model_posterior(self, subgraph):
         # Only loss values over the k-hop neighborhood is necessary (for a k-layer GNN)
         # but we compute loss values over all node for simplicity
@@ -598,7 +611,7 @@ class BayesOptimalMembershipInference:
     #     for node_idx in tqdm(target_node_index, total=len(target_node_index), desc="Running membership inference over all nodes"):
     #         samples = []
     #         for _ in range(self.config.num_sampled_graphs):
-    #             node_mask = torch.randint(0, 2, size=(self.graph.num_nodes,)).bool()
+    #             node_mask = self.sample_node_mask_zero_hop_MIA()
     #             node_mask[node_idx] = True
     #             subgraph_in = self.masked_subgraph(node_mask)
     #             log_posterior_in = self.log_model_posterior(subgraph=subgraph_in)
@@ -618,13 +631,8 @@ class BayesOptimalMembershipInference:
         preds = []
         samples = torch.zeros(size=(target_node_index.shape[0], config.num_sampled_graphs))
         for i in tqdm(range(config.num_sampled_graphs), desc="Monte Carlo estimation over sampled graphs"):
-            if i % 10 == 0:
-                node_mask = self.get_random_node_mask(frac_ones=0.5)
-                log_p, subgraph_in = self.evaluate_mask(node_mask)
-                for _ in range(1000): # Burn-in 
-                    log_p, node_mask, subgraph_in = self.sample_subgraph_MCMC(prev_log_p=log_p, prev_mask=node_mask, prev_subgraph=subgraph_in, eps=0.01)
-            for _ in range(1000):
-                log_p, node_mask, subgraph_in = self.sample_subgraph_MCMC(prev_log_p=log_p, prev_mask=node_mask, prev_subgraph=subgraph_in, eps=0.01)
+            node_mask = self.sample_node_mask_zero_hop_MIA()
+            subgraph_in = self.masked_subgraph(node_mask)
             log_posterior_in = self.log_model_posterior(subgraph=subgraph_in)
             for j, node_idx in enumerate(target_node_index):
                 node_mask[node_idx] = not node_mask[node_idx]
