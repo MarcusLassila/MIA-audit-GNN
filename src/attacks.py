@@ -657,7 +657,7 @@ class ConfidenceAttack2:
     def run_attack(self, target_node_index):
         empty_edge_index = torch.tensor([[],[]], dtype=torch.long)
         with torch.inference_mode():
-            preds = self.target_model(self.graph.x, empty_edge_index)[target_node_index, self.graph.y[target_node_index]]
+            preds = F.softmax(self.target_model(self.graph.x, empty_edge_index), dim=1)[target_node_index, self.graph.y[target_node_index]]
         return preds
 
 class LiraOnline:

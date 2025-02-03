@@ -219,6 +219,12 @@ def plot_roc_csv(filepath, savedir=None):
             t = name + "_tpr"
             plot_roc_loglog(df[s], df[t], title=name, savepath=f'{savedir}/{name}.png')
 
+def plot_histogram(x, bins, savepath=None):
+    plt.figure(figsize=(10, 10))
+    plt.hist(x=x, bins=bins)
+    plt.grid(True)
+    savefig_or_show(savepath)
+
 def plot_histogram_and_fitted_gaussian(x, mean, std, bins=10, savepath=None):
     plt.figure(figsize=(8, 8))
     plt.hist(x=x, bins=bins, density=True)
