@@ -105,6 +105,13 @@ class MembershipInferenceExperiment:
                     loss_fn=self.loss_fn,
                     config=config,
                 )
+            case "rmia":
+                attacker = attacks.RmiaOnline(
+                    target_model=target_model,
+                    graph=self.dataset,
+                    loss_fn=self.loss_fn,
+                    config=config,
+                )
             case _:
                 raise AttributeError(f"No attack named {config.attack}")
         return attacker

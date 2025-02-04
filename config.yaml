@@ -3,26 +3,11 @@ lira-cora-GCN:
   attack: "lira"
   dataset: "cora"
   model: "GCN"
-  epochs_target: 20
-  epochs_shadow: 20
+  epochs_target: 15
+  epochs_shadow: 15
   num_experiments: 10
-  hidden_dim_target: [64]
-  query_hops: [0, 2]
-  target_fpr: 0.001
-  lr: 0.01
-  weight_decay: 0.0001
-  dropout: 0.5
-  num_shadow_models: 64
-lira-citeseer-GCN:
-  attack: "lira"
-  dataset: "citeseer"
-  model: "GCN"
-  epochs_target: 20
-  epochs_shadow: 20
-  num_experiments: 10
-  hidden_dim_target: [64]
-  query_hops: [0, 2]
-  target_fpr: 0.001
+  hidden_dim_target: [32]
+  target_fpr: 0.01
   lr: 0.01
   weight_decay: 0.0001
   dropout: 0.5

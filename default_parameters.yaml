@@ -5,7 +5,6 @@ default-parameters:
   model: "GCN"
   epochs_target: 20
   epochs_shadow: 20
-  experiment: "query"
   num_experiments: 1
   hidden_dim_target: [64]
   query_hops: [0]

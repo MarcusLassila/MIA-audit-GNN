@@ -512,16 +512,16 @@ class BayesOptimalMembershipInference:
         self.graph = graph
         self.loss_fn = loss_fn
         self.config = config
-        #self.shadow_models = []
-        self.zero_hop_attacker = LiraOnline(
-            target_model=target_model,
-            graph=graph,
-            loss_fn=loss_fn,
-            config=config,
-        )
-        self.zero_hop_probs = self.zero_hop_attacker.run_attack(torch.arange(self.graph.num_nodes)).sigmoid()
-        self.shadow_models = [shadow_model for shadow_model, _ in self.zero_hop_attacker.shadow_models]
-        #self.train_shadow_models()
+        self.shadow_models = []
+        self.train_shadow_models()
+        # self.zero_hop_attacker = LiraOnline(
+        #     target_model=target_model,
+        #     graph=graph,
+        #     loss_fn=loss_fn,
+        #     config=config,
+        # )
+        # self.zero_hop_probs = self.zero_hop_attacker.run_attack(torch.arange(self.graph.num_nodes)).sigmoid()
+        # self.shadow_models = self.zero_hop_attacker.shadow_models
 
     def train_shadow_models(self):
         config = self.config
@@ -583,10 +583,8 @@ class BayesOptimalMembershipInference:
         log_p, subgraph = self.evaluate_mask(mask)
         crit = torch.exp(log_p - prev_log_p).item()
         if crit > u:
-            #print(f'accept: {crit:.4f}')
             return log_p, mask, subgraph
         else:
-            #print(f'reject: {crit:.4f}')
             return prev_log_p, prev_mask, prev_subgraph
 
     def sample_node_mask_zero_hop_MIA(self):
@@ -599,11 +597,10 @@ class BayesOptimalMembershipInference:
         # but we compute loss values over all node for simplicity
         with torch.inference_mode():
             loss_term = self.loss_fn(self.target_model(subgraph.x, subgraph.edge_index), subgraph.y)
-            neg_loss = torch.tensor([
+            log_Z_term = torch.tensor([
                 -self.loss_fn(shadow_model(subgraph.x, subgraph.edge_index), subgraph.y)
                 for shadow_model in self.shadow_models
-            ])
-            log_Z_term = neg_loss.logsumexp(0) - np.log(self.config.num_shadow_models)
+            ]).logsumexp(0) - np.log(self.config.num_shadow_models)
         return -loss_term - log_Z_term
 
     # def run_attack(self, target_node_index, prior=0.5):
@@ -625,13 +622,13 @@ class BayesOptimalMembershipInference:
     #         preds.append(test_statistic)
     #     preds = torch.tensor(preds)
     #     return preds
-    
+
     def run_attack(self, target_node_index, prior=0.5):
         config = self.config
         preds = []
         samples = torch.zeros(size=(target_node_index.shape[0], config.num_sampled_graphs))
         for i in tqdm(range(config.num_sampled_graphs), desc="Monte Carlo estimation over sampled graphs"):
-            node_mask = self.sample_node_mask_zero_hop_MIA()
+            node_mask = self.get_random_node_mask(frac_ones=0.5)
             subgraph_in = self.masked_subgraph(node_mask)
             log_posterior_in = self.log_model_posterior(subgraph=subgraph_in)
             for j, node_idx in enumerate(target_node_index):
@@ -667,9 +664,10 @@ class LiraOnline:
         self.graph = graph
         self.loss_fn = loss_fn
         self.config = config
-        self.shadow_models = [] # Pairs of shadow models and its corresponding training mask
+        self.shadow_models = []
+        self.shadow_train_masks = []
         self.train_shadow_models()
-    
+
     def train_shadow_models(self):
         config = self.config
         criterion = Accuracy(task="multiclass", num_classes=self.graph.num_classes).to(config.device)
@@ -700,7 +698,8 @@ class LiraOnline:
                 inductive_split=config.inductive_split,
             )
             shadow_model.eval()
-            self.shadow_models.append((shadow_model, shadow_dataset.train_mask))
+            self.shadow_models.append(shadow_model)
+            self.shadow_train_masks.append(shadow_dataset.train_mask)
     
     def query_shadow_models(self, target_node_index):
         hinges_in = defaultdict(list)
@@ -708,7 +707,7 @@ class LiraOnline:
         num_target_nodes = target_node_index.shape[0]
         empty_edge_index = torch.tensor([[],[]], dtype=torch.long)
         with torch.inference_mode():
-            for shadow_model, train_mask in self.shadow_models:
+            for shadow_model, train_mask in zip(self.shadow_models, self.shadow_train_masks):
                 preds = shadow_model(self.graph.x[target_node_index], empty_edge_index)
                 # Approximate logits of confidence values using the hinge loss.
                 hinges = utils.hinge_loss(preds, self.graph.y[target_node_index])
@@ -750,3 +749,66 @@ class LiraOnline:
         )
         assert p_in.shape == p_out.shape == (target_node_index.shape[0],)
         return torch.tensor(p_in - p_out)
+
+class RmiaOnline:
+
+    def __init__(self, target_model, graph, loss_fn, config):
+        self.target_model = target_model
+        self.graph = graph
+        self.loss_fn = loss_fn
+        self.config = config
+        self.shadow_models = [] # Pairs of shadow models and its corresponding training mask
+        self.train_shadow_models()
+
+    def train_shadow_models(self):
+        config = self.config
+        criterion = Accuracy(task="multiclass", num_classes=self.graph.num_classes).to(config.device)
+        train_config = trainer.TrainConfig(
+            criterion=criterion,
+            device=config.device,
+            epochs=config.epochs_shadow,
+            early_stopping=config.early_stopping,
+            loss_fn=self.loss_fn,
+            lr=config.lr,
+            weight_decay=config.weight_decay,
+            optimizer=getattr(torch.optim, config.optimizer),
+        )
+        for _ in tqdm(range(config.num_shadow_models), desc=f"Training {config.num_shadow_models} shadow models for Lira online"):
+            shadow_dataset = datasetup.remasked_graph(self.graph, train_frac=config.train_frac, val_frac=config.val_frac)
+            shadow_model = utils.fresh_model(
+                model_type=config.model,
+                num_features=shadow_dataset.num_features,
+                hidden_dims=config.hidden_dim_target,
+                num_classes=shadow_dataset.num_classes,
+                dropout=config.dropout,
+            )
+            _ = trainer.train_gnn(
+                model=shadow_model,
+                dataset=shadow_dataset,
+                config=train_config,
+                disable_tqdm=True,
+                inductive_split=config.inductive_split,
+            )
+            shadow_model.eval()
+            self.shadow_models.append(shadow_model)
+
+    def run_attack(self, target_node_index):
+        empty_edge_index = torch.tensor([[],[]], dtype=torch.long)
+        num_target_nodes = target_node_index.shape[0]
+        row_idx = torch.arange(num_target_nodes)
+        with torch.inference_mode():
+            p_x = []
+            for shadow_model in self.shadow_models:
+                preds = F.softmax(shadow_model(self.graph.x[target_node_index], empty_edge_index), dim=1)[row_idx, self.graph.y[target_node_index]]
+                p_x.append(preds)
+            p_x = torch.stack(p_x)
+            assert p_x.shape == (self.config.num_shadow_models, num_target_nodes)
+            p_x = p_x.mean(dim=0)
+            p_x_target = F.softmax(self.target_model(self.graph.x[target_node_index], empty_edge_index), dim=1)[row_idx, self.graph.y[target_node_index]]
+            ratio_x = p_x_target / p_x
+            # Let Z be all nodes in the graph. We compare each x with all nodes z (including x=z which has a negligible effect).
+            score = torch.tensor([(x > ratio_x * self.config.rmia_gamma).float().mean().item() for x in ratio_x])
+        return score
+        
+# 0.7033 (0.0000)  0.0320 (0.0000) LiRA Sampling
+# 0.7910 (0.0000)  0.0840 (0.0000) Uniform Sampling

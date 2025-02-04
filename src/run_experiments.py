@@ -1,4 +1,5 @@
 import run_mia
+import run_mia_2
 
 import yaml
 import numpy as np
@@ -28,7 +29,7 @@ def main():
         for k, v in params.items():
             print(f'{k}: {v}')
         print()
-        train_stats_df, attack_stats_df = run_mia.main(params)
+        train_stats_df, attack_stats_df = run_mia_2.main(params)
         train_stat_frames.append(train_stats_df)
         attack_stat_frames.append(attack_stats_df)
     pd.concat(train_stat_frames).to_csv(f'{default_params["savedir"]}/train_statistics.csv', sep=',')
@@ -38,10 +39,8 @@ if __name__ == "__main__":
     main()
     train_df = pd.read_csv('./results/train_statistics.csv', sep=',')
     attack_df = pd.read_csv('./results/attack_statistics.csv', sep=',')
-    detection_df = pd.read_csv('./results/detection_statistics.csv', sep=',')
     pd.set_option('display.max_columns', None)
     pd.set_option('display.max_rows', None)
     print(train_df)
     print(attack_df)
-    print(detection_df)
     print('Done.')
