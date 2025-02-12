@@ -570,7 +570,7 @@ class BayesOptimalMembershipInference:
         )
 
     def get_random_node_mask(self, frac_ones=0.5):
-        return ~(torch.randint(0, int(1 / frac_ones + 1e-6), size=(self.graph.num_nodes,)).bool())
+        return torch.rand(size=(self.graph.num_nodes,)) < frac_ones
 
     def evaluate_mask(self, mask):
         subgraph = self.masked_subgraph(mask)
@@ -604,49 +604,40 @@ class BayesOptimalMembershipInference:
             ]).logsumexp(0) - np.log(self.config.num_shadow_models)
         return -loss_term - log_Z_term
 
-    # def run_attack(self, target_node_index, prior=0.5):
-    #     preds = []
-    #     for node_idx in tqdm(target_node_index, total=len(target_node_index), desc="Running membership inference over all nodes"):
-    #         samples = []
-    #         for _ in range(self.config.num_sampled_graphs):
-    #             node_mask = self.sample_node_mask_zero_hop_MIA()
-    #             node_mask[node_idx] = True
-    #             subgraph_in = self.masked_subgraph(node_mask)
-    #             log_posterior_in = self.log_model_posterior(subgraph=subgraph_in)
-    #             node_mask[node_idx] = False
-    #             subgraph_out = self.masked_subgraph(node_mask)
-    #             log_posterior_out = self.log_model_posterior(subgraph=subgraph_out)
-    #             # No need to apply sigmoid since it is a monotone increasing function, but nice to get probabilities
-    #             samples.append(torch.sigmoid(log_posterior_in - log_posterior_out + np.log(prior) - np.log(1 - prior)))
-    #         samples = torch.tensor(samples)
-    #         test_statistic = samples.mean()
-    #         preds.append(test_statistic)
-    #     preds = torch.tensor(preds)
-    #     return preds
-
     def run_attack(self, target_node_index, prior=0.5):
         config = self.config
-        if config.num_workers > 1:
+        if config.num_threads > 1:
             return self.run_attack_mp(target_node_index, prior)
-        scores = torch.zeros(size=(target_node_index.shape[0], config.num_sampled_graphs))
+        scores = torch.zeros(size=(config.num_sampled_graphs, target_node_index.shape[0]))
         for i in tqdm(range(config.num_sampled_graphs), desc="Computing expactation over sampled graphs"):
-            node_mask = self.get_random_node_mask(frac_ones=0.5)
-            subgraph_in = self.masked_subgraph(node_mask)
-            log_posterior_in = self.log_model_posterior(subgraph=subgraph_in)
-            for j, node_idx in enumerate(target_node_index):
-                node_mask[node_idx] = not node_mask[node_idx]
-                subgraph_out = self.masked_subgraph(node_mask)
-                log_posterior_out = self.log_model_posterior(subgraph=subgraph_out)
-                if node_mask[node_idx]:
-                    scores[j][i] = torch.sigmoid(log_posterior_out - log_posterior_in + np.log(prior) - np.log(1 - prior))
-                else:
-                    scores[j][i] = torch.sigmoid(log_posterior_in - log_posterior_out + np.log(prior) - np.log(1 - prior))
-                node_mask[node_idx] = not node_mask[node_idx]
-        preds = scores.mean(dim=1)
+            self.update_scores(
+                sample_idx=i,
+                target_node_index=target_node_index,
+                prior=prior,
+                scores=scores,
+            )
+        preds = scores.mean(dim=0)
         assert preds.shape == target_node_index.shape
         return preds
 
-    def helper(self, idx, target_node_index, prior, scores):
+    def run_attack_mp(self, target_node_index, prior=0.5):
+        config = self.config
+        scores = torch.zeros(size=(config.num_sampled_graphs, target_node_index.shape[0])).share_memory_()
+        sample_idx = 0
+        for _ in tqdm(range(config.num_sampled_graphs // config.num_threads), desc=f"Computing expactation over sampled graphs using {config.num_threads} threads"):
+            processes = []
+            for _ in range(config.num_threads):
+                p = mp.Process(target=self.update_scores, args=(sample_idx, target_node_index, prior, scores))
+                sample_idx += 1
+                p.start()
+                processes.append(p)
+            for p in processes:
+                p.join()
+        preds = scores.mean(dim=0)
+        assert preds.shape == target_node_index.shape
+        return preds
+
+    def update_scores(self, sample_idx, target_node_index, prior, scores):
         node_mask = self.get_random_node_mask(frac_ones=0.5)
         subgraph_in = self.masked_subgraph(node_mask)
         log_posterior_in = self.log_model_posterior(subgraph=subgraph_in)
@@ -655,27 +646,10 @@ class BayesOptimalMembershipInference:
             subgraph_out = self.masked_subgraph(node_mask)
             log_posterior_out = self.log_model_posterior(subgraph=subgraph_out)
             if node_mask[node_idx]:
-                scores[i][idx] = torch.sigmoid(log_posterior_out - log_posterior_in + np.log(prior) - np.log(1 - prior))
+                scores[sample_idx][i] = torch.sigmoid(log_posterior_out - log_posterior_in + np.log(prior) - np.log(1 - prior))
             else:
-                scores[i][idx] = torch.sigmoid(log_posterior_in - log_posterior_out + np.log(prior) - np.log(1 - prior))
+                scores[sample_idx][i] = torch.sigmoid(log_posterior_in - log_posterior_out + np.log(prior) - np.log(1 - prior))
             node_mask[node_idx] = not node_mask[node_idx]
-
-    def run_attack_mp(self, target_node_index, prior=0.5):
-        config = self.config
-        scores = torch.zeros(size=(target_node_index.shape[0], config.num_sampled_graphs)).share_memory_()
-        idx = 0
-        for _ in tqdm(range(config.num_sampled_graphs // config.num_threads), desc="Computing expactation over sampled graphs"):
-            processes = []
-            for _ in range(config.num_threads):
-                p = mp.Process(target=self.helper, args=(idx, target_node_index, prior, scores))
-                idx += 1
-                p.start()
-                processes.append(p)
-            for p in processes:
-                p.join()
-        preds = scores.mean(dim=1)
-        assert preds.shape == target_node_index.shape
-        return preds
 
 class ConfidenceAttack2:
 
