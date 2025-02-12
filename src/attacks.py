@@ -569,9 +569,6 @@ class BayesOptimalMembershipInference:
             num_classes=self.graph.num_classes,
         )
 
-    def get_random_node_mask(self, frac_ones=0.5):
-        return torch.rand(size=(self.graph.num_nodes,)) < frac_ones
-
     def evaluate_mask(self, mask):
         subgraph = self.masked_subgraph(mask)
         with torch.inference_mode():
@@ -592,6 +589,9 @@ class BayesOptimalMembershipInference:
         random_ref = torch.rand(size=(self.graph.num_nodes,))
         node_mask = self.zero_hop_probs > random_ref
         return node_mask
+
+    def sample_random_node_mask(self, frac_ones=0.5):
+        return torch.rand(size=(self.graph.num_nodes,)) < frac_ones
 
     def log_model_posterior(self, subgraph):
         # Only loss values over the k-hop neighborhood is necessary (for a k-layer GNN)
@@ -638,7 +638,7 @@ class BayesOptimalMembershipInference:
         return preds
 
     def update_scores(self, sample_idx, target_node_index, prior, scores):
-        node_mask = self.get_random_node_mask(frac_ones=0.5)
+        node_mask = self.sample_random_node_mask(frac_ones=np.random.rand())
         subgraph_in = self.masked_subgraph(node_mask)
         log_posterior_in = self.log_model_posterior(subgraph=subgraph_in)
         for i, node_idx in enumerate(target_node_index):
