@@ -10,6 +10,7 @@ from sklearn.model_selection import train_test_split
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+import torch.multiprocessing as mp
 from torch_geometric.nn import MLP
 from torch_geometric.data import Data
 from torch_geometric.utils import subgraph, k_hop_subgraph, degree
@@ -625,9 +626,10 @@ class BayesOptimalMembershipInference:
 
     def run_attack(self, target_node_index, prior=0.5):
         config = self.config
-        preds = []
-        samples = torch.zeros(size=(target_node_index.shape[0], config.num_sampled_graphs))
-        for i in tqdm(range(config.num_sampled_graphs), desc="Monte Carlo estimation over sampled graphs"):
+        if config.num_workers > 1:
+            return self.run_attack_mp(target_node_index, prior)
+        scores = torch.zeros(size=(target_node_index.shape[0], config.num_sampled_graphs))
+        for i in tqdm(range(config.num_sampled_graphs), desc="Computing expactation over sampled graphs"):
             node_mask = self.get_random_node_mask(frac_ones=0.5)
             subgraph_in = self.masked_subgraph(node_mask)
             log_posterior_in = self.log_model_posterior(subgraph=subgraph_in)
@@ -636,11 +638,42 @@ class BayesOptimalMembershipInference:
                 subgraph_out = self.masked_subgraph(node_mask)
                 log_posterior_out = self.log_model_posterior(subgraph=subgraph_out)
                 if node_mask[node_idx]:
-                    samples[j][i] = torch.sigmoid(log_posterior_out - log_posterior_in + np.log(prior) - np.log(1 - prior))
+                    scores[j][i] = torch.sigmoid(log_posterior_out - log_posterior_in + np.log(prior) - np.log(1 - prior))
                 else:
-                    samples[j][i] = torch.sigmoid(log_posterior_in - log_posterior_out + np.log(prior) - np.log(1 - prior))
+                    scores[j][i] = torch.sigmoid(log_posterior_in - log_posterior_out + np.log(prior) - np.log(1 - prior))
                 node_mask[node_idx] = not node_mask[node_idx]
-        preds = samples.mean(dim=1)
+        preds = scores.mean(dim=1)
+        assert preds.shape == target_node_index.shape
+        return preds
+
+    def helper(self, idx, target_node_index, prior, scores):
+        node_mask = self.get_random_node_mask(frac_ones=0.5)
+        subgraph_in = self.masked_subgraph(node_mask)
+        log_posterior_in = self.log_model_posterior(subgraph=subgraph_in)
+        for i, node_idx in enumerate(target_node_index):
+            node_mask[node_idx] = not node_mask[node_idx]
+            subgraph_out = self.masked_subgraph(node_mask)
+            log_posterior_out = self.log_model_posterior(subgraph=subgraph_out)
+            if node_mask[node_idx]:
+                scores[i][idx] = torch.sigmoid(log_posterior_out - log_posterior_in + np.log(prior) - np.log(1 - prior))
+            else:
+                scores[i][idx] = torch.sigmoid(log_posterior_in - log_posterior_out + np.log(prior) - np.log(1 - prior))
+            node_mask[node_idx] = not node_mask[node_idx]
+
+    def run_attack_mp(self, target_node_index, prior=0.5):
+        config = self.config
+        scores = torch.zeros(size=(target_node_index.shape[0], config.num_sampled_graphs)).share_memory_()
+        idx = 0
+        for _ in tqdm(range(config.num_sampled_graphs // config.num_threads), desc="Computing expactation over sampled graphs"):
+            processes = []
+            for _ in range(config.num_threads):
+                p = mp.Process(target=self.helper, args=(idx, target_node_index, prior, scores))
+                idx += 1
+                p.start()
+                processes.append(p)
+            for p in processes:
+                p.join()
+        preds = scores.mean(dim=1)
         assert preds.shape == target_node_index.shape
         return preds
 
