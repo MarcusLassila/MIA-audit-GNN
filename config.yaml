@@ -1,4 +1,18 @@
 ---
+bayes-optimal-cora-GCN:
+  attack: "bayes-optimal"
+  dataset: "cora"
+  model: "GCN"
+  epochs_target: 15
+  epochs_shadow: 15
+  num_experiments: 10
+  hidden_dim_target: [32]
+  target_fpr: 0.01
+  lr: 0.01
+  weight_decay: 0.0001
+  dropout: 0.5
+  num_shadow_models: 64
+  num_sampled_graphs: 1
 lira-cora-GCN:
   attack: "lira"
   dataset: "cora"
