@@ -92,7 +92,7 @@ class MembershipInferenceExperiment:
                     loss_fn=self.loss_fn,
                     config=config,
                 )
-            case "logsumexp-threshold":
+            case "lset":
                 attacker = attacks.LogSumExpThreshholdAttack(
                     target_model=target_model,
                     graph=self.dataset,
@@ -122,25 +122,18 @@ class MembershipInferenceExperiment:
             case _:
                 raise AttributeError(f"No attack named {config.attack}")
         return attacker
-    
-    def parse_train_stats(self, train_stats):
-        return pd.DataFrame({
-            'train_acc': [utils.stat_repr(train_stats['train_scores'])],
-            'test_acc': [utils.stat_repr(train_stats['test_scores'])],
-        }, index=[self.config.name])
 
-    def parse_attack_stats(self, attack_stats):
+    def parse_stats(self, stats):
         config = self.config
-        stats = defaultdict(list)
-        for key, value in attack_stats.items():
+        table = defaultdict(list)
+        for key, value in stats.items():
             if isinstance(value[0], float):
-                stats[f'{key}'].append(utils.stat_repr(value))
-        return pd.DataFrame(stats, index=[config.name])
+                table[f'{key}'].append(utils.stat_repr(value))
+        return pd.DataFrame(table, index=[config.name])
 
     def run_bayes_optimal_experiment(self):
         config = self.config
-        train_stats = defaultdict(list)
-        attack_stats = defaultdict(list)
+        stats = defaultdict(list)
 
         for i_experiment in range(1, config.num_experiments + 1):
             print(f'Running experiment {i_experiment}/{config.num_experiments}')
@@ -152,14 +145,14 @@ class MembershipInferenceExperiment:
             target_model = self.train_target_model(self.dataset)
             attacker = self.get_attacker(target_model)
             target_scores = {
-                'train_score': evaluation.evaluate_graph_model(
+                'train_acc': evaluation.evaluate_graph_model(
                     model=target_model,
                     dataset=self.dataset,
                     mask=self.dataset.train_mask,
                     criterion=self.criterion,
                     inductive_inference=config.inductive_split,
                 ),
-                'test_score': evaluation.evaluate_graph_model(
+                'test_acc': evaluation.evaluate_graph_model(
                     model=target_model,
                     dataset=self.dataset,
                     mask=self.dataset.test_mask,
@@ -167,8 +160,8 @@ class MembershipInferenceExperiment:
                     inductive_inference=config.inductive_split,
                 ),
             }
-            train_stats['train_scores'].append(target_scores['train_score'])
-            train_stats['test_scores'].append(target_scores['test_score'])
+            stats['train_acc'].append(target_scores['train_acc'])
+            stats['test_acc'].append(target_scores['test_acc'])
 
             truth = self.dataset.train_mask.long()
             if config.num_target_nodes == -1:
@@ -189,20 +182,19 @@ class MembershipInferenceExperiment:
             preds = attacker.run_attack(target_node_index=target_node_index)
             metrics = evaluation.evaluate_binary_classification(preds, truth[target_node_index], config.target_fpr)
             fpr, tpr = metrics['ROC']
-            attack_stats[f'FPR'].append(fpr)
-            attack_stats[f'TPR'].append(tpr)
-            attack_stats[f'AUC'].append(metrics['AUC'])
-            attack_stats[f'TPR@{config.target_fpr}FPR'].append(metrics['TPR@FPR'])
+            stats[f'FPR'].append(fpr)
+            stats[f'TPR'].append(tpr)
+            stats[f'AUC'].append(metrics['AUC'])
+            stats[f'TPR@{config.target_fpr}FPR'].append(metrics['TPR@FPR'])
 
         if config.make_roc_plots:
             savepath = f'{config.savedir}/{config.name}_roc_loglog.png'
-            fprs = attack_stats[f'FPR']
-            tprs = attack_stats[f'TPR']
+            fprs = stats[f'FPR']
+            tprs = stats[f'TPR']
             utils.plot_multi_roc_loglog(fprs, tprs, savepath=savepath)
 
-        train_stats_df = self.parse_train_stats(train_stats)
-        attack_stats_df = self.parse_attack_stats(attack_stats)
-        return train_stats_df, attack_stats_df
+        stats_df = self.parse_stats(stats)
+        return stats_df
 
 def set_seed(seed):
     np.random.seed(seed)

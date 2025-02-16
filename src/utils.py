@@ -128,6 +128,7 @@ def min_max_normalization(*args):
 
 def partition_training_sets(num_nodes, num_models):
     '''Partition nodes such that each model is trained on half of the nodes. For e.g. LiRA and RMIA.'''
+    assert num_models > 1
     train_masks = torch.zeros(size=(num_models, num_nodes), dtype=torch.bool)
     for i in range(num_nodes):
         models = np.random.choice(num_models, num_models // 2, replace=False)
