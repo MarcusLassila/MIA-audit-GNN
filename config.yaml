@@ -1,28 +1,82 @@
 ---
-bayes-optimal-cora-GCN:
-  attack: "bayes-optimal"
+# bayes-optimal-amazon-photo-GAT:
+#   attack: "bayes-optimal"
+#   dataset: "amazon-photo"
+#   model: "GAT"
+#   epochs_target: 200
+#   epochs_shadow: 200
+#   num_experiments: 1
+#   hidden_dim_target: [512]
+#   target_fpr: 0.01
+#   lr: 0.001
+#   weight_decay: 0.0001
+#   dropout: 0.0
+#   num_shadow_models: 8
+#   num_sampled_graphs: 1
+# lira-amazon-photo-GAT:
+#   attack: "lira"
+#   dataset: "amazon-photo"
+#   model: "GAT"
+#   epochs_target: 200
+#   epochs_shadow: 200
+#   num_experiments: 1
+#   hidden_dim_target: [512]
+#   target_fpr: 0.01
+#   lr: 0.001
+#   weight_decay: 0.0001
+#   dropout: 0.0
+#   num_shadow_models: 8
+# rmia-amazon-photo-GAT:
+#   attack: "rmia"
+#   dataset: "amazon-photo"
+#   model: "GAT"
+#   epochs_target: 200
+#   epochs_shadow: 200
+#   num_experiments: 1
+#   hidden_dim_target: [512]
+#   target_fpr: 0.01
+#   lr: 0.001
+#   weight_decay: 0.0001
+#   dropout: 0.0
+#   num_shadow_models: 8
+#   rmia_gamma: 2
+
+logsumexp-threshold-cora-GCN:
+  attack: "logsumexp-threshold"
   dataset: "cora"
   model: "GCN"
   epochs_target: 15
   epochs_shadow: 15
-  num_experiments: 10
+  num_experiments: 20
   hidden_dim_target: [32]
-  target_fpr: 0.01
+  target_fpr: 0.001
   lr: 0.01
   weight_decay: 0.0001
   dropout: 0.5
-  num_shadow_models: 64
-  num_sampled_graphs: 1
+  num_shadow_models: 2
+rmia-cora-GCN:
+  attack: "rmia"
+  dataset: "cora"
+  model: "GCN"
+  epochs_target: 15
+  epochs_shadow: 15
+  num_experiments: 20
+  hidden_dim_target: [32]
+  target_fpr: 0.001
+  lr: 0.01
+  weight_decay: 0.0001
+  dropout: 0.5
+  num_shadow_models: 2
 lira-cora-GCN:
   attack: "lira"
   dataset: "cora"
   model: "GCN"
   epochs_target: 15
   epochs_shadow: 15
-  num_experiments: 10
+  num_experiments: 20
   hidden_dim_target: [32]
-  target_fpr: 0.01
+  target_fpr: 0.001
   lr: 0.01
   weight_decay: 0.0001
   dropout: 0.5
-  num_shadow_models: 64
+  num_shadow_models: 2

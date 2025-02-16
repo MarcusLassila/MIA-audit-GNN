@@ -92,6 +92,13 @@ class MembershipInferenceExperiment:
                     loss_fn=self.loss_fn,
                     config=config,
                 )
+            case "logsumexp-threshold":
+                attacker = attacks.LogSumExpThreshholdAttack(
+                    target_model=target_model,
+                    graph=self.dataset,
+                    loss_fn=self.loss_fn,
+                    config=config,
+                )
             case "confidence":
                 attacker = attacks.ConfidenceAttack2(
                     target_model=target_model,
@@ -164,17 +171,20 @@ class MembershipInferenceExperiment:
             train_stats['test_scores'].append(target_scores['test_score'])
 
             truth = self.dataset.train_mask.long()
-            num_targets = 500
-            positives = truth.nonzero().squeeze()
-            negatives = (truth ^ 1).nonzero().squeeze()
-            perm_mask = torch.randperm(positives.shape[0])
-            positives = positives[perm_mask][:num_targets // 2]
-            perm_mask = torch.randperm(negatives.shape[0])
-            negatives = negatives[perm_mask][:num_targets // 2]
-            perm_mask = torch.randperm(num_targets)
-            target_node_index = torch.concat((positives, negatives))[perm_mask]
-            assert target_node_index.shape == (500,)
-            #target_node_index = torch.arange(self.dataset.num_nodes)
+            if config.num_target_nodes == -1:
+                target_node_index = torch.arange(self.dataset.num_nodes)
+            else:
+                assert config.num_target_nodes <= self.dataset.num_nodes
+                num_targets = config.num_target_nodes
+                positives = truth.nonzero().squeeze()
+                negatives = (truth ^ 1).nonzero().squeeze()
+                perm_mask = torch.randperm(positives.shape[0])
+                positives = positives[perm_mask][:num_targets // 2]
+                perm_mask = torch.randperm(negatives.shape[0])
+                negatives = negatives[perm_mask][:num_targets // 2]
+                perm_mask = torch.randperm(num_targets)
+                target_node_index = torch.concat((positives, negatives))[perm_mask]
+                assert target_node_index.shape == (num_targets,)
 
             preds = attacker.run_attack(target_node_index=target_node_index)
             metrics = evaluation.evaluate_binary_classification(preds, truth[target_node_index], config.target_fpr)
@@ -226,6 +236,7 @@ if __name__ == '__main__':
     parser.add_argument("--optimizer", default="Adam", type=str)
     parser.add_argument("--num-shadow-models", default=64, type=int)
     parser.add_argument("--num-sampled-graphs", default=10, type=int)
+    parser.add_argument("--num-target-nodes", default=-1, type=int)
     parser.add_argument("--rmia-gamma", default=2.0, type=float)
     parser.add_argument("--name", default="unnamed", type=str)
     parser.add_argument("--datadir", default="./data", type=str)

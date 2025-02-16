@@ -5,7 +5,7 @@ import pandas as pd
 import scipy.stats as stats
 import matplotlib.pyplot as plt
 import torch
-from torch_geometric.utils import degree, to_networkx, remove_isolated_nodes
+from torch_geometric.utils import degree, to_networkx, remove_isolated_nodes, index_to_mask
 import networkx as nx
 from sklearn.decomposition import PCA
 from sklearn.manifold import TSNE
@@ -125,6 +125,18 @@ def min_max_normalization(*args):
         low = min(low, arg.min())
         high = max(high, arg.max())
     return tuple((arg - low) / (high - low) for arg in args)
+
+def partition_training_sets(num_nodes, num_models):
+    '''Partition nodes such that each model is trained on half of the nodes. For e.g. LiRA and RMIA.'''
+    train_masks = torch.zeros(size=(num_models, num_nodes), dtype=torch.bool)
+    for i in range(num_nodes):
+        models = np.random.choice(num_models, num_models // 2, replace=False)
+        model_mask = index_to_mask(torch.from_numpy(models), size=num_models)
+        for j in range(num_models):
+            train_masks[j][i] = model_mask[j]
+    return train_masks
+
+########## Plotting helpers ##########
 
 def plot_graph(graph):
     graph = to_networkx(graph)

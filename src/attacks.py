@@ -363,6 +363,7 @@ class RMIA:
             self.monte_carlo_masks.append(datasetup.random_edge_mask(self.population, 0.8))
         print("offline_a:", self.offline_a)
 
+    # TODO: Use utils.partition_training_sets instead of this
     def partition_population(self, unbiased_in_expectation=True):
         '''
         Partition the training nodes for the shadow models such that each model is trained on 50% of the population nodes.
@@ -638,7 +639,7 @@ class BayesOptimalMembershipInference:
         return preds
 
     def update_scores(self, sample_idx, target_node_index, prior, scores):
-        node_mask = self.sample_random_node_mask(frac_ones=np.random.rand())
+        node_mask = self.sample_random_node_mask(frac_ones=0.0)
         subgraph_in = self.masked_subgraph(node_mask)
         log_posterior_in = self.log_model_posterior(subgraph=subgraph_in)
         for i, node_idx in enumerate(target_node_index):
@@ -650,6 +651,68 @@ class BayesOptimalMembershipInference:
             else:
                 scores[sample_idx][i] = torch.sigmoid(log_posterior_in - log_posterior_out + np.log(prior) - np.log(1 - prior))
             node_mask[node_idx] = not node_mask[node_idx]
+
+class LogSumExpThreshholdAttack:
+
+    def __init__(self, target_model, graph, loss_fn, config):
+        self.target_model = target_model
+        self.graph = graph
+        self.loss_fn = loss_fn
+        self.config = config
+        self.shadow_models = []
+        self.train_shadow_models()
+
+    def train_shadow_models(self):
+        config = self.config
+        criterion = Accuracy(task="multiclass", num_classes=self.graph.num_classes).to(config.device)
+        train_config = trainer.TrainConfig(
+            criterion=criterion,
+            device=config.device,
+            epochs=config.epochs_shadow,
+            early_stopping=config.early_stopping,
+            loss_fn=self.loss_fn,
+            lr=config.lr,
+            weight_decay=config.weight_decay,
+            optimizer=getattr(torch.optim, config.optimizer),
+        )
+        # for _ in tqdm(range(config.num_shadow_models), desc=f"Training {config.num_shadow_models} shadow models for BayesOptimalMembershipInference"):
+        #     shadow_dataset = datasetup.remasked_graph(self.graph, train_frac=config.train_frac, val_frac=config.val_frac)
+        shadow_train_masks = utils.partition_training_sets(num_nodes=self.graph.num_nodes, num_models=config.num_shadow_models)
+        for shadow_nodes in tqdm(shadow_train_masks, total=shadow_train_masks.shape[0], desc=f"Training {config.num_shadow_models} shadow models for LogSumExp Threshold attack"):
+            shadow_dataset = datasetup.remasked_graph_deterministic(self.graph, shadow_nodes)
+            shadow_model = utils.fresh_model(
+                model_type=config.model,
+                num_features=shadow_dataset.num_features,
+                hidden_dims=config.hidden_dim_target,
+                num_classes=shadow_dataset.num_classes,
+                dropout=config.dropout,
+            )
+            _ = trainer.train_gnn(
+                model=shadow_model,
+                dataset=shadow_dataset,
+                config=train_config,
+                disable_tqdm=True,
+                inductive_split=config.inductive_split,
+            )
+            shadow_model.eval()
+            self.shadow_models.append(shadow_model)
+
+    def log_confidence(self, model, x, y):
+        empty_edge_index = torch.tensor([[],[]], dtype=torch.long)
+        with torch.inference_mode():
+            log_conf = F.softmax(model(x, empty_edge_index), dim=1)[torch.arange(x.shape[0]), y].log()
+        return log_conf
+
+    def log_model_posterior(self, x, y):
+        log_conf = self.log_confidence(self.target_model, x, y)
+        threshold = torch.stack([
+            self.log_confidence(shadow_model, x, y)
+            for shadow_model in self.shadow_models
+        ]).logsumexp(0) - np.log(self.config.num_shadow_models)
+        return log_conf - threshold
+
+    def run_attack(self, target_node_index):
+        return self.log_model_posterior(self.graph.x[target_node_index], self.graph.y[target_node_index])
 
 class ConfidenceAttack2:
 
@@ -688,8 +751,9 @@ class LiraOnline:
             weight_decay=config.weight_decay,
             optimizer=getattr(torch.optim, config.optimizer),
         )
-        for _ in tqdm(range(config.num_shadow_models), desc=f"Training {config.num_shadow_models} shadow models for Lira online"):
-            shadow_dataset = datasetup.remasked_graph(self.graph, train_frac=config.train_frac, val_frac=config.val_frac)
+        shadow_train_masks = utils.partition_training_sets(num_nodes=self.graph.num_nodes, num_models=config.num_shadow_models)
+        for shadow_nodes in tqdm(shadow_train_masks, total=shadow_train_masks.shape[0], desc=f"Training {config.num_shadow_models} shadow models for LiRA online"):
+            shadow_dataset = datasetup.remasked_graph_deterministic(self.graph, shadow_nodes)
             shadow_model = utils.fresh_model(
                 model_type=config.model,
                 num_features=shadow_dataset.num_features,
@@ -780,8 +844,9 @@ class RmiaOnline:
             weight_decay=config.weight_decay,
             optimizer=getattr(torch.optim, config.optimizer),
         )
-        for _ in tqdm(range(config.num_shadow_models), desc=f"Training {config.num_shadow_models} shadow models for Lira online"):
-            shadow_dataset = datasetup.remasked_graph(self.graph, train_frac=config.train_frac, val_frac=config.val_frac)
+        shadow_train_masks = utils.partition_training_sets(num_nodes=self.graph.num_nodes, num_models=config.num_shadow_models)
+        for shadow_nodes in tqdm(shadow_train_masks, total=shadow_train_masks.shape[0], desc=f"Training {config.num_shadow_models} shadow models for RMIA online"):
+            shadow_dataset = datasetup.remasked_graph_deterministic(self.graph, shadow_nodes)
             shadow_model = utils.fresh_model(
                 model_type=config.model,
                 num_features=shadow_dataset.num_features,

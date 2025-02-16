@@ -6,6 +6,7 @@ default-parameters:
   epochs_target: 20
   epochs_shadow: 20
   num_experiments: 1
+  num_target_nodes: -1 # -1 uses all nodes
   hidden_dim_target: [64]
   query_hops: [0]
   target_fpr: 0.01
@@ -24,3 +25,4 @@ default-parameters:
   val_frac: 0.0
   seed: 0
   num_threads: 1
+  rmia_gamma: 2
