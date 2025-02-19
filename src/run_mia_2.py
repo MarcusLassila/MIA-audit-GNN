@@ -248,12 +248,7 @@ if __name__ == '__main__':
     print('Running MIA experiment v2.')
     print(utils.Config(config))
     print()
-
-    ret = main(config)
-    train_df, stat_df = ret
-
+    stat_df = main(config)
     pd.set_option('display.max_columns', 500)
-    print('Target training statistics:')
-    print(train_df)
-    print('Attack performance statistics:')
+    print('Results:')
     print(stat_df)
