@@ -208,6 +208,7 @@ def main(config):
     return mie.run_bayes_optimal_experiment()
 
 if __name__ == '__main__':
+    torch.multiprocessing.set_start_method('spawn')
     parser = argparse.ArgumentParser()
     parser.add_argument("--attack", default="bayes-optimal", type=str)
     parser.add_argument("--dataset", default="cora", type=str)

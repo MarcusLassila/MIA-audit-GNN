@@ -611,13 +611,14 @@ class BayesOptimalMembershipInference:
             sampling_state.MCMC_update(mask, log_p, subgraph)
 
     def sample_node_mask_zero_hop_MIA(self):
-        random_ref = torch.rand(size=(self.graph.num_nodes,))
+        random_ref = torch.rand(size=(self.graph.num_nodes,)).to(self.config.device)
         node_mask = self.zero_hop_probs > random_ref
         return node_mask
 
     def sample_random_node_mask(self, frac_ones=0.5):
-        return torch.rand(size=(self.graph.num_nodes,)) < frac_ones
-    
+        mask = torch.rand(size=(self.graph.num_nodes,)) < frac_ones
+        return mask.to(self.config.device)
+
     def neg_loss(self, target_model, graph):
         soft_pred = F.softmax(target_model(graph.x, graph.edge_index), dim=1)
         log_conf = soft_pred[torch.arange(graph.num_nodes), graph.y].log()
@@ -750,7 +751,7 @@ class LogSumExpThreshholdAttack:
             self.shadow_models.append(shadow_model)
 
     def log_confidence(self, model, x, y):
-        empty_edge_index = torch.tensor([[],[]], dtype=torch.long)
+        empty_edge_index = torch.tensor([[],[]], dtype=torch.long).to(self.config.device)
         with torch.inference_mode():
             log_conf = F.softmax(model(x, empty_edge_index), dim=1)[torch.arange(x.shape[0]), y].log()
         return log_conf
@@ -826,14 +827,13 @@ class LiraOnline:
             self.shadow_models.append(shadow_model)
             self.shadow_train_masks.append(shadow_dataset.train_mask)
     
-    def query_shadow_models(self, target_node_index):
+    def query_shadow_models(self, target_node_index, edge_index):
         hinges_in = defaultdict(list)
         hinges_out = defaultdict(list)
         num_target_nodes = target_node_index.shape[0]
-        empty_edge_index = torch.tensor([[],[]], dtype=torch.long)
         with torch.inference_mode():
             for shadow_model, train_mask in zip(self.shadow_models, self.shadow_train_masks):
-                preds = shadow_model(self.graph.x[target_node_index], empty_edge_index)
+                preds = shadow_model(self.graph.x[target_node_index], edge_index)
                 # Approximate logits of confidence values using the hinge loss.
                 hinges = utils.hinge_loss(preds, self.graph.y[target_node_index])
                 for idx, node_idx in enumerate(target_node_index):
@@ -857,8 +857,8 @@ class LiraOnline:
         return mean_in, std_in, mean_out, std_out
 
     def run_attack(self, target_node_index):
-        empty_edge_index = torch.tensor([[],[]], dtype=torch.long)
-        mean_in, std_in, mean_out, std_out = self.query_shadow_models(target_node_index)
+        empty_edge_index = torch.tensor([[],[]], dtype=torch.long).to(self.config.device)
+        mean_in, std_in, mean_out, std_out = self.query_shadow_models(target_node_index, empty_edge_index)
         with torch.inference_mode():
             preds = self.target_model(self.graph.x[target_node_index], empty_edge_index)
             target_hinges = utils.hinge_loss(preds, self.graph.y[target_node_index])
@@ -919,7 +919,7 @@ class RmiaOnline:
             self.shadow_models.append(shadow_model)
 
     def run_attack(self, target_node_index):
-        empty_edge_index = torch.tensor([[],[]], dtype=torch.long)
+        empty_edge_index = torch.tensor([[],[]], dtype=torch.long).to(self.config.device)
         num_target_nodes = target_node_index.shape[0]
         row_idx = torch.arange(num_target_nodes)
         with torch.inference_mode():
