@@ -729,8 +729,6 @@ class LogSumExpThreshholdAttack:
             weight_decay=config.weight_decay,
             optimizer=getattr(torch.optim, config.optimizer),
         )
-        # for _ in tqdm(range(config.num_shadow_models), desc=f"Training {config.num_shadow_models} shadow models for BayesOptimalMembershipInference"):
-        #     shadow_dataset = datasetup.remasked_graph(self.graph, train_frac=config.train_frac, val_frac=config.val_frac)
         shadow_train_masks = utils.partition_training_sets(num_nodes=self.graph.num_nodes, num_models=config.num_shadow_models)
         for shadow_nodes in tqdm(shadow_train_masks, total=shadow_train_masks.shape[0], desc=f"Training {config.num_shadow_models} shadow models for LogSumExp Threshold attack"):
             shadow_dataset = datasetup.remasked_graph_deterministic(self.graph, shadow_nodes)
