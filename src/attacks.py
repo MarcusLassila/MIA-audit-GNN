@@ -508,22 +508,49 @@ class RMIA:
         return self.score(target_samples, num_hops, inductive_inference, monte_carlo_masks)
 
 class BayesOptimalMembershipInference:
-    
+
+    class SamplingState:
+        '''State object when sampling graphs'''
+
+        def __init__(self, outer_cls, score_dim, strategy='model-independent', multiprocessing=False, MCMC_sampling_iterations=500):
+            if multiprocessing:
+                self.score = torch.zeros(size=score_dim).share_memory_()
+            else:
+                self.score = torch.zeros(size=score_dim)
+            self.strategy = strategy
+            if strategy == 'MCMC':
+                burn_in_iterations = MCMC_sampling_iterations * 10
+                self.MCMC_sampling_iterations = MCMC_sampling_iterations
+                self.mask = outer_cls.sample_random_node_mask(frac_ones=0.5)
+                self.log_p, self.subgraph = outer_cls.evaluate_mask(self.mask)
+                print(f'Log model posterior before burn-in: {self.log_p}')
+                for _ in tqdm(range(burn_in_iterations), desc='MCMC burn-in'):
+                    outer_cls.MCMC_update_step(self)
+                print(f'Log model posterior after burn-in: {self.log_p}')
+
+        def MCMC_update(self, mask, log_p, subgraph):
+            assert self.strategy == 'MCMC'
+            self.mask = mask
+            self.log_p = log_p
+            self.subgraph = subgraph
+
     def __init__(self, target_model, graph, loss_fn, config):
         self.target_model = target_model
         self.graph = graph
         self.loss_fn = loss_fn
         self.config = config
-        self.shadow_models = []
-        self.train_shadow_models()
-        # self.zero_hop_attacker = LiraOnline(
-        #     target_model=target_model,
-        #     graph=graph,
-        #     loss_fn=loss_fn,
-        #     config=config,
-        # )
-        # self.zero_hop_probs = self.zero_hop_attacker.run_attack(torch.arange(self.graph.num_nodes)).sigmoid()
-        # self.shadow_models = self.zero_hop_attacker.shadow_models
+        if config.bayes_sampling_strategy == 'mia-0-hop':
+            self.zero_hop_attacker = LogSumExpThreshholdAttack(
+                target_model=target_model,
+                graph=graph,
+                loss_fn=loss_fn,
+                config=config,
+            )
+            self.zero_hop_probs = self.zero_hop_attacker.run_attack(torch.arange(self.graph.num_nodes)).sigmoid()
+            self.shadow_models = self.zero_hop_attacker.shadow_models
+        else:
+            self.shadow_models = []
+            self.train_shadow_models()
 
     def train_shadow_models(self):
         config = self.config
@@ -572,19 +599,16 @@ class BayesOptimalMembershipInference:
 
     def evaluate_mask(self, mask):
         subgraph = self.masked_subgraph(mask)
-        with torch.inference_mode():
-            log_p = -self.loss_fn(self.target_model(subgraph.x, subgraph.edge_index), subgraph.y)
+        log_p = self.log_model_posterior(subgraph)
         return log_p, subgraph
 
-    def sample_subgraph_MCMC(self, prev_log_p, prev_mask, prev_subgraph, eps=0.1):
+    def MCMC_update_step(self, sampling_state, eps=0.01):
         u = np.random.rand()
-        mask = self.get_random_node_mask(frac_ones=eps) ^ prev_mask
+        mask = self.sample_random_node_mask(frac_ones=eps) ^ sampling_state.mask
         log_p, subgraph = self.evaluate_mask(mask)
-        crit = torch.exp(log_p - prev_log_p).item()
+        crit = torch.exp(log_p - sampling_state.log_p).item()
         if crit > u:
-            return log_p, mask, subgraph
-        else:
-            return prev_log_p, prev_mask, prev_subgraph
+            sampling_state.MCMC_update(mask, log_p, subgraph)
 
     def sample_node_mask_zero_hop_MIA(self):
         random_ref = torch.rand(size=(self.graph.num_nodes,))
@@ -593,63 +617,93 @@ class BayesOptimalMembershipInference:
 
     def sample_random_node_mask(self, frac_ones=0.5):
         return torch.rand(size=(self.graph.num_nodes,)) < frac_ones
+    
+    def neg_loss(self, target_model, graph):
+        soft_pred = F.softmax(target_model(graph.x, graph.edge_index), dim=1)
+        log_conf = soft_pred[torch.arange(graph.num_nodes), graph.y].log()
+        assert log_conf.shape == (graph.num_nodes,)
+        return log_conf.sum().item()
 
     def log_model_posterior(self, subgraph):
         # Only loss values over the k-hop neighborhood is necessary (for a k-layer GNN)
         # but we compute loss values over all node for simplicity
         with torch.inference_mode():
-            loss_term = self.loss_fn(self.target_model(subgraph.x, subgraph.edge_index), subgraph.y)
+            neg_loss_term = self.neg_loss(self.target_model, subgraph)
             log_Z_term = torch.tensor([
-                -self.loss_fn(shadow_model(subgraph.x, subgraph.edge_index), subgraph.y)
+                self.neg_loss(shadow_model, subgraph)
                 for shadow_model in self.shadow_models
             ]).logsumexp(0) - np.log(self.config.num_shadow_models)
-        return -loss_term - log_Z_term
+        return neg_loss_term - log_Z_term
 
     def run_attack(self, target_node_index, prior=0.5):
         config = self.config
-        if config.num_threads > 1:
-            return self.run_attack_mp(target_node_index, prior)
-        scores = torch.zeros(size=(config.num_sampled_graphs, target_node_index.shape[0]))
+        do_multiprocessing = config.num_threads > 1
+        sampling_state = BayesOptimalMembershipInference.SamplingState(
+            outer_cls=self,
+            score_dim=(config.num_sampled_graphs, target_node_index.shape[0]),
+            strategy=config.bayes_sampling_strategy,
+            multiprocessing=do_multiprocessing
+        )
+        if do_multiprocessing:
+            return self.run_attack_mp(target_node_index, sampling_state, prior)
         for i in tqdm(range(config.num_sampled_graphs), desc="Computing expactation over sampled graphs"):
             self.update_scores(
                 sample_idx=i,
                 target_node_index=target_node_index,
                 prior=prior,
-                scores=scores,
+                sampling_state=sampling_state,
             )
-        preds = scores.mean(dim=0)
+        preds = sampling_state.score.mean(dim=0)
+        pred_var = sampling_state.score.var(dim=0)
+        print(f'Average sample variance: {pred_var.mean().item()}')
+        print(f'Maximum sample variance: {pred_var.max()}')
         assert preds.shape == target_node_index.shape
         return preds
 
-    def run_attack_mp(self, target_node_index, prior=0.5):
+    def run_attack_mp(self, target_node_index, sampling_state, prior=0.5):
         config = self.config
-        scores = torch.zeros(size=(config.num_sampled_graphs, target_node_index.shape[0])).share_memory_()
         sample_idx = 0
         for _ in tqdm(range(config.num_sampled_graphs // config.num_threads), desc=f"Computing expactation over sampled graphs using {config.num_threads} threads"):
             processes = []
             for _ in range(config.num_threads):
-                p = mp.Process(target=self.update_scores, args=(sample_idx, target_node_index, prior, scores))
+                p = mp.Process(target=self.update_scores, args=(sample_idx, target_node_index, sampling_state, prior))
                 sample_idx += 1
                 p.start()
                 processes.append(p)
             for p in processes:
                 p.join()
-        preds = scores.mean(dim=0)
+        preds = sampling_state.score.mean(dim=0)
+        pred_var = sampling_state.score.var(dim=0)
+        print(f'Average sample variances: {pred_var.mean().item()}')
+        print(f'Maximum sample variance: {pred_var.max()}')
         assert preds.shape == target_node_index.shape
         return preds
 
-    def update_scores(self, sample_idx, target_node_index, prior, scores):
-        node_mask = self.sample_random_node_mask(frac_ones=0.0)
-        subgraph_in = self.masked_subgraph(node_mask)
-        log_posterior_in = self.log_model_posterior(subgraph=subgraph_in)
+    def update_scores(self, sample_idx, target_node_index, sampling_state, prior):
+        match self.config.bayes_sampling_strategy:
+            case 'model-independent':
+                node_mask = self.sample_random_node_mask(frac_ones=0.5)
+                subgraph_in = self.masked_subgraph(node_mask)
+                log_posterior_in = self.log_model_posterior(subgraph=subgraph_in)
+            case 'mia-0-hop':
+                node_mask = self.sample_node_mask_zero_hop_MIA()
+                subgraph_in = self.masked_subgraph(node_mask)
+                log_posterior_in = self.log_model_posterior(subgraph=subgraph_in)
+            case 'MCMC':
+                for _ in range(sampling_state.MCMC_sampling_iterations):
+                    self.MCMC_update_step(sampling_state=sampling_state)
+                node_mask = sampling_state.mask
+                subgraph_in = sampling_state.subgraph
+                log_posterior_in = sampling_state.log_p
+
         for i, node_idx in enumerate(target_node_index):
             node_mask[node_idx] = not node_mask[node_idx]
             subgraph_out = self.masked_subgraph(node_mask)
             log_posterior_out = self.log_model_posterior(subgraph=subgraph_out)
             if node_mask[node_idx]:
-                scores[sample_idx][i] = torch.sigmoid(log_posterior_out - log_posterior_in + np.log(prior) - np.log(1 - prior))
+                sampling_state.score[sample_idx][i] = torch.sigmoid(log_posterior_out - log_posterior_in + np.log(prior) - np.log(1 - prior))
             else:
-                scores[sample_idx][i] = torch.sigmoid(log_posterior_in - log_posterior_out + np.log(prior) - np.log(1 - prior))
+                sampling_state.score[sample_idx][i] = torch.sigmoid(log_posterior_in - log_posterior_out + np.log(prior) - np.log(1 - prior))
             node_mask[node_idx] = not node_mask[node_idx]
 
 class LogSumExpThreshholdAttack:
@@ -708,6 +762,8 @@ class LogSumExpThreshholdAttack:
         threshold = torch.stack([
             self.log_confidence(shadow_model, x, y)
             for shadow_model in self.shadow_models
+        # Subtracting log(num_shadow_models) is not necessary for attack performance,
+        # but should be there if we want to get probabilities by applying sigmoid
         ]).logsumexp(0) - np.log(self.config.num_shadow_models)
         return log_conf - threshold
 
@@ -881,6 +937,3 @@ class RmiaOnline:
             # Let Z be all nodes in the graph. We compare each x with all nodes z (including x=z which has a negligible effect).
             score = torch.tensor([(x > ratio_x * self.config.rmia_gamma).float().mean().item() for x in ratio_x])
         return score
-        
-# 0.7033 (0.0000)  0.0320 (0.0000) LiRA Sampling
-# 0.7910 (0.0000)  0.0840 (0.0000) Uniform Sampling

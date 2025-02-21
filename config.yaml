@@ -11,7 +11,7 @@ logsumexp-threshold-cora-GCN:
   lr: 0.01
   weight_decay: 0.0001
   dropout: 0.5
-  num_shadow_models: 64
+  num_shadow_models: 10
 rmia-cora-GCN:
   attack: "rmia"
   dataset: "cora"
@@ -24,7 +24,7 @@ rmia-cora-GCN:
   lr: 0.01
   weight_decay: 0.0001
   dropout: 0.5
-  num_shadow_models: 64
+  num_shadow_models: 10
 lira-cora-GCN:
   attack: "lira"
   dataset: "cora"
@@ -37,124 +37,124 @@ lira-cora-GCN:
   lr: 0.01
   weight_decay: 0.0001
   dropout: 0.5
-  num_shadow_models: 64
-logsumexp-threshold-cora-GAT:
-  attack: "lset"
-  dataset: "cora"
-  model: "GAT"
-  epochs_target: 15
-  epochs_shadow: 15
-  num_experiments: 10
-  hidden_dim_target: [32]
-  target_fpr: 0.01
-  lr: 0.01
-  weight_decay: 0.0001
-  dropout: 0.5
-  num_shadow_models: 64
-rmia-cora-GAT:
-  attack: "rmia"
-  dataset: "cora"
-  model: "GAT"
-  epochs_target: 15
-  epochs_shadow: 15
-  num_experiments: 10
-  hidden_dim_target: [32]
-  target_fpr: 0.01
-  lr: 0.01
-  weight_decay: 0.0001
-  dropout: 0.5
-  num_shadow_models: 64
-lira-cora-GAT:
-  attack: "lira"
-  dataset: "cora"
-  model: "GAT"
-  epochs_target: 15
-  epochs_shadow: 15
-  num_experiments: 10
-  hidden_dim_target: [32]
-  target_fpr: 0.01
-  lr: 0.01
-  weight_decay: 0.0001
-  dropout: 0.5
-  num_shadow_models: 64
-logsumexp-threshold-citeseer-GCN:
-  attack: "lset"
-  dataset: "citeseer"
-  model: "GCN"
-  epochs_target: 15
-  epochs_shadow: 15
-  num_experiments: 10
-  hidden_dim_target: [32]
-  target_fpr: 0.01
-  lr: 0.01
-  weight_decay: 0.0001
-  dropout: 0.5
-  num_shadow_models: 64
-rmia-citeseer-GCN:
-  attack: "rmia"
-  dataset: "citeseer"
-  model: "GCN"
-  epochs_target: 15
-  epochs_shadow: 15
-  num_experiments: 10
-  hidden_dim_target: [32]
-  target_fpr: 0.01
-  lr: 0.01
-  weight_decay: 0.0001
-  dropout: 0.5
-  num_shadow_models: 64
-lira-citeseer-GCN:
-  attack: "lira"
-  dataset: "citeseer"
-  model: "GCN"
-  epochs_target: 15
-  epochs_shadow: 15
-  num_experiments: 10
-  hidden_dim_target: [32]
-  target_fpr: 0.01
-  lr: 0.01
-  weight_decay: 0.0001
-  dropout: 0.5
-  num_shadow_models: 64
-logsumexp-threshold-citeseer-GraphSAGE:
-  attack: "lset"
-  dataset: "citeseer"
-  model: "GraphSAGE"
-  epochs_target: 15
-  epochs_shadow: 15
-  num_experiments: 10
-  hidden_dim_target: [32]
-  target_fpr: 0.01
-  lr: 0.01
-  weight_decay: 0.0001
-  dropout: 0.5
-  num_shadow_models: 64
-rmia-citeseer-GraphSAGE:
-  attack: "rmia"
-  dataset: "citeseer"
-  model: "GraphSAGE"
-  epochs_target: 15
-  epochs_shadow: 15
-  num_experiments: 10
-  hidden_dim_target: [32]
-  target_fpr: 0.01
-  lr: 0.01
-  weight_decay: 0.0001
-  dropout: 0.5
-  num_shadow_models: 64
-lira-citeseer-GraphSAGE:
-  attack: "lira"
-  dataset: "citeseer"
-  model: "GraphSAGE"
-  epochs_target: 15
-  epochs_shadow: 15
-  num_experiments: 10
-  hidden_dim_target: [32]
-  target_fpr: 0.01
-  lr: 0.01
-  weight_decay: 0.0001
-  dropout: 0.5
-  num_shadow_models: 64
+  num_shadow_models: 10
+# logsumexp-threshold-cora-GAT:
+#   attack: "lset"
+#   dataset: "cora"
+#   model: "GAT"
+#   epochs_target: 15
+#   epochs_shadow: 15
+#   num_experiments: 10
+#   hidden_dim_target: [32]
+#   target_fpr: 0.01
+#   lr: 0.01
+#   weight_decay: 0.0001
+#   dropout: 0.5
+#   num_shadow_models: 64
+# rmia-cora-GAT:
+#   attack: "rmia"
+#   dataset: "cora"
+#   model: "GAT"
+#   epochs_target: 15
+#   epochs_shadow: 15
+#   num_experiments: 10
+#   hidden_dim_target: [32]
+#   target_fpr: 0.01
+#   lr: 0.01
+#   weight_decay: 0.0001
+#   dropout: 0.5
+#   num_shadow_models: 64
+# lira-cora-GAT:
+#   attack: "lira"
+#   dataset: "cora"
+#   model: "GAT"
+#   epochs_target: 15
+#   epochs_shadow: 15
+#   num_experiments: 10
+#   hidden_dim_target: [32]
+#   target_fpr: 0.01
+#   lr: 0.01
+#   weight_decay: 0.0001
+#   dropout: 0.5
+#   num_shadow_models: 64
+# logsumexp-threshold-citeseer-GCN:
+#   attack: "lset"
+#   dataset: "citeseer"
+#   model: "GCN"
+#   epochs_target: 15
+#   epochs_shadow: 15
+#   num_experiments: 10
+#   hidden_dim_target: [32]
+#   target_fpr: 0.01
+#   lr: 0.01
+#   weight_decay: 0.0001
+#   dropout: 0.5
+#   num_shadow_models: 64
+# rmia-citeseer-GCN:
+#   attack: "rmia"
+#   dataset: "citeseer"
+#   model: "GCN"
+#   epochs_target: 15
+#   epochs_shadow: 15
+#   num_experiments: 10
+#   hidden_dim_target: [32]
+#   target_fpr: 0.01
+#   lr: 0.01
+#   weight_decay: 0.0001
+#   dropout: 0.5
+#   num_shadow_models: 64
+# lira-citeseer-GCN:
+#   attack: "lira"
+#   dataset: "citeseer"
+#   model: "GCN"
+#   epochs_target: 15
+#   epochs_shadow: 15
+#   num_experiments: 10
+#   hidden_dim_target: [32]
+#   target_fpr: 0.01
+#   lr: 0.01
+#   weight_decay: 0.0001
+#   dropout: 0.5
+#   num_shadow_models: 64
+# logsumexp-threshold-citeseer-GraphSAGE:
+#   attack: "lset"
+#   dataset: "citeseer"
+#   model: "GraphSAGE"
+#   epochs_target: 15
+#   epochs_shadow: 15
+#   num_experiments: 10
+#   hidden_dim_target: [32]
+#   target_fpr: 0.01
+#   lr: 0.01
+#   weight_decay: 0.0001
+#   dropout: 0.5
+#   num_shadow_models: 64
+# rmia-citeseer-GraphSAGE:
+#   attack: "rmia"
+#   dataset: "citeseer"
+#   model: "GraphSAGE"
+#   epochs_target: 15
+#   epochs_shadow: 15
+#   num_experiments: 10
+#   hidden_dim_target: [32]
+#   target_fpr: 0.01
+#   lr: 0.01
+#   weight_decay: 0.0001
+#   dropout: 0.5
+#   num_shadow_models: 64
+# lira-citeseer-GraphSAGE:
+#   attack: "lira"
+#   dataset: "citeseer"
+#   model: "GraphSAGE"
+#   epochs_target: 15
+#   epochs_shadow: 15
+#   num_experiments: 10
+#   hidden_dim_target: [32]
+#   target_fpr: 0.01
+#   lr: 0.01
+#   weight_decay: 0.0001
+#   dropout: 0.5
+#   num_shadow_models: 64
 # logsumexp-threshold-amazon-photo-GCN:
 #   attack: "lset"
 #   dataset: "amazon-photo"

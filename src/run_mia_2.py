@@ -25,7 +25,7 @@ class MembershipInferenceExperiment:
         self.config = utils.Config(config)
         self.dataset = datasetup.parse_dataset(root=self.config.datadir, name=self.config.dataset)
         self.criterion = Accuracy(task="multiclass", num_classes=self.dataset.num_classes).to(self.config.device)
-        self.loss_fn = nn.CrossEntropyLoss(reduction='sum')
+        self.loss_fn = nn.CrossEntropyLoss(reduction='mean')
         print(utils.graph_info(self.dataset))
 
     def train_target_model(self, dataset, plot_training_results=True):
@@ -226,6 +226,7 @@ if __name__ == '__main__':
     parser.add_argument("--num-experiments", default=1, type=int)
     parser.add_argument("--target-fpr", default=0.01, type=float)
     parser.add_argument("--optimizer", default="Adam", type=str)
+    parser.add_argument("--bayes-sampling-strategy", default='model-independent', type=str)
     parser.add_argument("--num-shadow-models", default=64, type=int)
     parser.add_argument("--num-sampled-graphs", default=10, type=int)
     parser.add_argument("--num-target-nodes", default=-1, type=int)
