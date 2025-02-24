@@ -1,9 +1,9 @@
-import run_mia
 import run_mia_2
 
 import yaml
 import numpy as np
 import pandas as pd
+import torch
 from pathlib import Path
 
 def add_name(params):
@@ -33,6 +33,7 @@ def main():
     pd.concat(stat_frames).to_csv(f'{default_params["savedir"]}/results.csv', sep=',')
 
 if __name__ == "__main__":
+    torch.multiprocessing.set_start_method('spawn')
     main()
     stat_df = pd.read_csv('./results/results.csv', sep=',')
     pd.set_option('display.max_columns', None)
