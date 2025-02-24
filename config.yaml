@@ -30,7 +30,23 @@ bayes-optimal-cora-GCN-MCMC:
   num_shadow_models: 10
   num_sampled_graphs: 8
   num_threads: 8
-  bayes_sampling-strategy: "MCMC"
+  bayes_sampling_strategy: "MCMC"
+bayes-optimal-cora-GCN-MIA0:
+  attack: "bayes-optimal"
+  dataset: "cora"
+  model: "GCN"
+  epochs_target: 15
+  epochs_shadow: 15
+  num_experiments: 1
+  hidden_dim_target: [32]
+  target_fpr: 0.01
+  lr: 0.01
+  weight_decay: 0.0001
+  dropout: 0.5
+  num_shadow_models: 10
+  num_sampled_graphs: 8
+  num_threads: 8
+  bayes_sampling_strategy: "mia-0-hop"
 # logsumexp-threshold-cora-GAT:
 #   attack: "lset"
 #   dataset: "cora"
