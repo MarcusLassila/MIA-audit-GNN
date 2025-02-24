@@ -182,19 +182,21 @@ class MembershipInferenceExperiment:
             preds = attacker.run_attack(target_node_index=target_node_index)
             metrics = evaluation.evaluate_binary_classification(preds, truth[target_node_index], config.target_fpr)
             fpr, tpr = metrics['ROC']
-            stats[f'FPR'].append(fpr)
-            stats[f'TPR'].append(tpr)
-            stats[f'AUC'].append(metrics['AUC'])
+            stats['FPR'].append(fpr)
+            stats['TPR'].append(tpr)
+            stats['AUC'].append(metrics['AUC'])
             stats[f'TPR@{config.target_fpr}FPR'].append(metrics['TPR@FPR'])
 
         if config.make_roc_plots:
             savepath = f'{config.savedir}/{config.name}_roc_loglog.png'
-            fprs = stats[f'FPR']
-            tprs = stats[f'TPR']
-            utils.plot_multi_roc_loglog(fprs, tprs, savepath=savepath)
+            utils.plot_multi_roc_loglog(stats['FPR'], stats['TPR'], savepath=savepath)
 
         stats_df = self.parse_stats(stats)
-        return stats_df
+        roc_df = pd.DataFrame({
+            f'FPR_{config.name}': stats['FPR'][0],
+            f'TPR_{config.name}': stats['TPR'][0],
+        })
+        return stats_df, roc_df
 
 def set_seed(seed):
     np.random.seed(seed)
@@ -250,7 +252,7 @@ if __name__ == '__main__':
     print('Running MIA experiment v2.')
     print(utils.Config(config))
     print()
-    stat_df = main(config)
+    stat_df, _ = main(config)
     pd.set_option('display.max_columns', 500)
     print('Results:')
     print(stat_df)

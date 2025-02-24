@@ -6,13 +6,6 @@ import pandas as pd
 import torch
 from pathlib import Path
 
-def add_name(params):
-    params['name'] = '-'.join([
-        params['attack'],
-        params['dataset'],
-        params['model'],
-    ])
-
 def main():
     with open("config.yaml", "r") as file:
         config = yaml.safe_load(file)
@@ -20,17 +13,20 @@ def main():
         default_params = yaml.safe_load(file)['default-parameters']
     Path('./results').mkdir(parents=True, exist_ok=True)
     stat_frames = []
-    for _, params in config.items():
+    roc_frames = []
+    for name, params in config.items():
         params = default_params | params
-        add_name(params)
+        params['name'] = name
         print()
         print(f'Running MIA.')
         for k, v in params.items():
             print(f'{k}: {v}')
         print()
-        stats_df = run_mia_2.main(params)
+        stats_df, roc_df = run_mia_2.main(params)
         stat_frames.append(stats_df)
+        roc_frames.append(roc_df)
     pd.concat(stat_frames).to_csv(f'{default_params["savedir"]}/results.csv', sep=',')
+    pd.concat(roc_frames).to_csv(f'{default_params["savedir"]}/roc.csv', sep=',')
 
 if __name__ == "__main__":
     torch.multiprocessing.set_start_method('spawn')
