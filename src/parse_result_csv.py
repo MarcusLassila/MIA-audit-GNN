@@ -1,8 +1,8 @@
 import pandas as pd
 import matplotlib.pyplot as plt
 
-def parse_roc_csv():
-    roc_df = pd.read_csv('results/roc.csv', sep=',')
+def parse_roc_csv(name):
+    roc_df = pd.read_csv(f'example_results/roc_{name}.csv', sep=',')
     fprs = roc_df.filter(like='FPR_', axis=1)
     tprs = roc_df.filter(like='TPR_', axis=1)
 
@@ -19,7 +19,16 @@ def parse_roc_csv():
     plt.xlabel('FPR')
     plt.ylabel('TPR')
     plt.title('roc_curve')
-    plt.savefig('./results/roc_curve.png')
+    plt.savefig(f'./example_results/roc_{name}.png')
+
+def parse_stat_csv(name):
+    stat_df = pd.read_csv(f'example_results/stats_{name}.csv', sep=',')
+    pd.set_option('display.max_columns', None)
+    pd.set_option('display.max_rows', None)
+    print(stat_df)
 
 if __name__ == '__main__':
-    parse_roc_csv()
+    parse_roc_csv('bayes-optimal-cora-GCN-MI')
+    parse_stat_csv('bayes-optimal-cora-GCN-MI')
+    parse_roc_csv('bayes-optimal-cora-GCN-MCMC')
+    parse_stat_csv('bayes-optimal-cora-GCN-MCMC')

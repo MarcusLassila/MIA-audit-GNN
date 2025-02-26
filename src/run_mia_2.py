@@ -74,7 +74,7 @@ class MembershipInferenceExperiment:
             criterion=train_config.criterion,
             inductive_inference=config.inductive_split,
             training_results=train_res if plot_training_results else None,
-            plot_title="Target model",
+            plot_name="target_model",
             savedir=config.savedir,
         )
         return target_model

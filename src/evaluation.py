@@ -103,9 +103,9 @@ def evaluate_graph_model(model, dataset, mask, criterion, inductive_inference):
         score = criterion(out[mask].argmax(dim=1), dataset.y[mask])
     return score.item()
 
-def evaluate_graph_training(model, dataset, criterion, inductive_inference=True, training_results=None, plot_title="", savedir=None):
+def evaluate_graph_training(model, dataset, criterion, inductive_inference=True, training_results=None, plot_name="", savedir=None):
     if training_results:
-        utils.plot_training_results(training_results, plot_title, savedir)
+        utils.plot_training_results(training_results, plot_name, savedir)
     train_score = evaluate_graph_model(
         model=model,
         dataset=dataset,
