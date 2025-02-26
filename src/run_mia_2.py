@@ -1,7 +1,6 @@
 import attacks
 import datasetup
 import hypertuner
-import lood
 import evaluation
 import trainer
 import utils
@@ -9,14 +8,11 @@ import utils
 import argparse
 import pandas as pd
 import numpy as np
-import matplotlib.pyplot as plt
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch_geometric.data import Data
-from torch_geometric.utils import k_hop_subgraph, index_to_mask
 from torchmetrics import Accuracy
-from tqdm.auto import tqdm
 from collections import defaultdict
 
 class MembershipInferenceExperiment:
@@ -93,7 +89,7 @@ class MembershipInferenceExperiment:
                     config=config,
                 )
             case "lset":
-                attacker = attacks.LogSumExpThreshholdAttack(
+                attacker = attacks.LSET(
                     target_model=target_model,
                     graph=self.dataset,
                     loss_fn=self.loss_fn,
@@ -230,7 +226,7 @@ if __name__ == '__main__':
     parser.add_argument("--target-fpr", default=0.01, type=float)
     parser.add_argument("--optimizer", default="Adam", type=str)
     parser.add_argument("--bayes-sampling-strategy", default='model-independent', type=str)
-    parser.add_argument("--num-shadow-models", default=64, type=int)
+    parser.add_argument("--num-shadow-models", default=10, type=int)
     parser.add_argument("--num-sampled-graphs", default=10, type=int)
     parser.add_argument("--num-target-nodes", default=-1, type=int)
     parser.add_argument("--rmia-gamma", default=2.0, type=float)

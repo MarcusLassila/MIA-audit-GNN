@@ -540,7 +540,7 @@ class BayesOptimalMembershipInference:
         self.loss_fn = loss_fn
         self.config = config
         if config.bayes_sampling_strategy == 'mia-0-hop':
-            self.zero_hop_attacker = LogSumExpThreshholdAttack(
+            self.zero_hop_attacker = LSET(
                 target_model=target_model,
                 graph=graph,
                 loss_fn=loss_fn,
@@ -565,8 +565,9 @@ class BayesOptimalMembershipInference:
             weight_decay=config.weight_decay,
             optimizer=getattr(torch.optim, config.optimizer),
         )
-        for _ in tqdm(range(config.num_shadow_models), desc=f"Training {config.num_shadow_models} shadow models for BayesOptimalMembershipInference"):
-            shadow_dataset = datasetup.remasked_graph(self.graph, train_frac=config.train_frac, val_frac=config.val_frac)
+        shadow_train_masks = utils.partition_training_sets(num_nodes=self.graph.num_nodes, num_models=config.num_shadow_models)
+        for shadow_nodes in tqdm(shadow_train_masks, total=shadow_train_masks.shape[0], desc=f"Training {config.num_shadow_models} shadow models for Bayes optimal attack"):
+            shadow_dataset = datasetup.remasked_graph_deterministic(self.graph, shadow_nodes)
             shadow_model = utils.fresh_model(
                 model_type=config.model,
                 num_features=shadow_dataset.num_features,
@@ -651,13 +652,14 @@ class BayesOptimalMembershipInference:
             self.update_scores(
                 sample_idx=i,
                 target_node_index=target_node_index,
-                prior=prior,
                 sampling_state=sampling_state,
+                prior=prior,
             )
         preds = sampling_state.score.mean(dim=0)
-        pred_var = sampling_state.score.var(dim=0)
-        print(f'Average sample variance: {pred_var.mean().item()}')
-        print(f'Maximum sample variance: {pred_var.max()}')
+        if config.num_sampled_graphs > 1:
+            pred_var = sampling_state.score.var(dim=0)
+            print(f'Average sample variance: {pred_var.mean().item()}')
+            print(f'Maximum sample variance: {pred_var.max()}')
         assert preds.shape == target_node_index.shape
         return preds
 
@@ -674,16 +676,17 @@ class BayesOptimalMembershipInference:
             for p in processes:
                 p.join()
         preds = sampling_state.score.mean(dim=0)
-        pred_var = sampling_state.score.var(dim=0)
-        print(f'Average sample variances: {pred_var.mean().item()}')
-        print(f'Maximum sample variance: {pred_var.max()}')
+        if config.num_sampled_graphs > 1:
+            pred_var = sampling_state.score.var(dim=0)
+            print(f'Average sample variances: {pred_var.mean().item()}')
+            print(f'Maximum sample variance: {pred_var.max()}')
         assert preds.shape == target_node_index.shape
         return preds
 
     def update_scores(self, sample_idx, target_node_index, sampling_state, prior):
         match self.config.bayes_sampling_strategy:
             case 'model-independent':
-                node_mask = self.sample_random_node_mask(frac_ones=0.5)
+                node_mask = self.sample_random_node_mask(frac_ones=0.0)
                 subgraph_in = self.masked_subgraph(node_mask)
                 log_posterior_in = self.log_model_posterior(subgraph=subgraph_in)
             case 'mia-0-hop':
@@ -707,7 +710,7 @@ class BayesOptimalMembershipInference:
                 sampling_state.score[sample_idx][i] = torch.sigmoid(log_posterior_in - log_posterior_out + np.log(prior) - np.log(1 - prior))
             node_mask[node_idx] = not node_mask[node_idx]
 
-class LogSumExpThreshholdAttack:
+class LSET:
 
     def __init__(self, target_model, graph, loss_fn, config):
         self.target_model = target_model
@@ -767,7 +770,8 @@ class LogSumExpThreshholdAttack:
         return log_conf - threshold
 
     def run_attack(self, target_node_index):
-        return self.log_model_posterior(self.graph.x[target_node_index], self.graph.y[target_node_index])
+        preds = self.log_model_posterior(self.graph.x[target_node_index], self.graph.y[target_node_index])
+        return preds
 
 class ConfidenceAttack2:
 
