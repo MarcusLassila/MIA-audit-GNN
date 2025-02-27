@@ -5,13 +5,15 @@ import numpy as np
 import pandas as pd
 import torch
 from pathlib import Path
+import argparse
 
-def main():
+def main(savedir):
     with open("config.yaml", "r") as file:
         config = yaml.safe_load(file)
     with open("default_parameters.yaml", "r") as file:
         default_params = yaml.safe_load(file)['default-parameters']
-    Path('./results').mkdir(parents=True, exist_ok=True)
+    Path(savedir).mkdir(parents=True, exist_ok=True)
+    default_params['savedir'] = savedir
     stat_frames = []
     roc_frames = []
     for name, params in config.items():
@@ -25,13 +27,16 @@ def main():
         stats_df, roc_df = run_mia_2.main(params)
         stat_frames.append(stats_df)
         roc_frames.append(roc_df)
-    pd.concat(stat_frames).to_csv(f'{default_params["savedir"]}/results.csv', sep=',')
-    pd.concat(roc_frames).to_csv(f'{default_params["savedir"]}/roc.csv', sep=',')
+    pd.concat(stat_frames).to_csv(f'{savedir}/results.csv', sep=',')
+    pd.concat(roc_frames).to_csv(f'{savedir}/roc.csv', sep=',')
 
 if __name__ == "__main__":
     torch.multiprocessing.set_start_method('spawn')
-    main()
-    stat_df = pd.read_csv('./results/results.csv', sep=',')
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--savedir", default="./results", type=str)
+    args = parser.parse_args()
+    main(args.savedir)
+    stat_df = pd.read_csv(f'{args.savedir}/results.csv', sep=',')
     pd.set_option('display.max_columns', None)
     pd.set_option('display.max_rows', None)
     print(stat_df)

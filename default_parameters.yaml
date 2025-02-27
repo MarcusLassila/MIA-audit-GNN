@@ -15,7 +15,6 @@ default-parameters:
   dropout: 0.5
   early_stopping: 0
   datadir: "./data"
-  savedir: "./results"
   grid_search: False
   optimizer: "Adam"
   make_roc_plots: False
