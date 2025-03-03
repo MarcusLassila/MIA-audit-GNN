@@ -30,7 +30,7 @@ def parse_stat_csv(resdir):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument("--resdir", default="./results", type=str)
+    parser.add_argument("--resdir", default="./temp_results", type=str)
     args = parser.parse_args()
     parse_roc_csv(args.resdir)
     parse_stat_csv(args.resdir)

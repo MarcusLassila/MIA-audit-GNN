@@ -243,7 +243,7 @@ def remasked_graph(graph, train_frac, val_frac, stratify=None):
 def remasked_graph_deterministic(graph, train_mask):
     data = graph.clone()
     data.train_mask = train_mask
-    data.test_mask = train_mask
+    data.test_mask = ~train_mask
     data.val_mask = torch.zeros_like(train_mask, dtype=torch.bool)
     data.inductive_mask = train_split_interconnection_mask(data)
     return data

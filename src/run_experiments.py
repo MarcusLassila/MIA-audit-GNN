@@ -33,7 +33,7 @@ def main(savedir):
 if __name__ == "__main__":
     torch.multiprocessing.set_start_method('spawn')
     parser = argparse.ArgumentParser()
-    parser.add_argument("--savedir", default="./results", type=str)
+    parser.add_argument("--savedir", default="./temp_results", type=str)
     args = parser.parse_args()
     main(args.savedir)
     stat_df = pd.read_csv(f'{args.savedir}/results.csv', sep=',')
