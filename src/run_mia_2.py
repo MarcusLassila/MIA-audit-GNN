@@ -95,6 +95,13 @@ class MembershipInferenceExperiment:
                     loss_fn=self.loss_fn,
                     config=config,
                 )
+            case "bootstrapped-lset":
+                attacker = attacks.BootstrappedLSET(
+                    target_model=target_model,
+                    graph=self.dataset,
+                    loss_fn=self.loss_fn,
+                    config=config,
+                )
             case "confidence":
                 attacker = attacks.ConfidenceAttack2(
                     target_model=target_model,

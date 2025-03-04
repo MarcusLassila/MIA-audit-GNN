@@ -711,6 +711,82 @@ class BayesOptimalMembershipInference:
                 sampling_state.score[sample_idx][i] = torch.sigmoid(log_posterior_in - log_posterior_out + np.log(prior) - np.log(1 - prior))
             node_mask[node_idx] = not node_mask[node_idx]
 
+class BootstrappedLSET:
+
+    def __init__(self, target_model, graph, loss_fn, config):
+        self.target_model = target_model
+        self.graph = graph
+        self.loss_fn = loss_fn
+        self.config = config
+        self.zero_hop_attacker = LSET(
+            target_model=target_model,
+            graph=graph,
+            loss_fn=loss_fn,
+            config=config,
+        )
+        self.zero_hop_probs = self.zero_hop_attacker.run_attack(torch.arange(self.graph.num_nodes)).sigmoid()
+        self.shadow_models = self.zero_hop_attacker.shadow_models
+
+    def masked_subgraph(self, node_mask):
+        edge_index, _ = subgraph(
+            subset=node_mask,
+            edge_index=self.graph.edge_index,
+            relabel_nodes=True,
+        )
+        return Data(
+            x=self.graph.x[node_mask],
+            edge_index=edge_index,
+            y=self.graph.y[node_mask],
+            num_classes=self.graph.num_classes,
+        )
+
+    def sample_node_mask_zero_hop_MIA(self, reverse_probs=False):
+        random_ref = torch.rand(size=(self.graph.num_nodes,)).to(self.config.device)
+        if reverse_probs:
+            node_mask = (1 - self.zero_hop_probs) > random_ref
+        else:
+            node_mask = self.zero_hop_probs > random_ref
+        return node_mask
+
+    def neg_loss(self, target_model, graph):
+        soft_pred = F.softmax(target_model(graph.x, graph.edge_index), dim=1)
+        log_conf = soft_pred[torch.arange(graph.num_nodes), graph.y].log()
+        assert log_conf.shape == (graph.num_nodes,)
+        return log_conf.sum().item()
+
+    def log_model_posterior(self, subgraph):
+        # Only loss values over the k-hop neighborhood is necessary (for a k-layer GNN)
+        # but we compute loss values over all node for simplicity
+        with torch.inference_mode():
+            neg_loss_term = self.neg_loss(self.target_model, subgraph)
+            log_Z_term = torch.tensor([
+                self.neg_loss(shadow_model, subgraph)
+                for shadow_model in self.shadow_models
+            ]).logsumexp(0) - np.log(self.config.num_shadow_models)
+        return neg_loss_term - log_Z_term
+
+    def run_attack(self, target_node_index, prior=0.5):
+        config = self.config
+        preds = torch.zeros_like(target_node_index, dtype=torch.float32)
+        for i, target_idx in tqdm(enumerate(target_node_index), total=target_node_index.shape[0], desc="Attacking target nodes"):
+            zero_prob = self.zero_hop_probs[target_idx]
+            score = []
+            for _ in range(config.num_sampled_graphs):
+                if zero_prob > np.random.rand():
+                    node_mask = self.sample_node_mask_zero_hop_MIA(reverse_probs=False)
+                else:
+                    node_mask = self.sample_node_mask_zero_hop_MIA(reverse_probs=True)
+                node_mask[target_idx] = True
+                in_subgraph = self.masked_subgraph(node_mask)
+                in_log_p = self.log_model_posterior(in_subgraph)
+                node_mask[target_idx] = False
+                out_subgraph = self.masked_subgraph(node_mask)
+                out_log_p = self.log_model_posterior(out_subgraph)
+                score.append(torch.sigmoid(in_log_p - out_log_p + np.log(prior) - np.log(1 - prior)))
+            preds[i] = torch.tensor(score).mean()
+        assert preds.shape == target_node_index.shape
+        return preds
+
 class LSET:
 
     def __init__(self, target_model, graph, loss_fn, config):
