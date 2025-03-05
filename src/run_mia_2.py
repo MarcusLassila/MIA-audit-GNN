@@ -19,7 +19,7 @@ class MembershipInferenceExperiment:
 
     def __init__(self, config):
         self.config = utils.Config(config)
-        self.dataset = datasetup.parse_dataset(root=self.config.datadir, name=self.config.dataset)
+        self.dataset = datasetup.parse_dataset(root=self.config.datadir, name=self.config.dataset, max_num_nodes=self.config.max_num_nodes)
         self.criterion = Accuracy(task="multiclass", num_classes=self.dataset.num_classes).to(self.config.device)
         self.loss_fn = nn.CrossEntropyLoss(reduction='mean')
         print(utils.graph_info(self.dataset))
@@ -236,6 +236,7 @@ if __name__ == '__main__':
     parser.add_argument("--num-shadow-models", default=10, type=int)
     parser.add_argument("--num-sampled-graphs", default=10, type=int)
     parser.add_argument("--num-target-nodes", default=-1, type=int)
+    parser.add_argument("--max-num-nodes", default=None, type=int)
     parser.add_argument("--rmia-gamma", default=2.0, type=float)
     parser.add_argument("--name", default="unnamed", type=str)
     parser.add_argument("--datadir", default="./data", type=str)

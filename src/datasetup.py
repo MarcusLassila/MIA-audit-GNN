@@ -328,7 +328,7 @@ def disjoint_graph_split(graph, train_frac, val_frac, v2=True):
     graph_B = extract_subgraph(graph, index_B, train_frac=train_frac, val_frac=val_frac)
     return graph_A, graph_B, index_A, index_B
 
-def parse_dataset(root, name):
+def parse_dataset(root, name, max_num_nodes=None):
     match name:
         case "amazon-computers":
             dataset = torch_geometric.datasets.Amazon(root=f'{root}/Amazon', name="Computers")
@@ -355,12 +355,26 @@ def parse_dataset(root, name):
             dataset = stochastic_block_model(root)
         case _:
             raise ValueError("Unsupported dataset!")
-    dataset = Data(
-        x=dataset.x,
-        edge_index=dataset.edge_index,
-        y=dataset.y,
-        num_classes=dataset.num_classes,
-    )
+    if max_num_nodes is not None:
+        nodes = sample_nodes(dataset.x.shape[0], max_num_nodes, stratify=dataset.y)
+        edge_index, _ = subgraph(
+            subset=nodes,
+            edge_index=dataset.edge_index,
+            relabel_nodes=True,
+        )
+        dataset = Data(
+            x=dataset.x[nodes],
+            edge_index=edge_index,
+            y=dataset.y[nodes],
+            num_classes=dataset.num_classes,
+        )
+    else:
+        dataset = Data(
+            x=dataset.x,
+            edge_index=dataset.edge_index,
+            y=dataset.y,
+            num_classes=dataset.num_classes,
+        )
     return dataset
 
 def test_split():

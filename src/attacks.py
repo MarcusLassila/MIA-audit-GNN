@@ -765,25 +765,36 @@ class BootstrappedLSET:
             ]).logsumexp(0) - np.log(self.config.num_shadow_models)
         return neg_loss_term - log_Z_term
 
+    def update_score(self, target_idx, prior, score, score_idx):
+        if self.zero_hop_probs[target_idx] > np.random.rand():
+            node_mask = self.sample_node_mask_zero_hop_MIA(reverse_probs=False)
+        else:
+            node_mask = self.sample_node_mask_zero_hop_MIA(reverse_probs=True)
+        node_mask[target_idx] = True
+        in_subgraph = self.masked_subgraph(node_mask)
+        in_log_p = self.log_model_posterior(in_subgraph)
+        node_mask[target_idx] = False
+        out_subgraph = self.masked_subgraph(node_mask)
+        out_log_p = self.log_model_posterior(out_subgraph)
+        score[score_idx] = torch.sigmoid(in_log_p - out_log_p + np.log(prior) - np.log(1 - prior))
+
     def run_attack(self, target_node_index, prior=0.5):
         config = self.config
+        assert config.num_sampled_graphs % config.num_threads == 0
         preds = torch.zeros_like(target_node_index, dtype=torch.float32)
         for i, target_idx in tqdm(enumerate(target_node_index), total=target_node_index.shape[0], desc="Attacking target nodes"):
-            zero_prob = self.zero_hop_probs[target_idx]
-            score = []
-            for _ in range(config.num_sampled_graphs):
-                if zero_prob > np.random.rand():
-                    node_mask = self.sample_node_mask_zero_hop_MIA(reverse_probs=False)
-                else:
-                    node_mask = self.sample_node_mask_zero_hop_MIA(reverse_probs=True)
-                node_mask[target_idx] = True
-                in_subgraph = self.masked_subgraph(node_mask)
-                in_log_p = self.log_model_posterior(in_subgraph)
-                node_mask[target_idx] = False
-                out_subgraph = self.masked_subgraph(node_mask)
-                out_log_p = self.log_model_posterior(out_subgraph)
-                score.append(torch.sigmoid(in_log_p - out_log_p + np.log(prior) - np.log(1 - prior)))
-            preds[i] = torch.tensor(score).mean()
+            score = torch.zeros(size=(config.num_sampled_graphs,)).share_memory_()
+            score_idx = 0
+            for _ in range(config.num_sampled_graphs // config.num_threads):
+                processes = []
+                for _ in range(config.num_threads):
+                    p = mp.Process(target=self.update_score, args=(target_idx, prior, score, score_idx))
+                    score_idx += 1
+                    p.start()
+                    processes.append(p)
+                for p in processes:
+                    p.join()
+            preds[i] = score.mean()
         assert preds.shape == target_node_index.shape
         return preds
 
