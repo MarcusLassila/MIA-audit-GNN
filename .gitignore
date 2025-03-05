@@ -1,4 +1,4 @@
 data/
-results/
+temp_results/
 src/__pycache__
 test/__pycache__
