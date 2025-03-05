@@ -1,28 +1,43 @@
 ---
-lset-cora-GCN:
+lset-reddit-GCN:
   attack: "lset"
-  dataset: "cora"
+  dataset: "reddit"
+  max_num_nodes: 3000
   model: "GCN"
-  epochs_target: 15
-  epochs_shadow: 15
-  num_experiments: 5
+  epochs_target: 100
+  epochs_shadow: 100
+  num_experiments: 3
   hidden_dim_target: [32]
   target_fpr: 0.01
   lr: 0.01
   weight_decay: 0.0001
   dropout: 0.5
   num_shadow_models: 10
-bootstrapped-lset-cora-GCN:
-  attack: "bootstrapped-lset"
-  dataset: "cora"
+lira-reddit-GCN:
+  attack: "lira"
+  dataset: "reddit"
+  max_num_nodes: 3000
   model: "GCN"
-  epochs_target: 15
-  epochs_shadow: 15
-  num_experiments: 5
+  epochs_target: 100
+  epochs_shadow: 100
+  num_experiments: 3
   hidden_dim_target: [32]
   target_fpr: 0.01
   lr: 0.01
   weight_decay: 0.0001
   dropout: 0.5
   num_shadow_models: 10
-  num_sampled_graphs: 10
+rmia-reddit-GCN:
+  attack: "rmia"
+  dataset: "reddit"
+  max_num_nodes: 3000
+  model: "GCN"
+  epochs_target: 100
+  epochs_shadow: 100
+  num_experiments: 3
+  hidden_dim_target: [32]
+  target_fpr: 0.01
+  lr: 0.01
+  weight_decay: 0.0001
+  dropout: 0.5
+  num_shadow_models: 10

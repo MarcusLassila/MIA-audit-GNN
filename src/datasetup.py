@@ -183,7 +183,41 @@ def sample_nodes_v2(dataset, num_nodes, num_neighbors):
     sampled_node_index = torch.tensor(list(sampled_nodes), dtype=torch.long)[:num_nodes]
     return sampled_node_index
 
-def random_walk(edge_index, available, path_length):
+def random_walk(edge_index, available, priority, path_length):
+    visited = set()
+    start_node = priority.pop()
+    while start_node not in available:
+       start_node = priority.pop()
+    queue = deque([start_node])
+    while queue:
+        u = queue.popleft()
+        if u in visited:
+            continue
+        visited.add(u)
+        available.remove(u)
+        if len(visited) == path_length:
+            break
+        edge_mask = edge_index[0] == u
+        neighbors = edge_index[1][edge_mask]
+        perm_mask = torch.randperm(neighbors.shape[0])
+        neighbors = neighbors[perm_mask]
+        for v in neighbors.tolist():
+            if v in available:
+                queue.append(v)
+    return visited, available
+
+def random_walk_node_sample(dataset, num_nodes):
+    edge_index = dataset.edge_index
+    #_, sorted_node_index = degree(edge_index[0], num_nodes=dataset.x.shape[0], dtype=torch.long).sort(descending=False)
+    priority = [x.item() for x in torch.randperm(dataset.x.shape[0])] # [x.item() for x in sorted_node_index]
+    node_index_set = set()
+    available = set(range(dataset.x.shape[0]))
+    while len(node_index_set) < num_nodes:
+        node_index, available = random_walk(edge_index, available, priority, path_length=50)
+        node_index_set.update(node_index)
+    return torch.tensor([*node_index_set])[:num_nodes]
+
+def random_walk_alt(edge_index, available, path_length):
     available_set = set(available)
     visited = set()
     start_node = available[-1]
@@ -203,7 +237,6 @@ def random_walk(edge_index, available, path_length):
         for v in neighbors.tolist():
             if v in available_set:
                 queue.append(v)
-
     available = [x for x in available if x in available_set]
     return visited, available
 
@@ -215,7 +248,7 @@ def alternating_random_walk_node_split(dataset):
     node_index_split = set(), set()
     turn = 0
     while available:
-        node_index, available = random_walk(edge_index, available, path_length=50)
+        node_index, available = random_walk_alt(edge_index, available, path_length=50)
         node_index_split[turn].update(node_index)
         turn ^= 1
 
@@ -356,7 +389,8 @@ def parse_dataset(root, name, max_num_nodes=None):
         case _:
             raise ValueError("Unsupported dataset!")
     if max_num_nodes is not None:
-        nodes = sample_nodes(dataset.x.shape[0], max_num_nodes, stratify=dataset.y)
+        print(f'Sampling a subgraph of {name}.')
+        nodes = random_walk_node_sample(dataset, max_num_nodes)
         edge_index, _ = subgraph(
             subset=nodes,
             edge_index=dataset.edge_index,

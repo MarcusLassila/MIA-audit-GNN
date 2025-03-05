@@ -31,15 +31,13 @@ class MembershipInferenceExperiment:
             opt_hyperparams = hypertuner.grid_search(
                 dataset=dataset,
                 model_type=self.config.model,
-                epochs=self.config.epochs_target,
-                early_stopping=self.config.early_stopping,
                 optimizer=self.config.optimizer,
                 inductive_split=config.inductive_split,
             )
             print(f'Grid search results: {opt_hyperparams}')
-            lr, weight_decay, dropout, hidden_dim = opt_hyperparams.values()
+            lr, weight_decay, dropout, hidden_dim, epochs = opt_hyperparams.values()
         else:
-            lr, weight_decay, dropout, hidden_dim = config.lr, config.weight_decay, config.dropout, config.hidden_dim_target
+            lr, weight_decay, dropout, hidden_dim, epochs = config.lr, config.weight_decay, config.dropout, config.hidden_dim_target, config.epochs_target
 
         target_model = utils.fresh_model(
             model_type=self.config.model,
@@ -51,7 +49,7 @@ class MembershipInferenceExperiment:
         train_config = trainer.TrainConfig(
             criterion=self.criterion,
             device=config.device,
-            epochs=config.epochs_target,
+            epochs=epochs,
             early_stopping=config.early_stopping,
             loss_fn=self.loss_fn,
             lr=lr,
