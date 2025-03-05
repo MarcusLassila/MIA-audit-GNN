@@ -640,7 +640,7 @@ class BayesOptimalMembershipInference:
 
     def run_attack(self, target_node_index, prior=0.5):
         config = self.config
-        do_multiprocessing = config.num_threads > 1
+        do_multiprocessing = config.num_processes > 1
         sampling_state = BayesOptimalMembershipInference.SamplingState(
             outer_cls=self,
             score_dim=(config.num_sampled_graphs, target_node_index.shape[0]),
@@ -667,9 +667,9 @@ class BayesOptimalMembershipInference:
     def run_attack_mp(self, target_node_index, sampling_state, prior=0.5):
         config = self.config
         sample_idx = 0
-        for _ in tqdm(range(config.num_sampled_graphs // config.num_threads), desc=f"Computing expactation over sampled graphs using {config.num_threads} threads"):
+        for _ in tqdm(range(config.num_sampled_graphs // config.num_processes), desc=f"Computing expactation over sampled graphs using {config.num_processes} processes"):
             processes = []
-            for _ in range(config.num_threads):
+            for _ in range(config.num_processes):
                 p = mp.Process(target=self.update_scores, args=(sample_idx, target_node_index, sampling_state, prior))
                 sample_idx += 1
                 p.start()
@@ -780,20 +780,25 @@ class BootstrappedLSET:
 
     def run_attack(self, target_node_index, prior=0.5):
         config = self.config
-        assert config.num_sampled_graphs % config.num_threads == 0
+        assert config.num_sampled_graphs % config.num_processes == 0
         preds = torch.zeros_like(target_node_index, dtype=torch.float32)
         for i, target_idx in tqdm(enumerate(target_node_index), total=target_node_index.shape[0], desc="Attacking target nodes"):
-            score = torch.zeros(size=(config.num_sampled_graphs,)).share_memory_()
-            score_idx = 0
-            for _ in range(config.num_sampled_graphs // config.num_threads):
-                processes = []
-                for _ in range(config.num_threads):
-                    p = mp.Process(target=self.update_score, args=(target_idx, prior, score, score_idx))
-                    score_idx += 1
-                    p.start()
-                    processes.append(p)
-                for p in processes:
-                    p.join()
+            if config.num_processes == 1:
+                score = torch.zeros(size=(config.num_sampled_graphs,))
+                for score_idx in range(config.num_sampled_graphs):
+                    self.update_score(target_idx, prior, score, score_idx)
+            else:
+                score = torch.zeros(size=(config.num_sampled_graphs,)).share_memory_()
+                score_idx = 0
+                for _ in range(config.num_sampled_graphs // config.num_processes):
+                    processes = []
+                    for _ in range(config.num_processes):
+                        p = mp.Process(target=self.update_score, args=(target_idx, prior, score, score_idx))
+                        score_idx += 1
+                        p.start()
+                        processes.append(p)
+                    for p in processes:
+                        p.join()
             preds[i] = score.mean()
         assert preds.shape == target_node_index.shape
         return preds

@@ -211,7 +211,7 @@ def main(config):
     return mie.run_bayes_optimal_experiment()
 
 if __name__ == '__main__':
-    torch.multiprocessing.set_start_method('spawn')
+    torch.multiprocessing.set_start_method('fork')
     parser = argparse.ArgumentParser()
     parser.add_argument("--attack", default="bayes-optimal", type=str)
     parser.add_argument("--dataset", default="cora", type=str)
@@ -239,7 +239,7 @@ if __name__ == '__main__':
     parser.add_argument("--name", default="unnamed", type=str)
     parser.add_argument("--datadir", default="./data", type=str)
     parser.add_argument("--savedir", default="./results", type=str)
-    parser.add_argument("--num-threads", default=1, type=int)
+    parser.add_argument("--num-processes", default=1, type=int)
     parser.add_argument("--train-frac", default=0.5, type=float)
     parser.add_argument("--val-frac", default=0.0, type=float)
     parser.add_argument("--seed", default=0, type=int)
