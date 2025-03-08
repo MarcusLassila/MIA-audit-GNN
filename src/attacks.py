@@ -743,7 +743,7 @@ class BootstrappedLSET:
     def sample_node_mask_zero_hop_MIA(self, reverse_probs=False):
         random_ref = torch.rand(size=(self.graph.num_nodes,)).to(self.config.device)
         if reverse_probs:
-            node_mask = (1 - self.zero_hop_probs) > random_ref
+            node_mask = (1.0 - self.zero_hop_probs) > random_ref
         else:
             node_mask = self.zero_hop_probs > random_ref
         return node_mask
@@ -751,7 +751,6 @@ class BootstrappedLSET:
     def neg_loss(self, target_model, graph):
         soft_pred = F.softmax(target_model(graph.x, graph.edge_index), dim=1)
         log_conf = soft_pred[torch.arange(graph.num_nodes), graph.y].log()
-        assert log_conf.shape == (graph.num_nodes,)
         return log_conf.sum().item()
 
     def log_model_posterior(self, subgraph):
@@ -768,8 +767,10 @@ class BootstrappedLSET:
     def update_score(self, target_idx, prior, score, score_idx):
         if self.zero_hop_probs[target_idx] > np.random.rand():
             node_mask = self.sample_node_mask_zero_hop_MIA(reverse_probs=False)
-        else:
+        elif self.config.use_out_neighbors:
             node_mask = self.sample_node_mask_zero_hop_MIA(reverse_probs=True)
+        else:
+            node_mask = torch.zeros(self.graph.num_nodes, dtype=torch.long)
         node_mask[target_idx] = True
         in_subgraph = self.masked_subgraph(node_mask)
         in_log_p = self.log_model_posterior(in_subgraph)

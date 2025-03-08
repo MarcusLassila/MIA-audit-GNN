@@ -31,7 +31,7 @@ def main(savedir):
     pd.concat(roc_frames).to_csv(f'{savedir}/roc.csv', sep=',')
 
 if __name__ == "__main__":
-    torch.multiprocessing.set_start_method('fork')
+    torch.multiprocessing.set_start_method('spawn')
     parser = argparse.ArgumentParser()
     parser.add_argument("--savedir", default="./temp_results", type=str)
     args = parser.parse_args()

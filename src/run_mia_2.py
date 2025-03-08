@@ -124,6 +124,25 @@ class MembershipInferenceExperiment:
                 raise AttributeError(f"No attack named {config.attack}")
         return attacker
 
+    def get_target_nodes(self):
+        config = self.config
+        truth = self.dataset.train_mask.long()
+        if config.num_target_nodes == -1:
+            target_node_index = torch.arange(self.dataset.num_nodes)
+        else:
+            assert config.num_target_nodes <= self.dataset.num_nodes
+            num_targets = config.num_target_nodes
+            positives = truth.nonzero().squeeze()
+            negatives = (truth ^ 1).nonzero().squeeze()
+            perm_mask = torch.randperm(positives.shape[0])
+            positives = positives[perm_mask][:num_targets // 2]
+            perm_mask = torch.randperm(negatives.shape[0])
+            negatives = negatives[perm_mask][:num_targets // 2]
+            perm_mask = torch.randperm(num_targets)
+            target_node_index = torch.concat((positives, negatives))[perm_mask]
+            assert target_node_index.shape == (num_targets,)
+        return target_node_index
+
     def parse_stats(self, stats):
         config = self.config
         table = defaultdict(list)
@@ -132,7 +151,7 @@ class MembershipInferenceExperiment:
                 table[f'{key}'].append(utils.stat_repr(value))
         return pd.DataFrame(table, index=[config.name])
 
-    def run_bayes_optimal_experiment(self):
+    def run_experiment(self):
         config = self.config
         stats = defaultdict(list)
 
@@ -143,6 +162,7 @@ class MembershipInferenceExperiment:
             set_seed(i_experiment)
 
             datasetup.add_masks(self.dataset, train_frac=config.train_frac, val_frac=config.val_frac)
+            target_node_index = self.get_target_nodes()
             target_model = self.train_target_model(self.dataset)
             attacker = self.get_attacker(target_model)
             target_scores = {
@@ -164,24 +184,9 @@ class MembershipInferenceExperiment:
             stats['train_acc'].append(target_scores['train_acc'])
             stats['test_acc'].append(target_scores['test_acc'])
 
-            truth = self.dataset.train_mask.long()
-            if config.num_target_nodes == -1:
-                target_node_index = torch.arange(self.dataset.num_nodes)
-            else:
-                assert config.num_target_nodes <= self.dataset.num_nodes
-                num_targets = config.num_target_nodes
-                positives = truth.nonzero().squeeze()
-                negatives = (truth ^ 1).nonzero().squeeze()
-                perm_mask = torch.randperm(positives.shape[0])
-                positives = positives[perm_mask][:num_targets // 2]
-                perm_mask = torch.randperm(negatives.shape[0])
-                negatives = negatives[perm_mask][:num_targets // 2]
-                perm_mask = torch.randperm(num_targets)
-                target_node_index = torch.concat((positives, negatives))[perm_mask]
-                assert target_node_index.shape == (num_targets,)
-
+            truth = self.dataset.train_mask.long()[target_node_index]
             preds = attacker.run_attack(target_node_index=target_node_index)
-            metrics = evaluation.evaluate_binary_classification(preds, truth[target_node_index], config.target_fpr)
+            metrics = evaluation.evaluate_binary_classification(preds, truth, config.target_fpr)
             fpr, tpr = metrics['ROC']
             stats['FPR'].append(fpr)
             stats['TPR'].append(tpr)
@@ -208,10 +213,10 @@ def main(config):
     config['dataset'] = config['dataset'].lower()
     config['device'] = 'cuda' if torch.cuda.is_available() else 'cpu'
     mie = MembershipInferenceExperiment(config)
-    return mie.run_bayes_optimal_experiment()
+    return mie.run_experiment()
 
 if __name__ == '__main__':
-    torch.multiprocessing.set_start_method('fork')
+    torch.multiprocessing.set_start_method('spawn')
     parser = argparse.ArgumentParser()
     parser.add_argument("--attack", default="bayes-optimal", type=str)
     parser.add_argument("--dataset", default="cora", type=str)
