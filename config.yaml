@@ -13,8 +13,8 @@ lset-cora-GCN:
   weight_decay: 0.0001
   dropout: 0.5
   num_shadow_models: 10
-bootstrapped-lset-cora-GCN-only-in:
-  attack: "bootstrapped-lset"
+graph-lset-cora-GCN:
+  attack: "graph-lset"
   dataset: "cora"
   max_num_nodes: 5000
   model: "GCN"
@@ -27,8 +27,7 @@ bootstrapped-lset-cora-GCN-only-in:
   weight_decay: 0.0001
   dropout: 0.5
   num_shadow_models: 10
-  num_sampled_graphs: 8
-  use_out_neighbors: False
+  num_sampled_graphs: 64
 bootstrapped-lset-cora-GCN:
   attack: "bootstrapped-lset"
   dataset: "cora"
@@ -43,5 +42,21 @@ bootstrapped-lset-cora-GCN:
   weight_decay: 0.0001
   dropout: 0.5
   num_shadow_models: 10
-  num_sampled_graphs: 8
+  num_sampled_graphs: 64
   use_out_neighbors: True
+bootstrapped-lset-cora-GCN-only-in:
+  attack: "bootstrapped-lset"
+  dataset: "cora"
+  max_num_nodes: 5000
+  model: "GCN"
+  epochs_target: 15
+  epochs_shadow: 15
+  num_experiments: 1
+  hidden_dim_target: [32]
+  target_fpr: 0.01
+  lr: 0.01
+  weight_decay: 0.0001
+  dropout: 0.5
+  num_shadow_models: 10
+  num_sampled_graphs: 64
+  use_out_neighbors: False

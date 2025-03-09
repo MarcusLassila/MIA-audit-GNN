@@ -93,6 +93,13 @@ class MembershipInferenceExperiment:
                     loss_fn=self.loss_fn,
                     config=config,
                 )
+            case "graph-lset":
+                attacker = attacks.GraphLSET(
+                    target_model=target_model,
+                    graph=self.dataset,
+                    loss_fn=self.loss_fn,
+                    config=config,
+                )
             case "bootstrapped-lset":
                 attacker = attacks.BootstrappedLSET(
                     target_model=target_model,
@@ -126,11 +133,11 @@ class MembershipInferenceExperiment:
 
     def get_target_nodes(self):
         config = self.config
-        truth = self.dataset.train_mask.long()
         if config.num_target_nodes == -1:
             target_node_index = torch.arange(self.dataset.num_nodes)
         else:
             assert config.num_target_nodes <= self.dataset.num_nodes
+            truth = self.dataset.train_mask.long()
             num_targets = config.num_target_nodes
             positives = truth.nonzero().squeeze()
             negatives = (truth ^ 1).nonzero().squeeze()
@@ -159,7 +166,7 @@ class MembershipInferenceExperiment:
             print(f'Running experiment {i_experiment}/{config.num_experiments}')
 
             # Use fixed random seeds such that each experimental configuration is evaluated on the same dataset
-            set_seed(i_experiment)
+            set_seed(config.seed + i_experiment)
 
             datasetup.add_masks(self.dataset, train_frac=config.train_frac, val_frac=config.val_frac)
             target_node_index = self.get_target_nodes()

@@ -867,6 +867,100 @@ class LSET:
         preds = self.log_model_posterior(self.graph.x[target_node_index], self.graph.y[target_node_index])
         return preds
 
+class GraphLSET:
+
+    def __init__(self, target_model, graph, loss_fn, config):
+        self.target_model = target_model
+        self.graph = graph
+        self.loss_fn = loss_fn
+        self.config = config
+        self.shadow_models = []
+        self.train_shadow_models()
+
+    def train_shadow_models(self):
+        config = self.config
+        criterion = Accuracy(task="multiclass", num_classes=self.graph.num_classes).to(config.device)
+        train_config = trainer.TrainConfig(
+            criterion=criterion,
+            device=config.device,
+            epochs=config.epochs_shadow,
+            early_stopping=config.early_stopping,
+            loss_fn=self.loss_fn,
+            lr=config.lr,
+            weight_decay=config.weight_decay,
+            optimizer=getattr(torch.optim, config.optimizer),
+        )
+        shadow_train_masks = utils.partition_training_sets(num_nodes=self.graph.num_nodes, num_models=config.num_shadow_models)
+        for shadow_nodes in tqdm(shadow_train_masks, total=shadow_train_masks.shape[0], desc=f"Training {config.num_shadow_models} shadow models for LSET attack"):
+            shadow_dataset = datasetup.remasked_graph_deterministic(self.graph, shadow_nodes)
+            shadow_model = utils.fresh_model(
+                model_type=config.model,
+                num_features=shadow_dataset.num_features,
+                hidden_dims=config.hidden_dim_target,
+                num_classes=shadow_dataset.num_classes,
+                dropout=config.dropout,
+            )
+            _ = trainer.train_gnn(
+                model=shadow_model,
+                dataset=shadow_dataset,
+                config=train_config,
+                disable_tqdm=True,
+                inductive_split=config.inductive_split,
+            )
+            shadow_model.eval()
+            self.shadow_models.append(shadow_model)
+
+    def masked_subgraph(self, node_mask):
+        edge_index, _ = subgraph(
+            subset=node_mask,
+            edge_index=self.graph.edge_index,
+            relabel_nodes=True,
+        )
+        return Data(
+            x=self.graph.x[node_mask],
+            edge_index=edge_index,
+            y=self.graph.y[node_mask],
+            num_classes=self.graph.num_classes,
+        )
+
+    def sample_random_node_mask(self, frac_ones=0.5):
+        mask = torch.rand(size=(self.graph.num_nodes,)) < frac_ones
+        return mask.to(self.config.device)
+
+    def neg_loss(self, target_model, graph):
+        soft_pred = F.softmax(target_model(graph.x, graph.edge_index), dim=1)
+        log_conf = soft_pred[torch.arange(graph.num_nodes), graph.y].log()
+        assert log_conf.shape == (graph.num_nodes,)
+        return log_conf.sum().item()
+
+    def signal(self, in_subgraph, out_subgraph):
+        with torch.inference_mode():
+            target_loss_diff = self.neg_loss(self.target_model, in_subgraph) - self.neg_loss(self.target_model, out_subgraph)
+            shadow_loss_diff = torch.tensor([
+                self.neg_loss(shadow_model, in_subgraph) - self.neg_loss(shadow_model, out_subgraph)
+                for shadow_model in self.shadow_models
+            ]).logsumexp(0) - np.log(self.config.num_shadow_models)
+        return target_loss_diff - shadow_loss_diff
+
+    def update_score(self, target_idx, score, score_idx):
+        node_mask = self.sample_random_node_mask(frac_ones=0.5)
+        node_mask[target_idx] = True
+        in_subgraph = self.masked_subgraph(node_mask)
+        node_mask[target_idx] = False
+        out_subgraph = self.masked_subgraph(node_mask)
+        score[score_idx] = torch.sigmoid(self.signal(in_subgraph, out_subgraph))
+
+    def run_attack(self, target_node_index):
+        config = self.config
+        preds = torch.zeros_like(target_node_index, dtype=torch.float32)
+        for i, target_idx in tqdm(enumerate(target_node_index), total=target_node_index.shape[0], desc="Attacking target nodes"):
+            score = torch.zeros(size=(config.num_sampled_graphs,))
+            for score_idx in range(config.num_sampled_graphs):
+                self.update_score(target_idx, score, score_idx)
+            preds[i] = score.mean()
+        assert preds.shape == target_node_index.shape
+        return preds
+
 class ConfidenceAttack2:
 
     def __init__(self, target_model, graph, config):
