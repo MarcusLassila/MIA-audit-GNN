@@ -1,2 +1,0 @@
-,train_acc,test_acc,AUC,TPR@0.01FPR
-bayes-optimal-cora-GCN-MCMC,0.9217 (0.0000),0.7969 (0.0000),0.7866 (0.0000),0.1019 (0.0000)

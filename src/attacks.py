@@ -770,7 +770,7 @@ class BootstrappedLSET:
         elif self.config.use_out_neighbors:
             node_mask = self.sample_node_mask_zero_hop_MIA(reverse_probs=True)
         else:
-            node_mask = torch.zeros(self.graph.num_nodes, dtype=torch.long)
+            node_mask = torch.zeros(self.graph.num_nodes, dtype=torch.bool)
         node_mask[target_idx] = True
         in_subgraph = self.masked_subgraph(node_mask)
         in_log_p = self.log_model_posterior(in_subgraph)
