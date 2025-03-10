@@ -379,6 +379,9 @@ def parse_dataset(root, name, max_num_nodes=None):
         case "flickr":
             dataset = torch_geometric.datasets.Flickr(root=f'{root}/Flickr')
             dataset.name = "Flickr"
+        case "github":
+            dataset = torch_geometric.datasets.GitHub(root=f'{root}/GitHub')
+            dataset.name = "GitHub"
         case "pubmed":
             dataset = torch_geometric.datasets.Planetoid(root=root, name="PubMed")
         case "reddit":

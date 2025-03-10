@@ -1,47 +1,57 @@
 ---
-lset-flickr-GCN:
-  attack: "lset"
+confidence-flickr-GCN:
+  attack: "confidence"
   dataset: "flickr"
-  max_num_nodes: 5000
+  max_num_nodes: 10000
   model: "GCN"
-  epochs_target: 200
-  epochs_shadow: 200
-  num_experiments: 3
-  hidden_dim_target: [128]
+  epochs_target: 20
+  epochs_shadow: 20
+  num_experiments: 1
+  hidden_dim_target: [32]
   target_fpr: 0.01
   lr: 0.01
   weight_decay: 0.0001
   dropout: 0.5
-  num_shadow_models: 10
-bootstrapped-lset-flickr-GCN:
-  attack: "bootstrapped-lset"
-  dataset: "flickr"
-  max_num_nodes: 5000
+  hyperparam_search: True
+confidence-github-GCN:
+  attack: "confidence"
+  dataset: "github"
+  max_num_nodes: 10000
   model: "GCN"
-  epochs_target: 200
-  epochs_shadow: 200
-  num_experiments: 3
-  hidden_dim_target: [128]
+  epochs_target: 20
+  epochs_shadow: 20
+  num_experiments: 1
+  hidden_dim_target: [32]
   target_fpr: 0.01
   lr: 0.01
   weight_decay: 0.0001
   dropout: 0.5
-  num_shadow_models: 10
-  num_sampled_graphs: 100
-  use_out_neighbors: True
-bootstrapped-lset-flickr-GCN-in:
-  attack: "bootstrapped-lset"
-  dataset: "flickr"
-  max_num_nodes: 5000
+  hyperparam_search: True
+confidence-amazon-photo-GCN:
+  attack: "confidence"
+  dataset: "amazon-photo"
+  max_num_nodes: 10000
   model: "GCN"
-  epochs_target: 200
-  epochs_shadow: 200
-  num_experiments: 3
-  hidden_dim_target: [128]
+  epochs_target: 20
+  epochs_shadow: 20
+  num_experiments: 1
+  hidden_dim_target: [32]
   target_fpr: 0.01
   lr: 0.01
   weight_decay: 0.0001
   dropout: 0.5
-  num_shadow_models: 10
-  num_sampled_graphs: 100
-  use_out_neighbors: False
+  hyperparam_search: True
+confidence-reddit-GCN:
+  attack: "confidence"
+  dataset: "reddit"
+  max_num_nodes: 5000
+  model: "GCN"
+  epochs_target: 20
+  epochs_shadow: 20
+  num_experiments: 1
+  hidden_dim_target: [32]
+  target_fpr: 0.01
+  lr: 0.01
+  weight_decay: 0.0001
+  dropout: 0.5
+  hyperparam_search: True
