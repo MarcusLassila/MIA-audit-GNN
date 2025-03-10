@@ -961,6 +961,73 @@ class GraphLSET:
         assert preds.shape == target_node_index.shape
         return preds
 
+class StrongLSET:
+
+    def __init__(self, target_model, graph, loss_fn, config):
+        self.target_model = target_model
+        self.graph = graph
+        self.loss_fn = loss_fn
+        self.config = config
+
+    def train_shadow_models(self, train_mask):
+        shadow_models = []
+        config = self.config
+        criterion = Accuracy(task="multiclass", num_classes=self.graph.num_classes).to(config.device)
+        train_config = trainer.TrainConfig(
+            criterion=criterion,
+            device=config.device,
+            epochs=config.epochs_shadow,
+            early_stopping=config.early_stopping,
+            loss_fn=self.loss_fn,
+            lr=config.lr,
+            weight_decay=config.weight_decay,
+            optimizer=getattr(torch.optim, config.optimizer),
+        )
+        shadow_dataset = datasetup.remasked_graph_deterministic(self.graph, train_mask)
+        for _ in range(config.num_shadow_models):
+            shadow_model = utils.fresh_model(
+                model_type=config.model,
+                num_features=shadow_dataset.num_features,
+                hidden_dims=config.hidden_dim_target,
+                num_classes=shadow_dataset.num_classes,
+                dropout=config.dropout,
+            )
+            _ = trainer.train_gnn(
+                model=shadow_model,
+                dataset=shadow_dataset,
+                config=train_config,
+                disable_tqdm=True,
+                inductive_split=config.inductive_split,
+            )
+            shadow_model.eval()
+            shadow_models.append(shadow_model)
+        return shadow_models
+
+    def log_confidence(self, model, x, y):
+        empty_edge_index = torch.tensor([[],[]], dtype=torch.long).to(self.config.device)
+        with torch.inference_mode():
+            log_conf = F.softmax(model(x, empty_edge_index), dim=1)[torch.arange(x.shape[0]), y].log()
+        return log_conf
+
+    def log_model_posterior(self, x, y, shadow_models):
+        log_conf = self.log_confidence(self.target_model, x, y)
+        threshold = torch.stack([
+            self.log_confidence(shadow_model, x, y)
+            for shadow_model in shadow_models
+        # Subtracting log(num_shadow_models) is not necessary for attack performance,
+        # but should be there if we want to get probabilities by applying sigmoid
+        ]).logsumexp(0) - np.log(self.config.num_shadow_models)
+        return log_conf - threshold
+
+    def run_attack(self, target_node_index):
+        preds = torch.zeros_like(target_node_index, dtype=torch.float32)
+        for i, target_idx in tqdm(enumerate(target_node_index), total=target_node_index.shape[0], desc="Attacking target nodes"):
+            train_mask = self.graph.train_mask.clone()
+            train_mask[target_idx] = False
+            shadow_models = self.train_shadow_models(train_mask)
+            preds[i] = self.log_model_posterior(self.graph.x[target_idx].unsqueeze(0), self.graph.y[target_idx].unsqueeze(0), shadow_models).squeeze()
+        return preds
+
 class ConfidenceAttack2:
 
     def __init__(self, target_model, graph, config):
