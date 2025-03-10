@@ -1,57 +1,43 @@
 ---
-confidence-flickr-GCN:
-  attack: "confidence"
-  dataset: "flickr"
+lset-cora-GCN:
+  attack: "lset"
+  dataset: "cora"
   max_num_nodes: 10000
   model: "GCN"
-  epochs_target: 20
-  epochs_shadow: 20
+  epochs_target: 15
+  epochs_shadow: 15
   num_experiments: 1
   hidden_dim_target: [32]
   target_fpr: 0.01
   lr: 0.01
   weight_decay: 0.0001
   dropout: 0.5
-  hyperparam_search: True
-confidence-github-GCN:
-  attack: "confidence"
-  dataset: "github"
+  num_shadow_models: 10
+improved-lset-cora-GCN:
+  attack: "improved-lset"
+  dataset: "cora"
   max_num_nodes: 10000
   model: "GCN"
-  epochs_target: 20
-  epochs_shadow: 20
+  epochs_target: 15
+  epochs_shadow: 15
   num_experiments: 1
   hidden_dim_target: [32]
   target_fpr: 0.01
   lr: 0.01
   weight_decay: 0.0001
   dropout: 0.5
-  hyperparam_search: True
-confidence-amazon-photo-GCN:
-  attack: "confidence"
-  dataset: "amazon-photo"
-  max_num_nodes: 10000
-  model: "GCN"
-  epochs_target: 20
-  epochs_shadow: 20
-  num_experiments: 1
-  hidden_dim_target: [32]
-  target_fpr: 0.01
-  lr: 0.01
-  weight_decay: 0.0001
-  dropout: 0.5
-  hyperparam_search: True
-confidence-reddit-GCN:
-  attack: "confidence"
-  dataset: "reddit"
-  max_num_nodes: 5000
-  model: "GCN"
-  epochs_target: 20
-  epochs_shadow: 20
-  num_experiments: 1
-  hidden_dim_target: [32]
-  target_fpr: 0.01
-  lr: 0.01
-  weight_decay: 0.0001
-  dropout: 0.5
-  hyperparam_search: True
+  num_shadow_models: 10
+# strong-lset-cora-GCN:
+#   attack: "strong-lset"
+#   dataset: "cora"
+#   max_num_nodes: 10000
+#   model: "GCN"
+#   epochs_target: 15
+#   epochs_shadow: 15
+#   num_experiments: 3
+#   hidden_dim_target: [32]
+#   target_fpr: 0.01
+#   lr: 0.01
+#   weight_decay: 0.0001
+#   dropout: 0.5
+#   num_shadow_models: 10

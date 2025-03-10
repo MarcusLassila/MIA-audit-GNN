@@ -98,6 +98,20 @@ class MembershipInferenceExperiment:
                     loss_fn=self.loss_fn,
                     config=config,
                 )
+            case "improved-lset":
+                attacker = attacks.ImprovedLSET(
+                    target_model=target_model,
+                    graph=self.dataset,
+                    loss_fn=self.loss_fn,
+                    config=config,
+                )
+            case "bootstrapped-lset":
+                attacker = attacks.BootstrappedLSET(
+                    target_model=target_model,
+                    graph=self.dataset,
+                    loss_fn=self.loss_fn,
+                    config=config,
+                )
             case "strong-lset":
                 attacker = attacks.StrongLSET(
                     target_model=target_model,
@@ -107,13 +121,6 @@ class MembershipInferenceExperiment:
                 )
             case "graph-lset":
                 attacker = attacks.GraphLSET(
-                    target_model=target_model,
-                    graph=self.dataset,
-                    loss_fn=self.loss_fn,
-                    config=config,
-                )
-            case "bootstrapped-lset":
-                attacker = attacks.BootstrappedLSET(
                     target_model=target_model,
                     graph=self.dataset,
                     loss_fn=self.loss_fn,
