@@ -18,42 +18,42 @@ from collections import defaultdict
 class MembershipInferenceExperiment:
 
     def __init__(self, config):
-        self.config = utils.Config(config)
-        self.dataset = datasetup.parse_dataset(root=self.config.datadir, name=self.config.dataset, max_num_nodes=self.config.max_num_nodes)
-        self.criterion = Accuracy(task="multiclass", num_classes=self.dataset.num_classes).to(self.config.device)
+        config = utils.Config(config)
+        self.dataset = datasetup.parse_dataset(root=config.datadir, name=config.dataset, max_num_nodes=config.max_num_nodes)
+        self.criterion = Accuracy(task="multiclass", num_classes=self.dataset.num_classes).to(config.device)
         self.loss_fn = nn.CrossEntropyLoss(reduction='mean')
         print(utils.graph_info(self.dataset))
-
-    def train_target_model(self, dataset, plot_training_results=True):
-        config = self.config
-
-        if self.config.grid_search:
+        if config.hyperparam_search:
+            val_frac = config.val_frac or config.train_frac
+            datasetup.add_masks(self.dataset, train_frac=config.train_frac, val_frac=val_frac)
             opt_hyperparams = hypertuner.grid_search(
-                dataset=dataset,
-                model_type=self.config.model,
-                optimizer=self.config.optimizer,
+                dataset=self.dataset,
+                model_type=config.model,
+                optimizer=config.optimizer,
                 inductive_split=config.inductive_split,
             )
             print(f'Grid search results: {opt_hyperparams}')
-            lr, weight_decay, dropout, hidden_dim, epochs = opt_hyperparams.values()
-        else:
-            lr, weight_decay, dropout, hidden_dim, epochs = config.lr, config.weight_decay, config.dropout, config.hidden_dim_target, config.epochs_target
+            print('Updating hyperparameter values accordingly')
+            config.lr, config.weight_decay, config.dropout, config.hidden_dim_target, config.epochs_target = opt_hyperparams.values()
+        self.config = config
 
+    def train_target_model(self, dataset, plot_training_results=True):
+        config = self.config
         target_model = utils.fresh_model(
             model_type=self.config.model,
             num_features=dataset.num_features,
-            hidden_dims=hidden_dim,
+            hidden_dims=config.hidden_dim_target,
             num_classes=dataset.num_classes,
-            dropout=dropout,
+            dropout=config.dropout,
         )
         train_config = trainer.TrainConfig(
             criterion=self.criterion,
             device=config.device,
-            epochs=epochs,
+            epochs=config.epochs_target,
             early_stopping=config.early_stopping,
             loss_fn=self.loss_fn,
-            lr=lr,
-            weight_decay=weight_decay,
+            lr=config.lr,
+            weight_decay=config.weight_decay,
             optimizer=getattr(torch.optim, config.optimizer),
         )
         train_res = trainer.train_gnn(
@@ -225,7 +225,7 @@ def main(config):
 if __name__ == '__main__':
     torch.multiprocessing.set_start_method('spawn')
     parser = argparse.ArgumentParser()
-    parser.add_argument("--attack", default="bayes-optimal", type=str)
+    parser.add_argument("--attack", default="confidence", type=str)
     parser.add_argument("--dataset", default="cora", type=str)
     parser.add_argument("--inductive-split", action=argparse.BooleanOptionalAction)
     parser.add_argument("--inductive-inference", action=argparse.BooleanOptionalAction)
@@ -233,7 +233,7 @@ if __name__ == '__main__':
     parser.add_argument("--batch-size", default=32, type=int)
     parser.add_argument("--epochs-target", default=15, type=int)
     parser.add_argument("--epochs-shadow", default=15, type=int)
-    parser.add_argument("--grid-search", action=argparse.BooleanOptionalAction)
+    parser.add_argument("--hyperparam-search", action=argparse.BooleanOptionalAction)
     parser.add_argument("--lr", default=1e-2, type=float)
     parser.add_argument("--weight-decay", default=1e-4, type=float)
     parser.add_argument("--dropout", default=0.5, type=float)

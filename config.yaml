@@ -1,62 +1,47 @@
 ---
-lset-cora-GCN:
+lset-flickr-GCN:
   attack: "lset"
-  dataset: "cora"
+  dataset: "flickr"
   max_num_nodes: 5000
   model: "GCN"
-  epochs_target: 15
-  epochs_shadow: 15
-  num_experiments: 1
-  hidden_dim_target: [32]
+  epochs_target: 200
+  epochs_shadow: 200
+  num_experiments: 3
+  hidden_dim_target: [128]
   target_fpr: 0.01
   lr: 0.01
   weight_decay: 0.0001
   dropout: 0.5
   num_shadow_models: 10
-graph-lset-cora-GCN:
-  attack: "graph-lset"
-  dataset: "cora"
-  max_num_nodes: 5000
-  model: "GCN"
-  epochs_target: 15
-  epochs_shadow: 15
-  num_experiments: 1
-  hidden_dim_target: [32]
-  target_fpr: 0.01
-  lr: 0.01
-  weight_decay: 0.0001
-  dropout: 0.5
-  num_shadow_models: 10
-  num_sampled_graphs: 64
-bootstrapped-lset-cora-GCN:
+bootstrapped-lset-flickr-GCN:
   attack: "bootstrapped-lset"
-  dataset: "cora"
+  dataset: "flickr"
   max_num_nodes: 5000
   model: "GCN"
-  epochs_target: 15
-  epochs_shadow: 15
-  num_experiments: 1
-  hidden_dim_target: [32]
+  epochs_target: 200
+  epochs_shadow: 200
+  num_experiments: 3
+  hidden_dim_target: [128]
   target_fpr: 0.01
   lr: 0.01
   weight_decay: 0.0001
   dropout: 0.5
   num_shadow_models: 10
-  num_sampled_graphs: 64
+  num_sampled_graphs: 100
   use_out_neighbors: True
-bootstrapped-lset-cora-GCN-only-in:
+bootstrapped-lset-flickr-GCN-in:
   attack: "bootstrapped-lset"
-  dataset: "cora"
+  dataset: "flickr"
   max_num_nodes: 5000
   model: "GCN"
-  epochs_target: 15
-  epochs_shadow: 15
-  num_experiments: 1
-  hidden_dim_target: [32]
+  epochs_target: 200
+  epochs_shadow: 200
+  num_experiments: 3
+  hidden_dim_target: [128]
   target_fpr: 0.01
   lr: 0.01
   weight_decay: 0.0001
   dropout: 0.5
   num_shadow_models: 10
-  num_sampled_graphs: 64
+  num_sampled_graphs: 100
   use_out_neighbors: False
