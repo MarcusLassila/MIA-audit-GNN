@@ -969,7 +969,7 @@ class ConfidenceAttack2:
         self.config = config
 
     def run_attack(self, target_node_index):
-        empty_edge_index = torch.tensor([[],[]], dtype=torch.long)
+        empty_edge_index = torch.tensor([[],[]], dtype=torch.long).to(self.config.device)
         with torch.inference_mode():
             preds = F.softmax(self.target_model(self.graph.x, empty_edge_index), dim=1)[target_node_index, self.graph.y[target_node_index]]
         return preds
