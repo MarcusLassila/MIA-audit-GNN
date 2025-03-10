@@ -24,9 +24,9 @@ def grid_search(
     grid = {
         'lr': [1e-2, 1e-3],
         'weight_decay': [1e-5, 1e-4],
-        'dropout': [0.0, 0.5],
+        'dropout': [0.5],
         'hidden_dim': [[32], [128], [512]],
-        'epochs': [20, 100, 200, 500],
+        'epochs': [20, 100, 200, 500, 1000],
     }
     desc=f'Running grid search over the following hyperparameters: {", ".join(grid.keys())}'
     opt_hyperparams = None

@@ -741,7 +741,7 @@ class BootstrappedLSET:
         )
 
     def sample_node_mask_zero_hop_MIA(self, reverse_probs=False):
-        random_ref = torch.rand(size=(self.graph.num_nodes,)).to(self.config.device)
+        random_ref = torch.rand(self.graph.num_nodes).to(self.config.device)
         if reverse_probs:
             node_mask = (1.0 - self.zero_hop_probs) > random_ref
         else:
@@ -770,7 +770,7 @@ class BootstrappedLSET:
         elif self.config.use_out_neighbors:
             node_mask = self.sample_node_mask_zero_hop_MIA(reverse_probs=True)
         else:
-            node_mask = torch.zeros(self.graph.num_nodes, dtype=torch.bool)
+            node_mask = torch.zeros(self.graph.num_nodes, dtype=torch.bool).to(self.config.device)
         node_mask[target_idx] = True
         in_subgraph = self.masked_subgraph(node_mask)
         in_log_p = self.log_model_posterior(in_subgraph)
@@ -785,11 +785,11 @@ class BootstrappedLSET:
         preds = torch.zeros_like(target_node_index, dtype=torch.float32)
         for i, target_idx in tqdm(enumerate(target_node_index), total=target_node_index.shape[0], desc="Attacking target nodes"):
             if config.num_processes == 1:
-                score = torch.zeros(size=(config.num_sampled_graphs,))
+                score = torch.zeros(config.num_sampled_graphs)
                 for score_idx in range(config.num_sampled_graphs):
                     self.update_score(target_idx, prior, score, score_idx)
             else:
-                score = torch.zeros(size=(config.num_sampled_graphs,)).share_memory_()
+                score = torch.zeros(config.num_sampled_graphs).share_memory_()
                 score_idx = 0
                 for _ in range(config.num_sampled_graphs // config.num_processes):
                     processes = []
