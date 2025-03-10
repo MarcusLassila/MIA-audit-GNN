@@ -375,18 +375,14 @@ def parse_dataset(root, name, max_num_nodes=None):
             dataset = torch_geometric.datasets.Planetoid(root=root, name="Cora")
         case "corafull":
             dataset = torch_geometric.datasets.CoraFull(root=f'{root}/CoraFull')
-            dataset.name == "CoraFull"
         case "flickr":
             dataset = torch_geometric.datasets.Flickr(root=f'{root}/Flickr')
-            dataset.name = "Flickr"
         case "github":
             dataset = torch_geometric.datasets.GitHub(root=f'{root}/GitHub')
-            dataset.name = "GitHub"
         case "pubmed":
             dataset = torch_geometric.datasets.Planetoid(root=root, name="PubMed")
         case "reddit":
             dataset = torch_geometric.datasets.Reddit(root=f'{root}/Reddit')
-            dataset.name = "Reddit"
         case "sbm":
             dataset = stochastic_block_model(root)
         case _:

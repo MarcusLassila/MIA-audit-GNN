@@ -14,6 +14,7 @@ import torch.nn.functional as F
 from torch_geometric.data import Data
 from torchmetrics import Accuracy
 from collections import defaultdict
+from pathlib import Path
 
 class MembershipInferenceExperiment:
 
@@ -32,7 +33,11 @@ class MembershipInferenceExperiment:
                 optimizer=config.optimizer,
                 inductive_split=config.inductive_split,
             )
-            print(f'Grid search results: {opt_hyperparams}')
+            print(f'Hyperparameter search results: {opt_hyperparams}')
+            Path("results/hyperparams").mkdir(parents=True, exist_ok=True)
+            log_info = f'dataset: {config.dataset}\nnum_nodes: {self.dataset.num_nodes}\n' + '\n'.join(f'{k}: {v}' for k, v in opt_hyperparams.items())
+            with open(f"results/hyperparams/{config.dataset}_{self.dataset.num_nodes}.txt", "w") as f:
+                f.write(log_info)
             print('Updating hyperparameter values accordingly')
             config.lr, config.weight_decay, config.dropout, config.hidden_dim_target, config.epochs_target = opt_hyperparams.values()
         self.config = config
