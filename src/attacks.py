@@ -568,7 +568,7 @@ class BayesOptimalMembershipInference:
         shadow_train_masks = utils.partition_training_sets(num_nodes=self.graph.num_nodes, num_models=config.num_shadow_models)
         tqdm_desc = f"Training {config.num_shadow_models} shadow models for Bayes optimal attack"
         for shadow_nodes in tqdm(shadow_train_masks, total=shadow_train_masks.shape[0], desc=tqdm_desc):
-            shadow_dataset = datasetup.remasked_graph_deterministic(self.graph, shadow_nodes)
+            shadow_dataset = datasetup.remasked_graph(self.graph, shadow_nodes)
             shadow_model = utils.fresh_model(
                 model_type=config.model,
                 num_features=shadow_dataset.num_features,
@@ -829,7 +829,7 @@ class LSET:
         )
         shadow_train_masks = utils.partition_training_sets(num_nodes=self.graph.num_nodes, num_models=config.num_shadow_models)
         for shadow_train_mask in tqdm(shadow_train_masks, total=shadow_train_masks.shape[0], desc=f"Training {config.num_shadow_models} shadow models for LSET attack"):
-            shadow_dataset = datasetup.remasked_graph_deterministic(self.graph, shadow_train_mask)
+            shadow_dataset = datasetup.remasked_graph(self.graph, shadow_train_mask)
             shadow_model = utils.fresh_model(
                 model_type=config.model,
                 num_features=shadow_dataset.num_features,
@@ -882,7 +882,7 @@ class ImprovedLSET:
         )
         self.zero_hop_probs = self.zero_hop_attacker.run_attack(torch.arange(self.graph.num_nodes)).sigmoid()
 
-    def train_shadow_models(self, target_idx):
+    def train_shadow_models(self, shadow_graph):
         shadow_models = []
         config = self.config
         criterion = Accuracy(task="multiclass", num_classes=self.graph.num_classes).to(config.device)
@@ -897,19 +897,16 @@ class ImprovedLSET:
             optimizer=getattr(torch.optim, config.optimizer),
         )
         for _ in range(config.num_shadow_models):
-            train_mask = self.sample_node_mask_zero_hop_MIA()
-            train_mask[target_idx] = False
-            shadow_dataset = datasetup.remasked_graph_deterministic(self.graph, train_mask)
             shadow_model = utils.fresh_model(
                 model_type=config.model,
-                num_features=shadow_dataset.num_features,
+                num_features=shadow_graph.num_features,
                 hidden_dims=config.hidden_dim_target,
-                num_classes=shadow_dataset.num_classes,
+                num_classes=shadow_graph.num_classes,
                 dropout=config.dropout,
             )
             _ = trainer.train_gnn(
                 model=shadow_model,
-                dataset=shadow_dataset,
+                dataset=shadow_graph,
                 config=train_config,
                 disable_tqdm=True,
                 inductive_split=config.inductive_split,
@@ -933,14 +930,20 @@ class ImprovedLSET:
         threshold = torch.stack([
             self.log_confidence(shadow_model, x, y)
             for shadow_model in shadow_models
-        ]).mean(0)
+        ]).logsumexp(0) - np.log(len(shadow_models))
         return log_conf - threshold
 
     def run_attack(self, target_node_index):
         preds = torch.zeros_like(target_node_index, dtype=torch.float32)
         for i, target_idx in tqdm(enumerate(target_node_index), total=target_node_index.shape[0], desc="Attacking target nodes"):
-            shadow_models = self.train_shadow_models(target_idx)
-            preds[i] = self.log_model_posterior(shadow_models, self.graph.x[target_idx].unsqueeze(0), self.graph.y[target_idx].unsqueeze(0)).squeeze()
+            log_p = torch.zeros(self.config.num_sampled_graphs)
+            for j in range(self.config.num_sampled_graphs):
+                train_mask = self.sample_node_mask_zero_hop_MIA()
+                train_mask[target_idx] = False
+                shadow_graph = datasetup.remasked_graph(self.graph, train_mask)
+                shadow_models = self.train_shadow_models(shadow_graph)
+                log_p[j] = self.log_model_posterior(shadow_models, self.graph.x[target_idx].unsqueeze(0), self.graph.y[target_idx].unsqueeze(0)).squeeze()
+            preds[i] = log_p.mean()
         return preds
 
 class StrongLSET:
@@ -965,7 +968,7 @@ class StrongLSET:
             weight_decay=config.weight_decay,
             optimizer=getattr(torch.optim, config.optimizer),
         )
-        shadow_dataset = datasetup.remasked_graph_deterministic(self.graph, train_mask)
+        shadow_dataset = datasetup.remasked_graph(self.graph, train_mask)
         for _ in range(config.num_shadow_models):
             shadow_model = utils.fresh_model(
                 model_type=config.model,
@@ -1011,18 +1014,16 @@ class StrongLSET:
         return preds
 
 class GraphLSET:
-    '''Questionable'''
 
     def __init__(self, target_model, graph, loss_fn, config):
         self.target_model = target_model
         self.graph = graph
         self.loss_fn = loss_fn
         self.config = config
-        self.shadow_models = []
-        self.train_shadow_models()
 
-    def train_shadow_models(self):
+    def train_shadow_models(self, train_mask):
         config = self.config
+        shadow_models = []
         criterion = Accuracy(task="multiclass", num_classes=self.graph.num_classes).to(config.device)
         train_config = trainer.TrainConfig(
             criterion=criterion,
@@ -1034,9 +1035,8 @@ class GraphLSET:
             weight_decay=config.weight_decay,
             optimizer=getattr(torch.optim, config.optimizer),
         )
-        shadow_train_masks = utils.partition_training_sets(num_nodes=self.graph.num_nodes, num_models=config.num_shadow_models)
-        for shadow_nodes in tqdm(shadow_train_masks, total=shadow_train_masks.shape[0], desc=f"Training {config.num_shadow_models} shadow models for LSET attack"):
-            shadow_dataset = datasetup.remasked_graph_deterministic(self.graph, shadow_nodes)
+        shadow_dataset = datasetup.remasked_graph(self.graph, train_mask)
+        for _ in range(config.num_shadow_models):
             shadow_model = utils.fresh_model(
                 model_type=config.model,
                 num_features=shadow_dataset.num_features,
@@ -1052,7 +1052,8 @@ class GraphLSET:
                 inductive_split=config.inductive_split,
             )
             shadow_model.eval()
-            self.shadow_models.append(shadow_model)
+            shadow_models.append(shadow_model)
+        return shadow_models
 
     def masked_subgraph(self, node_mask):
         edge_index, _ = subgraph(
@@ -1068,40 +1069,33 @@ class GraphLSET:
         )
 
     def sample_random_node_mask(self, frac_ones=0.5):
-        mask = torch.rand(size=(self.graph.num_nodes,)) < frac_ones
+        mask = torch.rand(self.graph.num_nodes) < frac_ones
         return mask.to(self.config.device)
 
     def neg_loss(self, target_model, graph):
         soft_pred = F.softmax(target_model(graph.x, graph.edge_index), dim=1)
         log_conf = soft_pred[torch.arange(graph.num_nodes), graph.y].log()
-        assert log_conf.shape == (graph.num_nodes,)
         return log_conf.sum().item()
 
-    def signal(self, in_subgraph, out_subgraph):
+    def signal(self, shadow_models, in_subgraph, out_subgraph):
         with torch.inference_mode():
             target_loss_diff = self.neg_loss(self.target_model, in_subgraph) - self.neg_loss(self.target_model, out_subgraph)
             shadow_loss_diff = torch.tensor([
                 self.neg_loss(shadow_model, in_subgraph) - self.neg_loss(shadow_model, out_subgraph)
-                for shadow_model in self.shadow_models
+                for shadow_model in shadow_models
             ]).logsumexp(0) - np.log(self.config.num_shadow_models)
         return target_loss_diff - shadow_loss_diff
 
-    def update_score(self, target_idx, score, score_idx):
-        node_mask = self.sample_random_node_mask(frac_ones=0.5)
-        node_mask[target_idx] = True
-        in_subgraph = self.masked_subgraph(node_mask)
-        node_mask[target_idx] = False
-        out_subgraph = self.masked_subgraph(node_mask)
-        score[score_idx] = torch.sigmoid(self.signal(in_subgraph, out_subgraph))
-
     def run_attack(self, target_node_index):
-        config = self.config
         preds = torch.zeros_like(target_node_index, dtype=torch.float32)
         for i, target_idx in tqdm(enumerate(target_node_index), total=target_node_index.shape[0], desc="Attacking target nodes"):
-            score = torch.zeros(size=(config.num_sampled_graphs,))
-            for score_idx in range(config.num_sampled_graphs):
-                self.update_score(target_idx, score, score_idx)
-            preds[i] = score.mean()
+            node_mask = self.graph.train_mask.clone()
+            node_mask[target_idx] = True
+            in_subgraph = self.masked_subgraph(node_mask)
+            node_mask[target_idx] = False
+            out_subgraph = self.masked_subgraph(node_mask)
+            shadow_models = self.train_shadow_models(node_mask)
+            preds[i] = torch.sigmoid(self.signal(shadow_models, in_subgraph, out_subgraph))
         assert preds.shape == target_node_index.shape
         return preds
 
@@ -1144,7 +1138,7 @@ class LiraOnline:
         )
         shadow_train_masks = utils.partition_training_sets(num_nodes=self.graph.num_nodes, num_models=config.num_shadow_models)
         for shadow_nodes in tqdm(shadow_train_masks, total=shadow_train_masks.shape[0], desc=f"Training {config.num_shadow_models} shadow models for LiRA online"):
-            shadow_dataset = datasetup.remasked_graph_deterministic(self.graph, shadow_nodes)
+            shadow_dataset = datasetup.remasked_graph(self.graph, shadow_nodes)
             shadow_model = utils.fresh_model(
                 model_type=config.model,
                 num_features=shadow_dataset.num_features,
@@ -1236,7 +1230,7 @@ class RmiaOnline:
         )
         shadow_train_masks = utils.partition_training_sets(num_nodes=self.graph.num_nodes, num_models=config.num_shadow_models)
         for shadow_nodes in tqdm(shadow_train_masks, total=shadow_train_masks.shape[0], desc=f"Training {config.num_shadow_models} shadow models for RMIA online"):
-            shadow_dataset = datasetup.remasked_graph_deterministic(self.graph, shadow_nodes)
+            shadow_dataset = datasetup.remasked_graph(self.graph, shadow_nodes)
             shadow_model = utils.fresh_model(
                 model_type=config.model,
                 num_features=shadow_dataset.num_features,

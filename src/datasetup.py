@@ -256,9 +256,9 @@ def alternating_random_walk_node_split(dataset):
     node_index_B = torch.tensor(list(node_index_split[1]), dtype=torch.long)
     return node_index_A, node_index_B
 
-def remasked_graph(graph, train_frac, val_frac, stratify=None):
+def random_remasked_graph(graph, train_frac, val_frac, stratify=None, mutate=False):
     '''
-    Return a copy of dataset with new train/val/test masks.
+    Add new train/val/test masks, and a corresponding inductive edge mask
     '''
     train_mask, val_mask, test_mask = train_val_test_masks(
         num_nodes=graph.num_nodes,
@@ -266,35 +266,26 @@ def remasked_graph(graph, train_frac, val_frac, stratify=None):
         val_frac=val_frac,
         stratify=stratify,
     )
-    data = graph.clone()
+    if mutate:
+        data = graph
+    else:
+        data = graph.clone()
     data.train_mask = train_mask
     data.val_mask = val_mask
     data.test_mask = test_mask
     data.inductive_mask = train_split_interconnection_mask(data)
     return data
 
-def remasked_graph_deterministic(graph, train_mask):
-    data = graph.clone()
+def remasked_graph(graph, train_mask, mutate=False):
+    if mutate:
+        data = graph
+    else:
+        data = graph.clone()
     data.train_mask = train_mask
     data.test_mask = ~train_mask
     data.val_mask = torch.zeros_like(train_mask, dtype=torch.bool)
     data.inductive_mask = train_split_interconnection_mask(data)
     return data
-
-def add_masks(graph, train_frac, val_frac, stratify=None):
-    '''
-    Mutate graph to add new train/val/test masks.
-    '''
-    train_mask, val_mask, test_mask = train_val_test_masks(
-        num_nodes=graph.num_nodes,
-        train_frac=train_frac,
-        val_frac=val_frac,
-        stratify=stratify,
-    )
-    graph.train_mask = train_mask
-    graph.val_mask = val_mask
-    graph.test_mask = test_mask
-    graph.inductive_mask = train_split_interconnection_mask(graph)
 
 def extract_subgraph(graph, node_index, train_frac, val_frac):
     '''

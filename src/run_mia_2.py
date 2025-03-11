@@ -26,7 +26,7 @@ class MembershipInferenceExperiment:
         print(utils.graph_info(self.dataset))
         if config.hyperparam_search:
             val_frac = config.val_frac or config.train_frac
-            datasetup.add_masks(self.dataset, train_frac=config.train_frac, val_frac=val_frac)
+            _ = datasetup.random_remasked_graph(self.dataset, train_frac=config.train_frac, val_frac=val_frac, mutate=True)
             opt_hyperparams = hypertuner.grid_search(
                 dataset=self.dataset,
                 model_type=config.model,
@@ -187,7 +187,7 @@ class MembershipInferenceExperiment:
             # Use fixed random seeds such that each experimental configuration is evaluated on the same dataset
             set_seed(config.seed + i_experiment)
 
-            datasetup.add_masks(self.dataset, train_frac=config.train_frac, val_frac=config.val_frac)
+            _ = datasetup.random_remasked_graph(self.dataset, train_frac=config.train_frac, val_frac=config.val_frac, mutate=True)
             target_node_index = self.get_target_nodes()
             target_model = self.train_target_model(self.dataset)
             attacker = self.get_attacker(target_model)
@@ -264,7 +264,7 @@ if __name__ == '__main__':
     parser.add_argument("--bayes-sampling-strategy", default='model-independent', type=str)
     parser.add_argument("--num-shadow-models", default=10, type=int)
     parser.add_argument("--num-sampled-graphs", default=10, type=int)
-    parser.add_argument("--num-target-nodes", default=-1, type=int)
+    parser.add_argument("--num-target-nodes", default=500, type=int)
     parser.add_argument("--max-num-nodes", default=None, type=int)
     parser.add_argument("--rmia-gamma", default=2.0, type=float)
     parser.add_argument("--name", default="unnamed", type=str)
