@@ -622,9 +622,7 @@ class BayesOptimalMembershipInference:
         return mask.to(self.config.device)
 
     def neg_loss(self, target_model, graph):
-        soft_pred = F.softmax(target_model(graph.x, graph.edge_index), dim=1)
-        log_conf = soft_pred[torch.arange(graph.num_nodes), graph.y].log()
-        assert log_conf.shape == (graph.num_nodes,)
+        log_conf = F.log_softmax(target_model(graph.x, graph.edge_index), dim=1)[torch.arange(graph.num_nodes), graph.y]
         return log_conf.sum().item()
 
     def log_model_posterior(self, subgraph):
@@ -749,8 +747,7 @@ class BootstrappedLSET:
         return node_mask
 
     def neg_loss(self, target_model, graph):
-        soft_pred = F.softmax(target_model(graph.x, graph.edge_index), dim=1)
-        log_conf = soft_pred[torch.arange(graph.num_nodes), graph.y].log()
+        log_conf = F.log_softmax(target_model(graph.x, graph.edge_index), dim=1)[torch.arange(graph.num_nodes), graph.y]
         return log_conf.sum().item()
 
     def log_model_posterior(self, subgraph):
@@ -850,7 +847,7 @@ class LSET:
     def log_confidence(self, model, x, y):
         empty_edge_index = torch.tensor([[],[]], dtype=torch.long).to(self.config.device)
         with torch.inference_mode():
-            log_conf = F.softmax(model(x, empty_edge_index), dim=1)[torch.arange(x.shape[0]), y].log()
+            log_conf = F.log_softmax(model(x, empty_edge_index), dim=1)[torch.arange(x.shape[0]), y]
         return log_conf
 
     def log_model_posterior(self, x, y):
@@ -922,7 +919,7 @@ class ImprovedLSET:
     def log_confidence(self, model, x, y):
         empty_edge_index = torch.tensor([[],[]], dtype=torch.long).to(self.config.device)
         with torch.inference_mode():
-            log_conf = F.softmax(model(x, empty_edge_index), dim=1)[torch.arange(x.shape[0]), y].log()
+            log_conf = F.log_softmax(model(x, empty_edge_index), dim=1)[torch.arange(x.shape[0]), y]
         return log_conf
 
     def log_model_posterior(self, shadow_models, x, y):
@@ -991,7 +988,7 @@ class StrongLSET:
     def log_confidence(self, model, x, y):
         empty_edge_index = torch.tensor([[],[]], dtype=torch.long).to(self.config.device)
         with torch.inference_mode():
-            log_conf = F.softmax(model(x, empty_edge_index), dim=1)[torch.arange(x.shape[0]), y].log()
+            log_conf = F.log_softmax(model(x, empty_edge_index), dim=1)[torch.arange(x.shape[0]), y]
         return log_conf
 
     def log_model_posterior(self, x, y, shadow_models):
@@ -1073,8 +1070,7 @@ class GraphLSET:
         return mask.to(self.config.device)
 
     def neg_loss(self, target_model, graph):
-        soft_pred = F.softmax(target_model(graph.x, graph.edge_index), dim=1)
-        log_conf = soft_pred[torch.arange(graph.num_nodes), graph.y].log()
+        log_conf = F.log_softmax(target_model(graph.x, graph.edge_index), dim=1)[torch.arange(graph.num_nodes), graph.y]
         return log_conf.sum().item()
 
     def signal(self, shadow_models, in_subgraph, out_subgraph):
