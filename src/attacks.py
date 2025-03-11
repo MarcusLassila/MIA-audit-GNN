@@ -933,9 +933,7 @@ class ImprovedLSET:
         threshold = torch.stack([
             self.log_confidence(shadow_model, x, y)
             for shadow_model in shadow_models
-        # Subtracting log(num_shadow_models) is not necessary for attack performance,
-        # but should be there if we want to get probabilities by applying sigmoid
-        ]).logsumexp(0) - np.log(self.config.num_shadow_models)
+        ]).mean(0)
         return log_conf - threshold
 
     def run_attack(self, target_node_index):
