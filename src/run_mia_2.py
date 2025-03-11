@@ -119,6 +119,13 @@ class MembershipInferenceExperiment:
                     loss_fn=self.loss_fn,
                     config=config,
                 )
+            case "strong-graph-lset":
+                attacker = attacks.StrongGraphLSET(
+                    target_model=target_model,
+                    graph=self.dataset,
+                    loss_fn=self.loss_fn,
+                    config=config,
+                )
             case "graph-lset":
                 attacker = attacks.GraphLSET(
                     target_model=target_model,

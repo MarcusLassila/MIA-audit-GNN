@@ -2,7 +2,7 @@
 lset-cora-GCN:
   attack: "lset"
   dataset: "cora"
-  max_num_nodes: 10000
+  max_num_nodes: null
   model: "GCN"
   epochs_target: 15
   epochs_shadow: 15
@@ -16,7 +16,7 @@ lset-cora-GCN:
 graph-lset-cora-GCN:
   attack: "graph-lset"
   dataset: "cora"
-  max_num_nodes: 10000
+  max_num_nodes: null
   model: "GCN"
   epochs_target: 15
   epochs_shadow: 15
@@ -27,6 +27,7 @@ graph-lset-cora-GCN:
   weight_decay: 0.0001
   dropout: 0.5
   num_shadow_models: 10
+  num_sampled_graphs: 1
 # strong-lset-cora-GCN:
 #   attack: "strong-lset"
 #   dataset: "cora"
