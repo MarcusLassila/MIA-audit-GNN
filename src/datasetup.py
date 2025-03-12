@@ -33,14 +33,11 @@ def merge_graphs(graph_A, graph_B):
     return data
 
 def train_split_interconnection_mask(dataset):
-    mask = []
-    for a, b in dataset.edge_index.T:
-        mask.append(
-            dataset.train_mask[a] == dataset.train_mask[b]
-            and dataset.val_mask[a] == dataset.val_mask[b]
-            and dataset.test_mask[a] == dataset.test_mask[b]
-        )
-    return torch.tensor(mask, dtype=torch.bool)
+    return (
+        (dataset.train_mask[dataset.edge_index[0]] & dataset.train_mask[dataset.edge_index[1]])
+        | (dataset.val_mask[dataset.edge_index[0]] & dataset.val_mask[dataset.edge_index[1]])
+        | (dataset.test_mask[dataset.edge_index[0]] & dataset.test_mask[dataset.edge_index[1]])
+    ).to(dataset.x.device)
 
 def masked_subgraph(graph, mask):
     '''
