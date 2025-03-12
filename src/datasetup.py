@@ -37,7 +37,7 @@ def train_split_interconnection_mask(dataset):
         (dataset.train_mask[dataset.edge_index[0]] & dataset.train_mask[dataset.edge_index[1]])
         | (dataset.val_mask[dataset.edge_index[0]] & dataset.val_mask[dataset.edge_index[1]])
         | (dataset.test_mask[dataset.edge_index[0]] & dataset.test_mask[dataset.edge_index[1]])
-    ).to(dataset.x.device)
+    )
 
 def masked_subgraph(graph, mask):
     '''
@@ -267,9 +267,9 @@ def random_remasked_graph(graph, train_frac, val_frac, stratify=None, mutate=Fal
         data = graph
     else:
         data = graph.clone()
-    data.train_mask = train_mask
-    data.val_mask = val_mask
-    data.test_mask = test_mask
+    data.train_mask = train_mask.to(graph.x.device)
+    data.val_mask = val_mask.to(graph.x.device)
+    data.test_mask = test_mask.to(graph.x.device)
     data.inductive_mask = train_split_interconnection_mask(data)
     return data
 
@@ -278,6 +278,7 @@ def remasked_graph(graph, train_mask, mutate=False):
         data = graph
     else:
         data = graph.clone()
+    train_mask = train_mask.to(graph.x.device)
     data.train_mask = train_mask
     data.test_mask = ~train_mask
     data.val_mask = torch.zeros_like(train_mask, dtype=torch.bool)
