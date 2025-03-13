@@ -224,7 +224,8 @@ class MembershipInferenceExperiment:
             stats['FPR'].append(fpr)
             stats['TPR'].append(tpr)
             stats['AUC'].append(metrics['AUC'])
-            stats[f'TPR@{config.target_fpr}FPR'].append(metrics['TPR@FPR'])
+            for t_fpr, t_tpr in zip(config.target_fpr, metrics['TPR@FPR']):
+                stats[f'TPR@{t_fpr}FPR'].append(t_tpr)
 
         if config.make_roc_plots:
             savepath = f'{config.savedir}/{config.name}_roc_loglog.png'
@@ -266,7 +267,7 @@ if __name__ == '__main__':
     parser.add_argument("--early-stopping", default=0, type=int)
     parser.add_argument("--hidden-dim-target", default=[32], type=lambda x: [*map(int, x.split(','))])
     parser.add_argument("--num-experiments", default=1, type=int)
-    parser.add_argument("--target-fpr", default=0.01, type=float)
+    parser.add_argument("--target-fpr", default=[0.01], type=lambda x: [*map(float, x.split(','))])
     parser.add_argument("--optimizer", default="Adam", type=str)
     parser.add_argument("--bayes-sampling-strategy", default='model-independent', type=str)
     parser.add_argument("--num-shadow-models", default=10, type=int)

@@ -29,17 +29,17 @@ def evaluate_binary_classification(preds, truth, target_fpr):
         truth = truth.cpu().numpy()
     auroc = roc_auc_score(y_true=truth, y_score=preds)
     fpr, tpr, thresholds = roc_curve(y_true=truth, y_score=preds)
-    tpr_fixed_fpr, threshold = utils.tpr_at_fixed_fpr(fpr, tpr, target_fpr, thresholds)
-    hard_preds = (preds >= threshold).astype(np.int64)
-    true_positives = (hard_preds & truth).nonzero()[0]
+    tpr_fixed_fpr = []
+    threshold_fixed_fpr = []
+    for t_fpr in target_fpr:
+        t_tpr, threshold = utils.tpr_at_fixed_fpr(fpr, tpr, t_fpr, thresholds)
+        tpr_fixed_fpr.append(t_tpr)
+        threshold_fixed_fpr.append(threshold)
     return {
         'AUC': auroc,
         'ROC': (fpr, tpr),
         'TPR@FPR': tpr_fixed_fpr,
-        'TP': true_positives,
-        'soft_preds': preds,
-        'hard_preds': hard_preds,
-        'threshold': threshold,
+        'threshold@FPR': threshold_fixed_fpr,
     }
 
 def k_hop_query(model, dataset, query_nodes, num_hops=0, inductive_split=True, monte_carlo_masks=None, filter_on_class=False):
