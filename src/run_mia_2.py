@@ -78,83 +78,83 @@ class MembershipInferenceExperiment:
         )
         return target_model
 
-    def get_attacker(self, target_model):
+    def get_attacker(self, attack_dict, target_model):
         '''
         Return an instance of the attack class specified by config.attack
         '''
-        config = self.config
-        match config.attack:
+        attack_config = utils.Config(attack_dict)
+        match attack_config.attack:
             case "bayes-optimal":
                 attacker = attacks.BayesOptimalMembershipInference(
                     target_model=target_model,
                     graph=self.dataset,
                     loss_fn=self.loss_fn,
-                    config=config,
+                    config=attack_config,
                 )
             case "lset":
                 attacker = attacks.LSET(
                     target_model=target_model,
                     graph=self.dataset,
                     loss_fn=self.loss_fn,
-                    config=config,
+                    config=attack_config,
                 )
             case "improved-lset":
                 attacker = attacks.ImprovedLSET(
                     target_model=target_model,
                     graph=self.dataset,
                     loss_fn=self.loss_fn,
-                    config=config,
+                    config=attack_config,
                 )
             case "bootstrapped-lset":
                 attacker = attacks.BootstrappedLSET(
                     target_model=target_model,
                     graph=self.dataset,
                     loss_fn=self.loss_fn,
-                    config=config,
+                    config=attack_config,
                 )
             case "strong-lset":
                 attacker = attacks.StrongLSET(
                     target_model=target_model,
                     graph=self.dataset,
                     loss_fn=self.loss_fn,
-                    config=config,
+                    config=attack_config,
                 )
             case "strong-graph-lset":
                 attacker = attacks.StrongGraphLSET(
                     target_model=target_model,
                     graph=self.dataset,
                     loss_fn=self.loss_fn,
-                    config=config,
+                    config=attack_config,
                 )
             case "graph-lset":
                 attacker = attacks.GraphLSET(
                     target_model=target_model,
                     graph=self.dataset,
                     loss_fn=self.loss_fn,
-                    config=config,
+                    config=attack_config,
                 )
             case "confidence":
                 attacker = attacks.ConfidenceAttack2(
                     target_model=target_model,
                     graph=self.dataset,
-                    config=config,
+                    config=attack_config,
                 )
             case "lira":
                 attacker = attacks.LiraOnline(
                     target_model=target_model,
                     graph=self.dataset,
                     loss_fn=self.loss_fn,
-                    config=config,
+                    config=attack_config,
                 )
             case "rmia":
                 attacker = attacks.RmiaOnline(
                     target_model=target_model,
                     graph=self.dataset,
                     loss_fn=self.loss_fn,
-                    config=config,
+                    config=attack_config,
                 )
             case _:
-                raise AttributeError(f"No attack named {config.attack}")
+                raise AttributeError(f"No attack named {attack_config.attack}")
         return attacker
 
     def get_target_nodes(self):
@@ -179,25 +179,23 @@ class MembershipInferenceExperiment:
     def parse_stats(self, stats):
         config = self.config
         table = defaultdict(list)
-        for key, value in stats.items():
-            if isinstance(value[0], float):
-                table[f'{key}'].append(utils.stat_repr(value))
+        for attack in config.attacks.keys():
+            for key, value in stats.items():
+                if isinstance(value[0], float):
+                    table[f'{key}'].append(utils.stat_repr(value))
         return pd.DataFrame(table, index=[config.name])
 
     def run_experiment(self):
         config = self.config
-        stats = defaultdict(list)
+        stats = defaultdict(lambda: defaultdict(list))
 
         for i_experiment in range(1, config.num_experiments + 1):
             print(f'Running experiment {i_experiment}/{config.num_experiments}')
 
             # Use fixed random seeds such that each experimental configuration is evaluated on the same dataset
-            set_seed(config.seed + i_experiment)
-
             _ = datasetup.random_remasked_graph(self.dataset, train_frac=config.train_frac, val_frac=config.val_frac, mutate=True)
             target_node_index = self.get_target_nodes()
             target_model = self.train_target_model(self.dataset)
-            attacker = self.get_attacker(target_model)
             target_scores = {
                 'train_acc': evaluation.evaluate_graph_model(
                     model=target_model,
@@ -214,18 +212,23 @@ class MembershipInferenceExperiment:
                     inductive_inference=config.inductive_split,
                 ),
             }
-            stats['train_acc'].append(target_scores['train_acc'])
-            stats['test_acc'].append(target_scores['test_acc'])
+            for attack, attack_dict in config.attacks.items():
 
-            truth = self.dataset.train_mask.long()[target_node_index]
-            preds = attacker.run_attack(target_node_index=target_node_index)
-            metrics = evaluation.evaluate_binary_classification(preds, truth, config.target_fpr)
-            fpr, tpr = metrics['ROC']
-            stats['FPR'].append(fpr)
-            stats['TPR'].append(tpr)
-            stats['AUC'].append(metrics['AUC'])
-            for t_fpr, t_tpr in zip(config.target_fpr, metrics['TPR@FPR']):
-                stats[f'TPR@{t_fpr}FPR'].append(t_tpr)
+                attacker = self.get_attacker(attack_dict, target_model)
+                attack = attack
+
+                stats[attack]['train_acc'].append(target_scores['train_acc'])
+                stats[attack]['test_acc'].append(target_scores['test_acc'])
+
+                truth = self.dataset.train_mask.long()[target_node_index]
+                preds = attacker.run_attack(target_node_index=target_node_index)
+                metrics = evaluation.evaluate_binary_classification(preds, truth, config.target_fpr)
+                fpr, tpr = metrics['ROC']
+                stats[attack]['FPR'].append(fpr)
+                stats[attack]['TPR'].append(tpr)
+                stats[attack]['AUC'].append(metrics['AUC'])
+                for t_fpr, t_tpr in zip(config.target_fpr, metrics['TPR@FPR']):
+                    stats[attack][f'TPR@{t_fpr}FPR'].append(t_tpr)
 
         if config.make_roc_plots:
             savepath = f'{config.savedir}/{config.name}_roc_loglog.png'
@@ -238,14 +241,26 @@ class MembershipInferenceExperiment:
         })
         return stats_df, roc_df
 
+def add_attack_parameters(params):
+    ''' Add target values as default values to attack config parameters. '''
+    properties = [
+        'model', 'epochs', 'hidden_dim', 'lr', 'weight_decay', 'optimizer', 'dropout',
+        'inductive_split', 'device', 'early_stopping', 'train_frac', 'val_frac',
+    ]
+    for attack_params in params['attacks'].values():
+        for prop in properties:
+            if prop not in attack_params:
+                attack_params[prop] = params[prop]
+
 def set_seed(seed):
     np.random.seed(seed)
-    torch.random.manual_seed(seed)
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)
 
 def main(config):
     set_seed(config['seed'])
-    config['dataset'] = config['dataset'].lower()
-    config['device'] = 'cuda' if torch.cuda.is_available() else 'cpu'
+    add_attack_parameters(config)
     mie = MembershipInferenceExperiment(config)
     return mie.run_experiment()
 
@@ -286,6 +301,7 @@ if __name__ == '__main__':
     config = vars(args)
     config['make_roc_plots'] = True
     config['name'] = config['dataset'] + '_' + config['model'] + '_' + config['attack']
+    config['device'] = 'cuda' if torch.cuda.is_available() else 'cpu'
     if config['inductive_split'] is None:
         config['inductive_split'] = True
     if config['inductive_inference'] is None:

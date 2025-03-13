@@ -16,14 +16,13 @@ def main(savedir):
     default_params['savedir'] = savedir
     stat_frames = []
     roc_frames = []
-    for name, params in config.items():
+    for experiment, params in config.items():
         params = default_params | params
-        params['name'] = name
+        params['name'] = experiment
+        params['device'] = 'cuda' if torch.cuda.is_available() else 'cpu'
+        print('Running MIA...')
         print()
-        print(f'Running MIA.')
-        for k, v in params.items():
-            print(f'{k}: {v}')
-        print()
+        print(yaml.dump(params))
         stats_df, roc_df = run_mia_2.main(params)
         stat_frames.append(stats_df)
         roc_frames.append(roc_df)
