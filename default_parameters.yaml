@@ -3,7 +3,7 @@ default-parameters:
   dataset: "cora"
   model: "GCN"
   epochs: 15
-  num_experiments: 1
+  num_audits: 1
   max_num_nodes: null
   num_target_nodes: 500 # -1 uses all nodes
   hidden_dim: [32]

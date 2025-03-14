@@ -8,7 +8,7 @@ cora-GCN:
   weight_decay: 0.0001
   dropout: 0.5
   max_num_nodes: null
-  num_experiments: 1
+  num_audits: 1
   target_fpr: [0.01, 0.005]
   attacks:
     lset:

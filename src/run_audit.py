@@ -1,4 +1,4 @@
-import run_mia_2
+import mia_audit
 
 import yaml
 import numpy as np
@@ -14,18 +14,18 @@ def main(savedir):
         default_params = yaml.safe_load(file)['default-parameters']
     Path(savedir).mkdir(parents=True, exist_ok=True)
     default_params['savedir'] = savedir
-    for experiment, params in config.items():
+    for audit, params in config.items():
         params = default_params | params
-        params['name'] = experiment
+        params['name'] = audit
         params['device'] = 'cuda' if torch.cuda.is_available() else 'cpu'
         print('Running MIA...')
         print()
         print(yaml.dump(params))
-        stat_df, roc_df = run_mia_2.main(params)
+        stat_df, roc_df = mia_audit.main(params)
         print(stat_df)
-        Path(f'{savedir}/{experiment}').mkdir(parents=True, exist_ok=True)
-        stat_df.to_csv(f'{savedir}/{experiment}/results.csv', sep=',')
-        roc_df.to_csv(f'{savedir}/{experiment}/roc.csv', sep=',')
+        Path(f'{savedir}/{audit}').mkdir(parents=True, exist_ok=True)
+        stat_df.to_csv(f'{savedir}/{audit}/results.csv', sep=',')
+        roc_df.to_csv(f'{savedir}/{audit}/roc.csv', sep=',')
 
 if __name__ == "__main__":
     torch.multiprocessing.set_start_method('spawn')

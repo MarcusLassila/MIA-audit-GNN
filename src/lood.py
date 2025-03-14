@@ -35,7 +35,7 @@ class LOOD:
 
     def train_model(self, dataset, hidden_dims=None, dropout=None, disable_tqdm=True):
         config = self.config
-        hidden_dims = config.hidden_dim_target if hidden_dims is None else hidden_dims
+        hidden_dims = config.hidden_dim if hidden_dims is None else hidden_dims
         dropout = config.dropout if dropout is None else dropout
         model = utils.fresh_model(
             model_type=self.config.model,
@@ -47,7 +47,7 @@ class LOOD:
         train_config = trainer.TrainConfig(
             criterion=Accuracy(task="multiclass", num_classes=dataset.num_classes).to(self.config.device),
             device=config.device,
-            epochs=config.epochs_target,
+            epochs=config.epochs,
             early_stopping=config.early_stopping,
             loss_fn=F.cross_entropy,
             lr=config.lr,

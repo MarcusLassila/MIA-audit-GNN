@@ -16,7 +16,7 @@ from torchmetrics import Accuracy
 from collections import defaultdict
 from pathlib import Path
 
-class MembershipInferenceExperiment:
+class MembershipInferenceAudit:
 
     def __init__(self, config):
         config = utils.Config(config)
@@ -187,12 +187,12 @@ class MembershipInferenceExperiment:
             frames.append(pd.DataFrame(table, index=[config.name + '_' + attack]))
         return pd.concat(frames)
 
-    def run_experiment(self):
+    def run_audit(self):
         config = self.config
         stats = defaultdict(lambda: defaultdict(list))
 
-        for i_experiment in range(1, config.num_experiments + 1):
-            print(f'Running experiment {i_experiment}/{config.num_experiments}')
+        for i_audit in range(1, config.num_audits + 1):
+            print(f'Running audit {i_audit}/{config.num_audits}')
             _ = datasetup.random_remasked_graph(self.dataset, train_frac=config.train_frac, val_frac=config.val_frac, mutate=True)
             target_node_index = self.get_target_nodes()
             target_model = self.train_target_model(self.dataset)
@@ -230,7 +230,7 @@ class MembershipInferenceExperiment:
         roc_df = pd.DataFrame({})
         roc_frames = []
         for attack in config.attacks.keys():
-            for i in range(config.num_experiments):
+            for i in range(config.num_audits):
                 roc_frames.append(pd.DataFrame({
                     f'FPR_{i}_{config.name}_{attack}': stats[attack]['FPR'][i],
                     f'TPR_{i}_{config.name}_{attack}': stats[attack]['TPR'][i],
@@ -258,8 +258,8 @@ def set_seed(seed):
 def main(config):
     set_seed(config['seed'])
     add_attack_parameters(config)
-    mie = MembershipInferenceExperiment(config)
-    return mie.run_experiment()
+    mie = MembershipInferenceAudit(config)
+    return mie.run_audit()
 
 if __name__ == '__main__':
     torch.multiprocessing.set_start_method('spawn')
@@ -277,7 +277,7 @@ if __name__ == '__main__':
     parser.add_argument("--dropout", default=0.5, type=float)
     parser.add_argument("--early-stopping", default=0, type=int)
     parser.add_argument("--hidden-dim", default=[32], type=lambda x: [*map(int, x.split(','))])
-    parser.add_argument("--num-experiments", default=1, type=int)
+    parser.add_argument("--num-audits", default=1, type=int)
     parser.add_argument("--target-fpr", default=[0.01], type=lambda x: [*map(float, x.split(','))])
     parser.add_argument("--optimizer", default="Adam", type=str)
     parser.add_argument("--bayes-sampling-strategy", default='model-independent', type=str)
@@ -312,7 +312,7 @@ if __name__ == '__main__':
         }
     }
     del config['attack']
-    print('Running MIA experiment v2.')
+    print('Running MIA audit...')
     print(utils.Config(config))
     print()
     stat_df, _ = main(config)
