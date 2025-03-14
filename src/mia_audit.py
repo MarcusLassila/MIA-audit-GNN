@@ -134,7 +134,7 @@ class MembershipInferenceAudit:
                     config=attack_config,
                 )
             case "confidence":
-                attacker = attacks.ConfidenceAttack2(
+                attacker = attacks.ConfidenceAttack(
                     target_model=target_model,
                     graph=self.dataset,
                     config=attack_config,
@@ -151,6 +151,13 @@ class MembershipInferenceAudit:
                     target_model=target_model,
                     graph=self.dataset,
                     loss_fn=self.loss_fn,
+                    config=attack_config,
+                )
+            case "mlp-attack":
+                attacker = attacks.MLPAttack(
+                    target_model=target_model,
+                    graph=self.dataset,
+                    queries=[0,2],
                     config=attack_config,
                 )
             case _:
@@ -242,7 +249,7 @@ def add_attack_parameters(params):
     ''' Add target values as default values to attack config parameters. '''
     properties = [
         'model', 'epochs', 'hidden_dim', 'lr', 'weight_decay', 'optimizer', 'dropout',
-        'inductive_split', 'device', 'early_stopping', 'train_frac', 'val_frac',
+        'inductive_split', 'device', 'early_stopping', 'train_frac', 'val_frac', 'batch_size',
     ]
     for attack_params in params['attacks'].values():
         for prop in properties:
@@ -271,12 +278,14 @@ if __name__ == '__main__':
     parser.add_argument("--model", default="GCN", type=str)
     parser.add_argument("--batch-size", default=32, type=int)
     parser.add_argument("--epochs", default=15, type=int)
+    parser.add_argument("--epochs-mlp", default=500, type=int)
     parser.add_argument("--hyperparam-search", action=argparse.BooleanOptionalAction)
     parser.add_argument("--lr", default=1e-2, type=float)
     parser.add_argument("--weight-decay", default=1e-4, type=float)
     parser.add_argument("--dropout", default=0.5, type=float)
     parser.add_argument("--early-stopping", default=0, type=int)
     parser.add_argument("--hidden-dim", default=[32], type=lambda x: [*map(int, x.split(','))])
+    parser.add_argument("--hidden-dim-mlp", default=[128], type=lambda x: [*map(int, x.split(','))])
     parser.add_argument("--num-audits", default=1, type=int)
     parser.add_argument("--target-fpr", default=[0.01], type=lambda x: [*map(float, x.split(','))])
     parser.add_argument("--optimizer", default="Adam", type=str)
@@ -309,6 +318,8 @@ if __name__ == '__main__':
             'num_shadow_models': config['num_shadow_models'],
             'num_sampled_graphs': config['num_sampled_graphs'],
             'bayes_sampling_strategy': config['bayes_sampling_strategy'],
+            'hidden_dim_mlp': config['hidden_dim_mlp'],
+            'epochs_mlp': config['epochs_mlp'],
         }
     }
     del config['attack']

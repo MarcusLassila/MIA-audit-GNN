@@ -377,7 +377,7 @@ def parse_dataset(root, name, max_num_nodes=None):
         case _:
             raise ValueError("Unsupported dataset!")
     if max_num_nodes is not None and dataset.x.shape[0] > max_num_nodes:
-        print(f'Sampling a subgraph of {name}.', flush=True)
+        print(f'Sampling a subgraph of {name}...', flush=True)
         nodes = random_walk_node_sample(dataset, max_num_nodes)
         edge_index, _ = subgraph(
             subset=nodes,
