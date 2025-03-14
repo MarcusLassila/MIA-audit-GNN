@@ -24,14 +24,14 @@ class TestEvaluation(unittest.TestCase):
         target_model = utils.fresh_model(
             model_type=config.model,
             num_features=dataset.num_features,
-            hidden_dims=config.hidden_dim_target,
+            hidden_dims=config.hidden_dim,
             num_classes=dataset.num_classes,
             dropout=config.dropout,
         )
         train_config = trainer.TrainConfig(
             criterion=criterion,
             device=config.device,
-            epochs=config.epochs_target,
+            epochs=config.epochs,
             early_stopping=config.early_stopping,
             loss_fn=F.cross_entropy,
             lr=config.lr,

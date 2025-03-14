@@ -28,7 +28,7 @@ class BasicMLPAttack:
         self.shadow_model = utils.fresh_model(
             model_type=config.model,
             num_features=shadow_dataset.num_features,
-            hidden_dims=config.hidden_dim_target,
+            hidden_dims=config.hidden_dim,
             num_classes=shadow_dataset.num_classes,
             dropout=config.dropout,
         )
@@ -46,7 +46,7 @@ class BasicMLPAttack:
         train_config = trainer.TrainConfig(
             criterion=Accuracy(task="multiclass", num_classes=self.shadow_dataset.num_classes).to(config.device),
             device=config.device,
-            epochs=config.epochs_target,
+            epochs=config.epochs,
             early_stopping=config.early_stopping,
             loss_fn=F.cross_entropy,
             lr=config.lr,
@@ -123,7 +123,7 @@ class ImprovedMLPAttack:
         self.shadow_model = utils.fresh_model(
             model_type=config.model,
             num_features=population.num_features,
-            hidden_dims=config.hidden_dim_target,
+            hidden_dims=config.hidden_dim,
             num_classes=population.num_classes,
             dropout=config.dropout,
         )
@@ -140,7 +140,7 @@ class ImprovedMLPAttack:
         train_config = trainer.TrainConfig(
             criterion=Accuracy(task="multiclass", num_classes=self.population.num_classes).to(config.device),
             device=config.device,
-            epochs=config.epochs_target,
+            epochs=config.epochs,
             early_stopping=config.early_stopping,
             loss_fn=F.cross_entropy,
             lr=config.lr,
@@ -263,7 +263,7 @@ class LiRA:
         train_config = trainer.TrainConfig(
             criterion=criterion,
             device=config.device,
-            epochs=config.epochs_shadow,
+            epochs=config.epochs,
             early_stopping=config.early_stopping,
             loss_fn=F.cross_entropy,
             lr=config.lr,
@@ -275,7 +275,7 @@ class LiRA:
             shadow_model = utils.fresh_model(
                 model_type=config.model,
                 num_features=shadow_dataset.num_features,
-                hidden_dims=config.hidden_dim_target,
+                hidden_dims=config.hidden_dim,
                 num_classes=shadow_dataset.num_classes,
                 dropout=config.dropout,
             )
@@ -400,7 +400,7 @@ class RMIA:
         train_config = trainer.TrainConfig(
             criterion=criterion,
             device=config.device,
-            epochs=config.epochs_shadow,
+            epochs=config.epochs,
             early_stopping=0,
             loss_fn=F.cross_entropy,
             lr=config.lr,
@@ -412,7 +412,7 @@ class RMIA:
             shadow_model = utils.fresh_model(
                 model_type=config.model,
                 num_features=shadow_dataset.num_features,
-                hidden_dims=config.hidden_dim_target,
+                hidden_dims=config.hidden_dim,
                 num_classes=shadow_dataset.num_classes,
                 dropout=config.dropout,
             )
@@ -558,7 +558,7 @@ class BayesOptimalMembershipInference:
         train_config = trainer.TrainConfig(
             criterion=criterion,
             device=config.device,
-            epochs=config.epochs_shadow,
+            epochs=config.epochs,
             early_stopping=config.early_stopping,
             loss_fn=self.loss_fn,
             lr=config.lr,
@@ -572,7 +572,7 @@ class BayesOptimalMembershipInference:
             shadow_model = utils.fresh_model(
                 model_type=config.model,
                 num_features=shadow_dataset.num_features,
-                hidden_dims=config.hidden_dim_target,
+                hidden_dims=config.hidden_dim,
                 num_classes=shadow_dataset.num_classes,
                 dropout=config.dropout,
             )
@@ -817,7 +817,7 @@ class LSET:
         train_config = trainer.TrainConfig(
             criterion=criterion,
             device=config.device,
-            epochs=config.epochs_shadow,
+            epochs=config.epochs,
             early_stopping=config.early_stopping,
             loss_fn=self.loss_fn,
             lr=config.lr,
@@ -830,7 +830,7 @@ class LSET:
             shadow_model = utils.fresh_model(
                 model_type=config.model,
                 num_features=shadow_dataset.num_features,
-                hidden_dims=config.hidden_dim_target,
+                hidden_dims=config.hidden_dim,
                 num_classes=shadow_dataset.num_classes,
                 dropout=config.dropout,
             )
@@ -886,7 +886,7 @@ class ImprovedLSET:
         train_config = trainer.TrainConfig(
             criterion=criterion,
             device=config.device,
-            epochs=config.epochs_shadow,
+            epochs=config.epochs,
             early_stopping=config.early_stopping,
             loss_fn=self.loss_fn,
             lr=config.lr,
@@ -897,7 +897,7 @@ class ImprovedLSET:
             shadow_model = utils.fresh_model(
                 model_type=config.model,
                 num_features=shadow_graph.num_features,
-                hidden_dims=config.hidden_dim_target,
+                hidden_dims=config.hidden_dim,
                 num_classes=shadow_graph.num_classes,
                 dropout=config.dropout,
             )
@@ -958,7 +958,7 @@ class StrongLSET:
         train_config = trainer.TrainConfig(
             criterion=criterion,
             device=config.device,
-            epochs=config.epochs_shadow,
+            epochs=config.epochs,
             early_stopping=config.early_stopping,
             loss_fn=self.loss_fn,
             lr=config.lr,
@@ -970,7 +970,7 @@ class StrongLSET:
             shadow_model = utils.fresh_model(
                 model_type=config.model,
                 num_features=shadow_dataset.num_features,
-                hidden_dims=config.hidden_dim_target,
+                hidden_dims=config.hidden_dim,
                 num_classes=shadow_dataset.num_classes,
                 dropout=config.dropout,
             )
@@ -1025,7 +1025,7 @@ class StrongGraphLSET:
         train_config = trainer.TrainConfig(
             criterion=criterion,
             device=config.device,
-            epochs=config.epochs_shadow,
+            epochs=config.epochs,
             early_stopping=config.early_stopping,
             loss_fn=self.loss_fn,
             lr=config.lr,
@@ -1037,7 +1037,7 @@ class StrongGraphLSET:
             shadow_model = utils.fresh_model(
                 model_type=config.model,
                 num_features=shadow_dataset.num_features,
-                hidden_dims=config.hidden_dim_target,
+                hidden_dims=config.hidden_dim,
                 num_classes=shadow_dataset.num_classes,
                 dropout=config.dropout,
             )
@@ -1117,7 +1117,7 @@ class GraphLSET:
         train_config = trainer.TrainConfig(
             criterion=criterion,
             device=config.device,
-            epochs=config.epochs_shadow,
+            epochs=config.epochs,
             early_stopping=config.early_stopping,
             loss_fn=self.loss_fn,
             lr=config.lr,
@@ -1129,7 +1129,7 @@ class GraphLSET:
             shadow_model = utils.fresh_model(
                 model_type=config.model,
                 num_features=shadow_dataset.num_features,
-                hidden_dims=config.hidden_dim_target,
+                hidden_dims=config.hidden_dim,
                 num_classes=shadow_dataset.num_classes,
                 dropout=config.dropout,
             )
@@ -1220,7 +1220,7 @@ class LiraOnline:
         train_config = trainer.TrainConfig(
             criterion=criterion,
             device=config.device,
-            epochs=config.epochs_shadow,
+            epochs=config.epochs,
             early_stopping=config.early_stopping,
             loss_fn=self.loss_fn,
             lr=config.lr,
@@ -1233,7 +1233,7 @@ class LiraOnline:
             shadow_model = utils.fresh_model(
                 model_type=config.model,
                 num_features=shadow_dataset.num_features,
-                hidden_dims=config.hidden_dim_target,
+                hidden_dims=config.hidden_dim,
                 num_classes=shadow_dataset.num_classes,
                 dropout=config.dropout,
             )
@@ -1312,7 +1312,7 @@ class RmiaOnline:
         train_config = trainer.TrainConfig(
             criterion=criterion,
             device=config.device,
-            epochs=config.epochs_shadow,
+            epochs=config.epochs,
             early_stopping=config.early_stopping,
             loss_fn=self.loss_fn,
             lr=config.lr,
@@ -1325,7 +1325,7 @@ class RmiaOnline:
             shadow_model = utils.fresh_model(
                 model_type=config.model,
                 num_features=shadow_dataset.num_features,
-                hidden_dims=config.hidden_dim_target,
+                hidden_dims=config.hidden_dim,
                 num_classes=shadow_dataset.num_classes,
                 dropout=config.dropout,
             )

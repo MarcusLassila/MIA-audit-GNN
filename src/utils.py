@@ -16,6 +16,7 @@ from time import perf_counter
 from itertools import cycle, islice, product
 import io
 from contextlib import redirect_stdout, redirect_stderr
+import yaml
 
 class Config:
 
@@ -23,7 +24,7 @@ class Config:
         self.__dict__.update(dictionary)
 
     def __str__(self):
-        return '\n'.join(f'{k}: {v}'.replace('_', ' ') for k, v in self.__dict__.items())
+        return yaml.dump(self.__dict__)
 
 def fresh_model(model_type, num_features, hidden_dims, num_classes, dropout=0.0):
     try:
