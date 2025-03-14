@@ -14,7 +14,7 @@ cora-GCN:
     lset:
       attack: "lset"
       num_shadow_models: 10
-      epochs: 50
+      epochs: 15
     confidence:
       attack: "confidence"
       hidden_dim: [64]

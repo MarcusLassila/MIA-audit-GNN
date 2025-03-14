@@ -2,11 +2,11 @@
 default-parameters:
   dataset: "cora"
   model: "GCN"
-  epochs_target: 15
+  epochs: 15
   num_experiments: 1
   max_num_nodes: null
   num_target_nodes: 500 # -1 uses all nodes
-  hidden_dim_target: [32]
+  hidden_dim: [32]
   target_fpr: 0.01
   lr: 0.01
   weight_decay: 0.0001
@@ -15,7 +15,6 @@ default-parameters:
   datadir: "./data"
   hyperparam_search: False
   optimizer: "Adam"
-  make_roc_plots: False
   inductive_split: True
   inductive_inference: True
   train_frac: 0.5

@@ -39,7 +39,7 @@ class MembershipInferenceExperiment:
             with open(f"results/hyperparams/{config.dataset}_{self.dataset.num_nodes}.txt", "w") as f:
                 f.write(log_info)
             print('Updating hyperparameter values accordingly')
-            config.lr, config.weight_decay, config.dropout, config.hidden_dim_target, config.epochs_target = opt_hyperparams.values()
+            config.lr, config.weight_decay, config.dropout, config.hidden_dim, config.epochs = opt_hyperparams.values()
         self.config = config
 
     def train_target_model(self, dataset, plot_training_results=True):
@@ -47,14 +47,14 @@ class MembershipInferenceExperiment:
         target_model = utils.fresh_model(
             model_type=self.config.model,
             num_features=dataset.num_features,
-            hidden_dims=config.hidden_dim_target,
+            hidden_dims=config.hidden_dim,
             num_classes=dataset.num_classes,
             dropout=config.dropout,
         )
         train_config = trainer.TrainConfig(
             criterion=self.criterion,
             device=config.device,
-            epochs=config.epochs_target,
+            epochs=config.epochs,
             early_stopping=config.early_stopping,
             loss_fn=self.loss_fn,
             lr=config.lr,
@@ -178,12 +178,14 @@ class MembershipInferenceExperiment:
 
     def parse_stats(self, stats):
         config = self.config
-        table = defaultdict(list)
+        frames = []
         for attack in config.attacks.keys():
-            for key, value in stats.items():
+            table = defaultdict(list)
+            for key, value in stats[attack].items():
                 if isinstance(value[0], float):
                     table[f'{key}'].append(utils.stat_repr(value))
-        return pd.DataFrame(table, index=[config.name])
+            frames.append(pd.DataFrame(table, index=[config.name + '_' + attack]))
+        return pd.concat(frames)
 
     def run_experiment(self):
         config = self.config
@@ -191,8 +193,6 @@ class MembershipInferenceExperiment:
 
         for i_experiment in range(1, config.num_experiments + 1):
             print(f'Running experiment {i_experiment}/{config.num_experiments}')
-
-            # Use fixed random seeds such that each experimental configuration is evaluated on the same dataset
             _ = datasetup.random_remasked_graph(self.dataset, train_frac=config.train_frac, val_frac=config.val_frac, mutate=True)
             target_node_index = self.get_target_nodes()
             target_model = self.train_target_model(self.dataset)
@@ -213,13 +213,9 @@ class MembershipInferenceExperiment:
                 ),
             }
             for attack, attack_dict in config.attacks.items():
-
                 attacker = self.get_attacker(attack_dict, target_model)
-                attack = attack
-
                 stats[attack]['train_acc'].append(target_scores['train_acc'])
                 stats[attack]['test_acc'].append(target_scores['test_acc'])
-
                 truth = self.dataset.train_mask.long()[target_node_index]
                 preds = attacker.run_attack(target_node_index=target_node_index)
                 metrics = evaluation.evaluate_binary_classification(preds, truth, config.target_fpr)
@@ -230,16 +226,17 @@ class MembershipInferenceExperiment:
                 for t_fpr, t_tpr in zip(config.target_fpr, metrics['TPR@FPR']):
                     stats[attack][f'TPR@{t_fpr}FPR'].append(t_tpr)
 
-        if config.make_roc_plots:
-            savepath = f'{config.savedir}/{config.name}_roc_loglog.png'
-            utils.plot_multi_roc_loglog(stats['FPR'], stats['TPR'], savepath=savepath)
-
-        stats_df = self.parse_stats(stats)
-        roc_df = pd.DataFrame({
-            f'FPR_{config.name}': stats['FPR'][0],
-            f'TPR_{config.name}': stats['TPR'][0],
-        })
-        return stats_df, roc_df
+        stat_df = self.parse_stats(stats)
+        roc_df = pd.DataFrame({})
+        roc_frames = []
+        for attack in config.attacks.keys():
+            for i in range(config.num_experiments):
+                roc_frames.append(pd.DataFrame({
+                    f'FPR_{i}_{config.name}_{attack}': stats[attack]['FPR'][i],
+                    f'TPR_{i}_{config.name}_{attack}': stats[attack]['TPR'][i],
+                }))
+        roc_df = pd.concat(roc_frames)
+        return stat_df, roc_df
 
 def add_attack_parameters(params):
     ''' Add target values as default values to attack config parameters. '''
@@ -273,14 +270,13 @@ if __name__ == '__main__':
     parser.add_argument("--inductive-inference", action=argparse.BooleanOptionalAction)
     parser.add_argument("--model", default="GCN", type=str)
     parser.add_argument("--batch-size", default=32, type=int)
-    parser.add_argument("--epochs-target", default=15, type=int)
-    parser.add_argument("--epochs-shadow", default=15, type=int)
+    parser.add_argument("--epochs", default=15, type=int)
     parser.add_argument("--hyperparam-search", action=argparse.BooleanOptionalAction)
     parser.add_argument("--lr", default=1e-2, type=float)
     parser.add_argument("--weight-decay", default=1e-4, type=float)
     parser.add_argument("--dropout", default=0.5, type=float)
     parser.add_argument("--early-stopping", default=0, type=int)
-    parser.add_argument("--hidden-dim-target", default=[32], type=lambda x: [*map(int, x.split(','))])
+    parser.add_argument("--hidden-dim", default=[32], type=lambda x: [*map(int, x.split(','))])
     parser.add_argument("--num-experiments", default=1, type=int)
     parser.add_argument("--target-fpr", default=[0.01], type=lambda x: [*map(float, x.split(','))])
     parser.add_argument("--optimizer", default="Adam", type=str)
@@ -299,13 +295,23 @@ if __name__ == '__main__':
     parser.add_argument("--seed", default=0, type=int)
     args = parser.parse_args()
     config = vars(args)
-    config['make_roc_plots'] = True
     config['name'] = config['dataset'] + '_' + config['model'] + '_' + config['attack']
     config['device'] = 'cuda' if torch.cuda.is_available() else 'cpu'
     if config['inductive_split'] is None:
         config['inductive_split'] = True
     if config['inductive_inference'] is None:
         config['inductive_inference'] = True
+    # Construct attack config.
+    # Add all default properties even if they are not applicable to the specified attack.
+    config['attacks'] = {
+        config['attack']: {
+            'attack': config['attack'],
+            'num_shadow_models': config['num_shadow_models'],
+            'num_sampled_graphs': config['num_sampled_graphs'],
+            'bayes_sampling_strategy': config['bayes_sampling_strategy'],
+        }
+    }
+    del config['attack']
     print('Running MIA experiment v2.')
     print(utils.Config(config))
     print()

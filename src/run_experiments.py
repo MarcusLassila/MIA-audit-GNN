@@ -14,8 +14,6 @@ def main(savedir):
         default_params = yaml.safe_load(file)['default-parameters']
     Path(savedir).mkdir(parents=True, exist_ok=True)
     default_params['savedir'] = savedir
-    stat_frames = []
-    roc_frames = []
     for experiment, params in config.items():
         params = default_params | params
         params['name'] = experiment
@@ -23,20 +21,18 @@ def main(savedir):
         print('Running MIA...')
         print()
         print(yaml.dump(params))
-        stats_df, roc_df = run_mia_2.main(params)
-        stat_frames.append(stats_df)
-        roc_frames.append(roc_df)
-    pd.concat(stat_frames).to_csv(f'{savedir}/results.csv', sep=',')
-    pd.concat(roc_frames).to_csv(f'{savedir}/roc.csv', sep=',')
+        stat_df, roc_df = run_mia_2.main(params)
+        print(stat_df)
+        Path(f'{savedir}/{experiment}').mkdir(parents=True, exist_ok=True)
+        stat_df.to_csv(f'{savedir}/{experiment}/results.csv', sep=',')
+        roc_df.to_csv(f'{savedir}/{experiment}/roc.csv', sep=',')
 
 if __name__ == "__main__":
     torch.multiprocessing.set_start_method('spawn')
     parser = argparse.ArgumentParser()
     parser.add_argument("--savedir", default="./temp_results", type=str)
     args = parser.parse_args()
-    main(args.savedir)
-    stat_df = pd.read_csv(f'{args.savedir}/results.csv', sep=',')
     pd.set_option('display.max_columns', None)
     pd.set_option('display.max_rows', None)
-    print(stat_df)
+    main(args.savedir)
     print('Done.')
