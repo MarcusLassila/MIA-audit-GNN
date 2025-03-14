@@ -9,15 +9,18 @@ cora-GCN:
   dropout: 0.5
   max_num_nodes: null
   num_audits: 1
-  target_fpr: [0.01, 0.005]
+  target_fpr: [0.01, 0.001]
   attacks:
     lset:
       attack: "lset"
       num_shadow_models: 10
       epochs: 15
-    confidence:
-      attack: "confidence"
-      hidden_dim: [64]
-    lira:
-      attack: "lira"
-      num_shadow_models: 10
+    mlp-attack:
+      attack: "mlp-attack"
+      mlp_attack_queries: [0]
+    mlp-attack-2:
+      attack: "mlp-attack"
+      mlp_attack_queries: [2]
+    mlp-attack-3:
+      attack: "mlp-attack"
+      mlp_attack_queries: [0, 2]

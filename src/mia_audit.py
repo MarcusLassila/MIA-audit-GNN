@@ -45,7 +45,7 @@ class MembershipInferenceAudit:
     def train_target_model(self, dataset, plot_training_results=True):
         config = self.config
         target_model = utils.fresh_model(
-            model_type=self.config.model,
+            model_type=config.model,
             num_features=dataset.num_features,
             hidden_dims=config.hidden_dim,
             num_classes=dataset.num_classes,
@@ -61,6 +61,7 @@ class MembershipInferenceAudit:
             weight_decay=config.weight_decay,
             optimizer=getattr(torch.optim, config.optimizer),
         )
+        print(f'Training a {config.model} target model on {config.dataset}...')
         train_res = trainer.train_gnn(
             model=target_model,
             dataset=dataset,
@@ -157,7 +158,6 @@ class MembershipInferenceAudit:
                 attacker = attacks.MLPAttack(
                     target_model=target_model,
                     graph=self.dataset,
-                    queries=[0,2],
                     config=attack_config,
                 )
             case _:
@@ -250,6 +250,7 @@ def add_attack_parameters(params):
     properties = [
         'model', 'epochs', 'hidden_dim', 'lr', 'weight_decay', 'optimizer', 'dropout',
         'inductive_split', 'device', 'early_stopping', 'train_frac', 'val_frac', 'batch_size',
+        'hidden_dim_mlp', 'epochs_mlp',
     ]
     for attack_params in params['attacks'].values():
         for prop in properties:
@@ -289,6 +290,7 @@ if __name__ == '__main__':
     parser.add_argument("--num-audits", default=1, type=int)
     parser.add_argument("--target-fpr", default=[0.01], type=lambda x: [*map(float, x.split(','))])
     parser.add_argument("--optimizer", default="Adam", type=str)
+    parser.add_argument("--mlp-attack-queries", default=[0], type=lambda x: [*map(int, x.split(','))])
     parser.add_argument("--bayes-sampling-strategy", default='model-independent', type=str)
     parser.add_argument("--num-shadow-models", default=10, type=int)
     parser.add_argument("--num-sampled-graphs", default=10, type=int)
@@ -304,7 +306,7 @@ if __name__ == '__main__':
     parser.add_argument("--seed", default=0, type=int)
     args = parser.parse_args()
     config = vars(args)
-    config['name'] = config['dataset'] + '_' + config['model'] + '_' + config['attack']
+    config['name'] = config['dataset'] + '_' + config['model']
     config['device'] = 'cuda' if torch.cuda.is_available() else 'cpu'
     if config['inductive_split'] is None:
         config['inductive_split'] = True
@@ -318,8 +320,7 @@ if __name__ == '__main__':
             'num_shadow_models': config['num_shadow_models'],
             'num_sampled_graphs': config['num_sampled_graphs'],
             'bayes_sampling_strategy': config['bayes_sampling_strategy'],
-            'hidden_dim_mlp': config['hidden_dim_mlp'],
-            'epochs_mlp': config['epochs_mlp'],
+            'mlp_attack_queries': list(config['mlp_attack_queries']),
         }
     }
     del config['attack']

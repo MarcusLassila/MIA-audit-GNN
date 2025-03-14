@@ -2,11 +2,14 @@
 default-parameters:
   dataset: "cora"
   model: "GCN"
+  batch_size: 32 # Only used for MLP attack
   epochs: 15
+  epochs_mlp: 500
   num_audits: 1
   max_num_nodes: null
-  num_target_nodes: 500 # -1 uses all nodes
+  num_target_nodes: -1 # -1 uses all nodes
   hidden_dim: [32]
+  hidden_dim_mlp: [128]
   target_fpr: 0.01
   lr: 0.01
   weight_decay: 0.0001

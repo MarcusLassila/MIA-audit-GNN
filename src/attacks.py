@@ -22,7 +22,7 @@ from collections import defaultdict
 
 class MLPAttack:
 
-    def __init__(self, target_model, graph, queries, config):
+    def __init__(self, target_model, graph, config):
         self.config = config
         self.target_model = target_model
         self.graph = graph
@@ -34,8 +34,8 @@ class MLPAttack:
             num_classes=graph.num_classes,
             dropout=config.dropout,
         )
-        self.queries = queries
-        dims = [graph.num_classes * len(queries), *config.hidden_dim_mlp, 2]
+        self.queries = config.mlp_attack_queries
+        dims = [graph.num_classes * len(self.queries), *config.hidden_dim_mlp, 2]
         self.attack_model = MLP(channel_list=dims, dropout=0.0)
         self.train_shadow_model()
         self.train_attack_model()
@@ -68,7 +68,7 @@ class MLPAttack:
 
     def make_attack_dataset(self):
         features = []
-        row_idx = torch.arange(self.graph.num_nodes)
+        row_idx = torch.arange(self.shadow_graph.num_nodes)
         for num_hops in self.queries:
             preds = evaluation.k_hop_query(
                 model=self.shadow_model,
@@ -94,11 +94,11 @@ class MLPAttack:
             criterion=Accuracy(task="multiclass", num_classes=2).to(config.device),
             device=config.device,
             epochs=config.epochs_mlp,
-            early_stopping=30,
+            early_stopping=100,
             loss_fn=nn.CrossEntropyLoss(),
             lr=1e-3,
             weight_decay=1e-4,
-            optimizer=getattr(torch.optim, config.optimizer),
+            optimizer=torch.optim.Adam,
         )
         trainer.train_mlp(
             model=self.attack_model,
@@ -109,14 +109,13 @@ class MLPAttack:
 
     def run_attack(self, target_node_index):
         # num_hops not used, attack always use both 0-hop and 2-hop queries
-        row_idx = torch.arange(target_node_index.shape[0])
         with torch.inference_mode():
             features = []
             for num_hops in self.queries:
                 preds = evaluation.k_hop_query(
                     model=self.target_model,
                     dataset=self.graph,
-                    query_nodes=row_idx,
+                    query_nodes=target_node_index,
                     num_hops=num_hops,
                 )
                 features.append(preds)
