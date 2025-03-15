@@ -8,19 +8,17 @@ cora-GCN:
   weight_decay: 0.0001
   dropout: 0.5
   max_num_nodes: null
-  num_audits: 1
-  target_fpr: [0.01, 0.001]
+  num_target_nodes: 500
+  num_audits: 10
+  target_fpr: [0.01, 0.005]
   attacks:
     lset:
       attack: "lset"
-      num_shadow_models: 10
-      epochs: 15
-    mlp-attack:
-      attack: "mlp-attack"
-      mlp_attack_queries: [0]
-    mlp-attack-2:
-      attack: "mlp-attack"
-      mlp_attack_queries: [2]
-    mlp-attack-3:
-      attack: "mlp-attack"
-      mlp_attack_queries: [0, 2]
+      num_shadow_models: 20
+    lira:
+      attack: "lira"
+      num_shadow_models: 20
+    rmia:
+      attack: "rmia"
+      num_shadow_models: 20
+      rmia_gamma: 2

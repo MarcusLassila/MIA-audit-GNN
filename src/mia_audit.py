@@ -28,6 +28,7 @@ class MembershipInferenceAudit:
             val_frac = config.val_frac or config.train_frac
             _ = datasetup.random_remasked_graph(self.dataset, train_frac=config.train_frac, val_frac=val_frac, mutate=True)
             opt_hyperparams = hypertuner.grid_search(
+                param_grid=config.hyperparam_grid,
                 dataset=self.dataset,
                 model_type=config.model,
                 optimizer=config.optimizer,
@@ -38,8 +39,6 @@ class MembershipInferenceAudit:
             log_info = f'dataset: {config.dataset}\nnum_nodes: {self.dataset.num_nodes}\n' + '\n'.join(f'{k}: {v}' for k, v in opt_hyperparams.items())
             with open(f"results/hyperparams/{config.dataset}_{self.dataset.num_nodes}.txt", "w") as f:
                 f.write(log_info)
-            print('Updating hyperparameter values accordingly')
-            config.lr, config.weight_decay, config.dropout, config.hidden_dim, config.epochs = opt_hyperparams.values()
         self.config = config
 
     def train_target_model(self, dataset, plot_training_results=True):
@@ -265,9 +264,12 @@ def set_seed(seed):
 
 def main(config):
     set_seed(config['seed'])
-    add_attack_parameters(config)
-    mie = MembershipInferenceAudit(config)
-    return mie.run_audit()
+    if config['hyperparam_search']:
+        MembershipInferenceAudit(config)
+    else:
+        add_attack_parameters(config)
+        mie = MembershipInferenceAudit(config)
+        return mie.run_audit()
 
 if __name__ == '__main__':
     torch.multiprocessing.set_start_method('spawn')
@@ -280,7 +282,6 @@ if __name__ == '__main__':
     parser.add_argument("--batch-size", default=32, type=int)
     parser.add_argument("--epochs", default=15, type=int)
     parser.add_argument("--epochs-mlp", default=500, type=int)
-    parser.add_argument("--hyperparam-search", action=argparse.BooleanOptionalAction)
     parser.add_argument("--lr", default=1e-2, type=float)
     parser.add_argument("--weight-decay", default=1e-4, type=float)
     parser.add_argument("--dropout", default=0.5, type=float)
@@ -308,6 +309,7 @@ if __name__ == '__main__':
     config = vars(args)
     config['name'] = config['dataset'] + '_' + config['model']
     config['device'] = 'cuda' if torch.cuda.is_available() else 'cpu'
+    config['hyperparam_search'] = False
     if config['inductive_split'] is None:
         config['inductive_split'] = True
     if config['inductive_inference'] is None:

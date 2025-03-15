@@ -94,7 +94,7 @@ class MLPAttack:
             criterion=Accuracy(task="multiclass", num_classes=2).to(config.device),
             device=config.device,
             epochs=config.epochs_mlp,
-            early_stopping=100,
+            early_stopping=50,
             loss_fn=nn.CrossEntropyLoss(),
             lr=1e-3,
             weight_decay=1e-4,

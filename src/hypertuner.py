@@ -12,6 +12,7 @@ from itertools import product
 from statistics import mean
 
 def grid_search(
+    param_grid: dict,
     dataset: Data,
     model_type: str,
     optimizer: str,
@@ -21,17 +22,10 @@ def grid_search(
     assert torch.any(dataset.val_mask)
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
     criterion = Accuracy(task="multiclass", num_classes=dataset.num_classes).to(device)
-    grid = {
-        'lr': [1e-2, 1e-3],
-        'weight_decay': [1e-5, 1e-4],
-        'dropout': [0.5],
-        'hidden_dim': [[32], [128], [512]],
-        'epochs': [20, 100, 200, 500, 1000],
-    }
-    desc=f'Running grid search over the following hyperparameters: {", ".join(grid.keys())}'
+    desc=f'Running grid search over the following hyperparameters: {", ".join(param_grid.keys())}'
     opt_hyperparams = None
     min_valid_loss = float('inf')
-    for lr, weight_decay, dropout, hidden_dim, epochs in tqdm(list(product(*grid.values())), desc=desc):
+    for lr, weight_decay, dropout, hidden_dim, epochs in tqdm(list(product(*param_grid.values())), desc=desc):
         train_config = trainer.TrainConfig(
             criterion=criterion,
             device=device,
