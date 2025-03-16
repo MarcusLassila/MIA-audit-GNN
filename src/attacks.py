@@ -570,7 +570,7 @@ class StrongLSET:
         self.loss_fn = loss_fn
         self.config = config
 
-    def train_shadow_models(self, train_mask):
+    def train_shadow_models(self, target_idx):
         shadow_models = []
         config = self.config
         criterion = Accuracy(task="multiclass", num_classes=self.graph.num_classes).to(config.device)
@@ -584,8 +584,13 @@ class StrongLSET:
             weight_decay=config.weight_decay,
             optimizer=getattr(torch.optim, config.optimizer),
         )
-        shadow_dataset = datasetup.remasked_graph(self.graph, train_mask)
+        train_mask = self.graph.train_mask.clone()
         for _ in range(config.num_shadow_models):
+            if config.use_target_node and np.random.rand() > 0.5:
+                train_mask[target_idx] = True
+            else:
+                train_mask[target_idx] = False
+            shadow_dataset = datasetup.remasked_graph(self.graph, train_mask)
             shadow_model = utils.fresh_model(
                 model_type=config.model,
                 num_features=shadow_dataset.num_features,
@@ -623,9 +628,7 @@ class StrongLSET:
     def run_attack(self, target_node_index):
         preds = torch.zeros_like(target_node_index, dtype=torch.float32)
         for i, target_idx in tqdm(enumerate(target_node_index), total=target_node_index.shape[0], desc="Attacking target nodes"):
-            train_mask = self.graph.train_mask.clone()
-            train_mask[target_idx] = False
-            shadow_models = self.train_shadow_models(train_mask)
+            shadow_models = self.train_shadow_models(target_idx)
             preds[i] = self.log_model_posterior(self.graph.x[target_idx].unsqueeze(0), self.graph.y[target_idx].unsqueeze(0), shadow_models).squeeze()
         return preds
 
@@ -637,7 +640,7 @@ class StrongGraphLSET:
         self.loss_fn = loss_fn
         self.config = config
 
-    def train_shadow_models(self, train_mask):
+    def train_shadow_models(self, target_idx):
         config = self.config
         shadow_models = []
         criterion = Accuracy(task="multiclass", num_classes=self.graph.num_classes).to(config.device)
@@ -651,8 +654,13 @@ class StrongGraphLSET:
             weight_decay=config.weight_decay,
             optimizer=getattr(torch.optim, config.optimizer),
         )
-        shadow_dataset = datasetup.remasked_graph(self.graph, train_mask)
+        train_mask = self.graph.train_mask.clone()
         for _ in range(config.num_shadow_models):
+            if config.use_target_node and np.random.rand() > 0.5:
+                train_mask[target_idx] = True
+            else:
+                train_mask[target_idx] = False
+            shadow_dataset = datasetup.remasked_graph(self.graph, train_mask)
             shadow_model = utils.fresh_model(
                 model_type=config.model,
                 num_features=shadow_dataset.num_features,
@@ -709,7 +717,7 @@ class StrongGraphLSET:
             in_subgraph = self.masked_subgraph(node_mask)
             node_mask[target_idx] = False
             out_subgraph = self.masked_subgraph(node_mask)
-            shadow_models = self.train_shadow_models(node_mask)
+            shadow_models = self.train_shadow_models(target_idx)
             preds[i] = torch.sigmoid(self.signal(shadow_models, in_subgraph, out_subgraph))
         assert preds.shape == target_node_index.shape
         return preds
