@@ -13,6 +13,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch_geometric.data import Data
 from torchmetrics import Accuracy
+from tqdm.auto import tqdm
 from collections import defaultdict
 from pathlib import Path
 
@@ -23,6 +24,8 @@ class MembershipInferenceAudit:
         self.dataset = datasetup.parse_dataset(root=config.datadir, name=config.dataset, max_num_nodes=config.max_num_nodes)
         self.criterion = Accuracy(task="multiclass", num_classes=self.dataset.num_classes).to(config.device)
         self.loss_fn = nn.CrossEntropyLoss(reduction='mean')
+        self.shadow_models = None
+        self.shadow_train_masks = None
         print(utils.graph_info(self.dataset))
         if config.hyperparam_search:
             val_frac = config.val_frac or config.train_frac
@@ -78,6 +81,42 @@ class MembershipInferenceAudit:
         )
         return target_model
 
+    def train_shadow_models(self):
+        config = self.config
+        self.shadow_models = []
+        self.shadow_train_masks = []
+        criterion = Accuracy(task="multiclass", num_classes=self.dataset.num_classes).to(config.device)
+        train_config = trainer.TrainConfig(
+            criterion=criterion,
+            device=config.device,
+            epochs=config.epochs,
+            early_stopping=config.early_stopping,
+            loss_fn=self.loss_fn,
+            lr=config.lr,
+            weight_decay=config.weight_decay,
+            optimizer=getattr(torch.optim, config.optimizer),
+        )
+        shadow_train_masks = utils.partition_training_sets(num_nodes=self.dataset.num_nodes, num_models=config.num_shadow_models)
+        for shadow_train_mask in tqdm(shadow_train_masks, total=shadow_train_masks.shape[0], desc=f"Training {config.num_shadow_models} shadow models"):
+            shadow_dataset = datasetup.remasked_graph(self.dataset, shadow_train_mask)
+            shadow_model = utils.fresh_model(
+                model_type=config.model,
+                num_features=shadow_dataset.num_features,
+                hidden_dims=config.hidden_dim,
+                num_classes=shadow_dataset.num_classes,
+                dropout=config.dropout,
+            )
+            _ = trainer.train_gnn(
+                model=shadow_model,
+                dataset=shadow_dataset,
+                config=train_config,
+                disable_tqdm=True,
+                inductive_split=config.inductive_split,
+            )
+            shadow_model.eval()
+            self.shadow_models.append(shadow_model)
+            self.shadow_train_masks.append(shadow_train_mask)
+
     def get_attacker(self, attack_dict, target_model):
         '''
         Return an instance of the attack class specified by config.attack
@@ -97,6 +136,7 @@ class MembershipInferenceAudit:
                     graph=self.dataset,
                     loss_fn=self.loss_fn,
                     config=attack_config,
+                    shadow_models=self.shadow_models,
                 )
             case "improved-lset":
                 attacker = attacks.ImprovedLSET(
@@ -145,6 +185,7 @@ class MembershipInferenceAudit:
                     graph=self.dataset,
                     loss_fn=self.loss_fn,
                     config=attack_config,
+                    shadow_models_and_masks=(self.shadow_models, self.shadow_train_masks),
                 )
             case "rmia":
                 attacker = attacks.RmiaOnline(
@@ -152,6 +193,7 @@ class MembershipInferenceAudit:
                     graph=self.dataset,
                     loss_fn=self.loss_fn,
                     config=attack_config,
+                    shadow_models=self.shadow_models,
                 )
             case "mlp-attack":
                 attacker = attacks.MLPAttack(
@@ -196,7 +238,8 @@ class MembershipInferenceAudit:
     def run_audit(self):
         config = self.config
         stats = defaultdict(lambda: defaultdict(list))
-
+        if config.pretrain_shadow_models:
+            self.train_shadow_models()
         for i_audit in range(1, config.num_audits + 1):
             print(f'Running audit {i_audit}/{config.num_audits}')
             _ = datasetup.random_remasked_graph(self.dataset, train_frac=config.train_frac, val_frac=config.val_frac, mutate=True)

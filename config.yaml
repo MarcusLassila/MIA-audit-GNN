@@ -11,14 +11,13 @@ cora-GCN:
   num_target_nodes: 500
   num_audits: 10
   target_fpr: [0.01, 0.005]
+  pretrain_shadow_models: True
+  num_shadow_models: 20
   attacks:
     lset:
       attack: "lset"
-      num_shadow_models: 20
     lira:
       attack: "lira"
-      num_shadow_models: 20
     rmia:
       attack: "rmia"
-      num_shadow_models: 20
       rmia_gamma: 2

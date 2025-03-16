@@ -419,13 +419,16 @@ class BootstrappedLSET:
 
 class LSET:
 
-    def __init__(self, target_model, graph, loss_fn, config):
+    def __init__(self, target_model, graph, loss_fn, config, shadow_models=None):
         self.target_model = target_model
         self.graph = graph
         self.loss_fn = loss_fn
         self.config = config
-        self.shadow_models = []
-        self.train_shadow_models()
+        if shadow_models is None:
+            self.shadow_models = []
+            self.train_shadow_models()
+        else:
+            self.shadow_models = shadow_models
 
     def train_shadow_models(self):
         config = self.config
@@ -473,7 +476,7 @@ class LSET:
             for shadow_model in self.shadow_models
         # Subtracting log(num_shadow_models) is not necessary for attack performance,
         # but should be there if we want to get probabilities by applying sigmoid
-        ]).logsumexp(0) - np.log(self.config.num_shadow_models)
+        ]).logsumexp(0) - np.log(len(self.shadow_models))
         return log_conf - threshold
 
     def run_attack(self, target_node_index):
@@ -823,14 +826,18 @@ class LiraOnline:
     
     EPS = 1e-6
 
-    def __init__(self, target_model, graph, loss_fn, config):
+    def __init__(self, target_model, graph, loss_fn, config, shadow_models_and_masks=None):
         self.target_model = target_model
         self.graph = graph
         self.loss_fn = loss_fn
         self.config = config
-        self.shadow_models = []
-        self.shadow_train_masks = []
-        self.train_shadow_models()
+        if shadow_models_and_masks is None:
+            self.shadow_models = []
+            self.shadow_train_masks = []
+            self.train_shadow_models()
+        else:
+            self.shadow_models = shadow_models_and_masks[0]
+            self.shadow_train_masks = shadow_models_and_masks[1]
 
     def train_shadow_models(self):
         config = self.config
@@ -846,8 +853,8 @@ class LiraOnline:
             optimizer=getattr(torch.optim, config.optimizer),
         )
         shadow_train_masks = utils.partition_training_sets(num_nodes=self.graph.num_nodes, num_models=config.num_shadow_models)
-        for shadow_nodes in tqdm(shadow_train_masks, total=shadow_train_masks.shape[0], desc=f"Training {config.num_shadow_models} shadow models for LiRA online"):
-            shadow_dataset = datasetup.remasked_graph(self.graph, shadow_nodes)
+        for shadow_train_mask in tqdm(shadow_train_masks, total=shadow_train_masks.shape[0], desc=f"Training {config.num_shadow_models} shadow models for LiRA online"):
+            shadow_dataset = datasetup.remasked_graph(self.graph, shadow_train_mask)
             shadow_model = utils.fresh_model(
                 model_type=config.model,
                 num_features=shadow_dataset.num_features,
@@ -864,7 +871,7 @@ class LiraOnline:
             )
             shadow_model.eval()
             self.shadow_models.append(shadow_model)
-            self.shadow_train_masks.append(shadow_dataset.train_mask)
+            self.shadow_train_masks.append(shadow_train_mask)
     
     def query_shadow_models(self, target_node_index, edge_index):
         hinges_in = defaultdict(list)
@@ -916,13 +923,16 @@ class LiraOnline:
 
 class RmiaOnline:
 
-    def __init__(self, target_model, graph, loss_fn, config):
+    def __init__(self, target_model, graph, loss_fn, config, shadow_models=None):
         self.target_model = target_model
         self.graph = graph
         self.loss_fn = loss_fn
         self.config = config
-        self.shadow_models = [] # Pairs of shadow models and its corresponding training mask
-        self.train_shadow_models()
+        if shadow_models is None:
+            self.shadow_models = []
+            self.train_shadow_models()
+        else:
+            self.shadow_models = shadow_models
 
     def train_shadow_models(self):
         config = self.config
@@ -967,7 +977,7 @@ class RmiaOnline:
                 preds = F.softmax(shadow_model(self.graph.x[target_node_index], empty_edge_index), dim=1)[row_idx, self.graph.y[target_node_index]]
                 p_x.append(preds)
             p_x = torch.stack(p_x)
-            assert p_x.shape == (self.config.num_shadow_models, num_target_nodes)
+            assert p_x.shape == (len(self.shadow_models), num_target_nodes)
             p_x = p_x.mean(dim=0)
             p_x_target = F.softmax(self.target_model(self.graph.x[target_node_index], empty_edge_index), dim=1)[row_idx, self.graph.y[target_node_index]]
             ratio_x = p_x_target / p_x
