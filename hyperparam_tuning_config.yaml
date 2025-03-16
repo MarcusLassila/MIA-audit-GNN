@@ -1,0 +1,23 @@
+---
+cora-GCN:
+  dataset: "cora"
+  model: "GCN"
+  epochs: 0
+  hidden_dim: [0]
+  lr: 0.0
+  weight_decay: 0.0
+  dropout: 0.0
+  max_num_nodes: null
+  num_target_nodes: 500
+  num_audits: 1
+  target_fpr: [0.01]
+  hyperparam_search: True
+  train_frac: 0.5
+  val_frac: 0.5
+  hyperparam_grid:
+    lr: [0.01]
+    weight_decay: [0.0001, 0.00001]
+    dropout: [0.0, 0.5]
+    hidden_dim: [[32], [128], [512]]
+    epochs: [20]
+  attacks: null
