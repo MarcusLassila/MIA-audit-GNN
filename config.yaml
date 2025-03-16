@@ -16,19 +16,9 @@ cora-GCN:
     lset:
       attack: "lset"
       num_shadow_models: 20
-    strong-lset-in:
+    strong-lset:
       attack: "strong-lset"
       num_shadow_models: 20
-      use_target_node: True
-    strong-lset-out:
-      attack: "strong-lset"
-      num_shadow_models: 20
-      use_target_node: False
     strong-graph-lset-in:
       attack: "strong-graph-lset"
       num_shadow_models: 20
-      use_target_node: True
-    strong-graph-lset-out:
-      attack: "strong-graph-lset"
-      num_shadow_models: 20
-      use_target_node: False

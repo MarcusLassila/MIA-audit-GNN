@@ -145,13 +145,6 @@ class MembershipInferenceAudit:
                     loss_fn=self.loss_fn,
                     config=attack_config,
                 )
-            case "bootstrapped-lset":
-                attacker = attacks.BootstrappedLSET(
-                    target_model=target_model,
-                    graph=self.dataset,
-                    loss_fn=self.loss_fn,
-                    config=attack_config,
-                )
             case "strong-lset":
                 attacker = attacks.StrongLSET(
                     target_model=target_model,
@@ -321,6 +314,7 @@ if __name__ == '__main__':
     parser.add_argument("--dataset", default="cora", type=str)
     parser.add_argument("--inductive-split", action=argparse.BooleanOptionalAction)
     parser.add_argument("--inductive-inference", action=argparse.BooleanOptionalAction)
+    parser.add_argument("--pretrain_shadow_models", action=argparse.BooleanOptionalAction)
     parser.add_argument("--model", default="GCN", type=str)
     parser.add_argument("--batch-size", default=32, type=int)
     parser.add_argument("--epochs", default=15, type=int)
