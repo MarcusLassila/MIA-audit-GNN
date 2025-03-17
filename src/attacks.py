@@ -443,8 +443,8 @@ class ImprovedLSET:
         return self.zero_hop_probs > random_ref
 
     def log_confidence(self, model, x, y):
-        empty_edge_index = torch.tensor([[],[]], dtype=torch.long).to(self.config.device)
         with torch.inference_mode():
+            empty_edge_index = torch.tensor([[],[]], dtype=torch.long).to(self.config.device)
             log_conf = F.log_softmax(model(x, empty_edge_index), dim=1)[torch.arange(x.shape[0]), y]
         return log_conf
 
@@ -511,8 +511,8 @@ class StrongLSET:
         return shadow_models
 
     def log_confidence(self, model, x, y):
-        empty_edge_index = torch.tensor([[],[]], dtype=torch.long).to(self.config.device)
         with torch.inference_mode():
+            empty_edge_index = torch.tensor([[],[]], dtype=torch.long).to(self.config.device)
             log_conf = F.log_softmax(model(x, empty_edge_index), dim=1)[torch.arange(x.shape[0]), y]
         return log_conf
 
@@ -591,16 +591,16 @@ class StrongGraphLSET:
         )
 
     def neg_loss(self, target_model, graph):
-        log_conf = F.log_softmax(target_model(graph.x, graph.edge_index), dim=1)[torch.arange(graph.num_nodes), graph.y]
-        return log_conf.sum().item()
+        with torch.inference_mode():
+            res = -self.loss_fn(target_model(graph.x, graph.edge_index), graph.y)
+        return res
 
     def signal(self, shadow_models, in_subgraph, out_subgraph):
-        with torch.inference_mode():
-            target_loss_diff = self.neg_loss(self.target_model, in_subgraph) - self.neg_loss(self.target_model, out_subgraph)
-            shadow_loss_diff = torch.tensor([
-                self.neg_loss(shadow_model, in_subgraph) - self.neg_loss(shadow_model, out_subgraph)
-                for shadow_model in shadow_models
-            ]).logsumexp(0) - np.log(len(shadow_models))
+        target_loss_diff = self.neg_loss(self.target_model, in_subgraph) - self.neg_loss(self.target_model, out_subgraph)
+        shadow_loss_diff = torch.tensor([
+            self.neg_loss(shadow_model, in_subgraph) - self.neg_loss(shadow_model, out_subgraph)
+            for shadow_model in shadow_models
+        ]).logsumexp(0) - np.log(len(shadow_models))
         return target_loss_diff - shadow_loss_diff
 
     def run_attack(self, target_node_index):
@@ -684,16 +684,16 @@ class GraphLSET:
         return self.zero_hop_probs > random_ref
 
     def neg_loss(self, target_model, graph):
-        log_conf = F.log_softmax(target_model(graph.x, graph.edge_index), dim=1)[torch.arange(graph.num_nodes), graph.y]
-        return log_conf.sum().item()
+        with torch.inference_mode():
+            res = -self.loss_fn(target_model(graph.x, graph.edge_index), y)
+        return res
 
     def signal(self, shadow_models, in_subgraph, out_subgraph):
-        with torch.inference_mode():
-            target_loss_diff = self.neg_loss(self.target_model, in_subgraph) - self.neg_loss(self.target_model, out_subgraph)
-            shadow_loss_diff = torch.tensor([
-                self.neg_loss(shadow_model, in_subgraph) - self.neg_loss(shadow_model, out_subgraph)
-                for shadow_model in shadow_models
-            ]).logsumexp(0) - np.log(self.config.num_shadow_models)
+        target_loss_diff = self.neg_loss(self.target_model, in_subgraph) - self.neg_loss(self.target_model, out_subgraph)
+        shadow_loss_diff = torch.tensor([
+            self.neg_loss(shadow_model, in_subgraph) - self.neg_loss(shadow_model, out_subgraph)
+            for shadow_model in shadow_models
+        ]).logsumexp(0) - np.log(self.config.num_shadow_models)
         return target_loss_diff - shadow_loss_diff
 
     def run_attack(self, target_node_index):
