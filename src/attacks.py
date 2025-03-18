@@ -22,10 +22,11 @@ from collections import defaultdict
 
 class MLPAttack:
 
-    def __init__(self, target_model, graph, config):
+    def __init__(self, target_model, graph, loss_fn, config):
         self.config = config
         self.target_model = target_model
         self.graph = graph
+        self.loss_fn = loss_fn
         self.shadow_graph = datasetup.random_remasked_graph(graph, train_frac=0.5, val_frac=0.0)
         self.shadow_model = utils.fresh_model(
             model_type=config.model,
@@ -38,6 +39,7 @@ class MLPAttack:
         dims = [graph.num_classes * len(self.queries), *config.hidden_dim_mlp, 2]
         self.attack_model = MLP(channel_list=dims, dropout=0.0)
         self.train_shadow_model()
+        self.shadow_model.eval()
         self.train_attack_model()
         self.attack_model.eval()
 
@@ -48,7 +50,7 @@ class MLPAttack:
             device=config.device,
             epochs=config.epochs,
             early_stopping=config.early_stopping,
-            loss_fn=F.cross_entropy,
+            loss_fn=self.loss_fn,
             lr=config.lr,
             weight_decay=config.weight_decay,
             optimizer=getattr(torch.optim, config.optimizer),
@@ -94,7 +96,7 @@ class MLPAttack:
             criterion=Accuracy(task="multiclass", num_classes=2).to(config.device),
             device=config.device,
             epochs=config.epochs_mlp,
-            early_stopping=50,
+            early_stopping=100,
             loss_fn=nn.CrossEntropyLoss(),
             lr=1e-3,
             weight_decay=1e-4,

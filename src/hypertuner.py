@@ -17,7 +17,7 @@ def grid_search(
     model_type: str,
     optimizer: str,
     inductive_split: bool,
-    num_samples: int = 5,
+    num_samples: int = 10,
 ):
     assert torch.any(dataset.val_mask)
     device = 'cuda' if torch.cuda.is_available() else 'cpu'

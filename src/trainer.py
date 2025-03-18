@@ -128,5 +128,6 @@ def train_mlp(model, train_loader, valid_loader, config: TrainConfig):
             early_stopping_counter += 1
             if early_stopping_counter == config.early_stopping:
                 break
-    model = best_model
+    if config.early_stopping:
+        model = best_model
     return res

@@ -57,7 +57,7 @@ def k_hop_query(model, dataset, query_nodes, num_hops=0, inductive_split=False):
         query_nodes = torch.tensor(query_nodes, dtype=torch.int64)
     if query_nodes.shape == ():
         query_nodes.unsqueeze(dim=0)
-    edge_mask = torch.ones(dataset.edge_index.shape[1], dtype=torch.bool)
+    edge_mask = torch.ones(dataset.edge_index.shape[1], dtype=torch.bool).to(dataset.edge_index.device)
     if inductive_split:
         edge_mask = edge_mask & dataset.inductive_mask
     edge_index = dataset.edge_index[:, edge_mask]

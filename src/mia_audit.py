@@ -39,7 +39,7 @@ class MembershipInferenceAudit:
             )
             print(f'Hyperparameter search results: {opt_hyperparams}')
             Path("results/hyperparams").mkdir(parents=True, exist_ok=True)
-            log_info = f'dataset: {config.dataset}\nnum_nodes: {self.dataset.num_nodes}\n' + '\n'.join(f'{k}: {v}' for k, v in opt_hyperparams.items())
+            log_info = f'dataset: {config.dataset}\nmodel: {config.model}\nnum_nodes: {self.dataset.num_nodes}\n' + '\n'.join(f'{k}: {v}' for k, v in opt_hyperparams.items())
             with open(f"results/hyperparams/{config.dataset}_{self.dataset.num_nodes}.txt", "w") as f:
                 f.write(log_info)
         self.config = config
@@ -192,6 +192,7 @@ class MembershipInferenceAudit:
                 attacker = attacks.MLPAttack(
                     target_model=target_model,
                     graph=self.dataset,
+                    loss_fn=self.loss_fn,
                     config=attack_config,
                 )
             case _:
@@ -238,6 +239,7 @@ class MembershipInferenceAudit:
             _ = datasetup.random_remasked_graph(self.dataset, train_frac=config.train_frac, val_frac=config.val_frac, mutate=True)
             target_node_index = self.get_target_nodes()
             target_model = self.train_target_model(self.dataset)
+            target_model.eval()
             target_scores = {
                 'train_acc': evaluation.evaluate_graph_model(
                     model=target_model,
