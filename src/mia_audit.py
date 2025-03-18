@@ -129,6 +129,7 @@ class MembershipInferenceAudit:
                     graph=self.dataset,
                     loss_fn=self.loss_fn,
                     config=attack_config,
+                    shadow_models=self.shadow_models,
                 )
             case "lset":
                 attacker = attacks.LSET(
@@ -287,7 +288,7 @@ def add_attack_parameters(params):
     properties = [
         'model', 'epochs', 'hidden_dim', 'lr', 'weight_decay', 'optimizer', 'dropout',
         'inductive_split', 'device', 'early_stopping', 'train_frac', 'val_frac', 'batch_size',
-        'hidden_dim_mlp', 'epochs_mlp',
+        'hidden_dim_mlp', 'epochs_mlp', 'num_processes',
     ]
     for attack_params in params['attacks'].values():
         for prop in properties:

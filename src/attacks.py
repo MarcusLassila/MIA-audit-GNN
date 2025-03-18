@@ -152,7 +152,7 @@ class BayesOptimalMembershipInference:
             self.log_p = log_p
             self.subgraph = subgraph
 
-    def __init__(self, target_model, graph, loss_fn, config):
+    def __init__(self, target_model, graph, loss_fn, config, shadow_models=None):
         self.target_model = target_model
         self.graph = graph
         self.loss_fn = loss_fn
@@ -166,9 +166,11 @@ class BayesOptimalMembershipInference:
             )
             self.zero_hop_probs = self.zero_hop_attacker.run_attack(torch.arange(self.graph.num_nodes)).sigmoid()
             self.shadow_models = self.zero_hop_attacker.shadow_models
-        else:
+        elif shadow_models is None:
             self.shadow_models = []
             self.train_shadow_models()
+        else:
+            self.shadow_models = shadow_models
 
     def train_shadow_models(self):
         config = self.config
@@ -239,19 +241,19 @@ class BayesOptimalMembershipInference:
         mask = torch.rand(size=(self.graph.num_nodes,)) < frac_ones
         return mask.to(self.config.device)
 
-    def neg_loss(self, target_model, graph):
-        log_conf = F.log_softmax(target_model(graph.x, graph.edge_index), dim=1)[torch.arange(graph.num_nodes), graph.y]
-        return log_conf.sum().item()
+    def neg_loss(self, model, graph):
+        with torch.inference_mode():
+            res = -self.loss_fn(model(graph.x, graph.edge_index), graph.y)
+        return res
 
     def log_model_posterior(self, subgraph):
         # Only loss values over the k-hop neighborhood is necessary (for a k-layer GNN)
         # but we compute loss values over all node for simplicity
-        with torch.inference_mode():
-            neg_loss_term = self.neg_loss(self.target_model, subgraph)
-            log_Z_term = torch.tensor([
-                self.neg_loss(shadow_model, subgraph)
-                for shadow_model in self.shadow_models
-            ]).logsumexp(0) - np.log(self.config.num_shadow_models)
+        neg_loss_term = self.neg_loss(self.target_model, subgraph)
+        log_Z_term = torch.tensor([
+            self.neg_loss(shadow_model, subgraph)
+            for shadow_model in self.shadow_models
+        ]).logsumexp(0) - np.log(len(self.shadow_models))
         return neg_loss_term - log_Z_term
 
     def run_attack(self, target_node_index, prior=0.5):
@@ -312,15 +314,21 @@ class BayesOptimalMembershipInference:
                 node_mask = sampling_state.mask
                 subgraph_in = sampling_state.subgraph
                 log_posterior_in = sampling_state.log_p
+            case 'strong':
+                node_mask = self.graph.train_mask.clone()
+                subgraph_in = self.masked_subgraph(node_mask)
+                log_posterior_in = self.log_model_posterior(subgraph=subgraph_in)
+            case _:
+                raise ValueError(f'Unsupported sampling strategy: {self.config.bayes_sampling_strategy}')
 
         for i, node_idx in enumerate(target_node_index):
             node_mask[node_idx] = not node_mask[node_idx]
             subgraph_out = self.masked_subgraph(node_mask)
             log_posterior_out = self.log_model_posterior(subgraph=subgraph_out)
             if node_mask[node_idx]:
-                sampling_state.score[sample_idx][i] = torch.sigmoid(log_posterior_out - log_posterior_in + np.log(prior) - np.log(1 - prior))
+                sampling_state.score[sample_idx][i] = log_posterior_out - log_posterior_in + np.log(prior) - np.log(1 - prior)
             else:
-                sampling_state.score[sample_idx][i] = torch.sigmoid(log_posterior_in - log_posterior_out + np.log(prior) - np.log(1 - prior))
+                sampling_state.score[sample_idx][i] = log_posterior_in - log_posterior_out + np.log(prior) - np.log(1 - prior)
             node_mask[node_idx] = not node_mask[node_idx]
 
 class LSET:
@@ -542,6 +550,7 @@ class StrongGraphLSET:
         self.graph = graph
         self.loss_fn = loss_fn
         self.config = config
+        self.beta = 1e3
 
     def train_shadow_models(self, target_idx):
         config = self.config
@@ -592,9 +601,9 @@ class StrongGraphLSET:
             num_classes=self.graph.num_classes,
         )
 
-    def neg_loss(self, target_model, graph):
+    def neg_loss(self, model, graph):
         with torch.inference_mode():
-            res = -self.loss_fn(target_model(graph.x, graph.edge_index), graph.y)
+            res = -self.loss_fn(model(graph.x, graph.edge_index), graph.y) * self.beta
         return res
 
     def signal(self, shadow_models, in_subgraph, out_subgraph):
@@ -614,7 +623,7 @@ class StrongGraphLSET:
             node_mask[target_idx] = False
             out_subgraph = self.masked_subgraph(node_mask)
             shadow_models = self.train_shadow_models(target_idx)
-            preds[i] = torch.sigmoid(self.signal(shadow_models, in_subgraph, out_subgraph))
+            preds[i] = self.signal(shadow_models, in_subgraph, out_subgraph)
         assert preds.shape == target_node_index.shape
         return preds
 
@@ -685,9 +694,9 @@ class GraphLSET:
         random_ref = torch.rand(self.graph.num_nodes).to(self.config.device)
         return self.zero_hop_probs > random_ref
 
-    def neg_loss(self, target_model, graph):
+    def neg_loss(self, model, graph):
         with torch.inference_mode():
-            res = -self.loss_fn(target_model(graph.x, graph.edge_index), y)
+            res = -self.loss_fn(model(graph.x, graph.edge_index), graph.y)
         return res
 
     def signal(self, shadow_models, in_subgraph, out_subgraph):
