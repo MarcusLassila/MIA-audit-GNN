@@ -1,0 +1,8 @@
+dataset: cora
+model: GCN
+num_nodes: 2708
+lr: 0.01
+weight_decay: 1e-05
+dropout: 0.0
+hidden_dim: [32]
+epochs: 20

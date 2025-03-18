@@ -17,7 +17,7 @@ class TrainConfig:
     weight_decay: float
     optimizer: torch.optim.Optimizer
 
-def train_step_gnn(model, dataset, optimizer, loss_fn, criterion, edge_mask=None):
+def train_step_gnn(model, dataset, optimizer, loss_fn, criterion, num_train_nodes, edge_mask=None):
     model.train()
     optimizer.zero_grad()
     if edge_mask is not None:
@@ -28,9 +28,9 @@ def train_step_gnn(model, dataset, optimizer, loss_fn, criterion, edge_mask=None
     score = criterion(out[dataset.train_mask].argmax(dim=1), dataset.y[dataset.train_mask])
     loss.backward()
     optimizer.step()
-    return loss.item() / dataset.train_mask.sum().item(), score.item()
+    return loss.item() / num_train_nodes, score.item()
 
-def valid_step_gnn(model, dataset, loss_fn, criterion, edge_mask=None):
+def valid_step_gnn(model, dataset, loss_fn, criterion, num_val_nodes, edge_mask=None):
     model.eval()
     with torch.inference_mode():
         if edge_mask is not None:
@@ -39,7 +39,7 @@ def valid_step_gnn(model, dataset, loss_fn, criterion, edge_mask=None):
             out = model(dataset.x, dataset.edge_index)
         loss = loss_fn(out[dataset.val_mask], dataset.y[dataset.val_mask])
         score = criterion(out[dataset.val_mask].argmax(dim=1), dataset.y[dataset.val_mask])
-    return loss.item() / dataset.val_mask.sum().item(), score.item()
+    return loss.item() / num_val_nodes, score.item()
 
 def train_gnn(model, dataset, config: TrainConfig, disable_tqdm=False, inductive_split=True):
     model.to(config.device)
@@ -48,7 +48,9 @@ def train_gnn(model, dataset, config: TrainConfig, disable_tqdm=False, inductive
         edge_mask = dataset.inductive_mask
     else:
         edge_mask = None
-    if config.early_stopping and dataset.val_mask.sum().item() == 0:
+    num_train_nodes = dataset.train_mask.sum().item()
+    num_val_node = dataset.val_mask.sum().item()
+    if config.early_stopping and num_val_node == 0:
         raise Exception('Early stopping not possible without a validation set!')
     optimizer = config.optimizer(model.parameters(), lr=config.lr, weight_decay=config.weight_decay)
     loss_fn, criterion = config.loss_fn, config.criterion
@@ -57,14 +59,14 @@ def train_gnn(model, dataset, config: TrainConfig, disable_tqdm=False, inductive
     min_loss = float('inf')
     best_model = None
     for _ in tqdm(range(config.epochs), disable=disable_tqdm, desc=f"Training {model.__class__.__name__} on {config.device}"):
-        train_loss, train_score = train_step_gnn(model, dataset, optimizer, loss_fn, criterion, edge_mask)
+        train_loss, train_score = train_step_gnn(model, dataset, optimizer, loss_fn, criterion, num_train_nodes, edge_mask)
         res['train_loss'].append(train_loss)
         res['train_score'].append(train_score)
-        if dataset.val_mask.sum().item() > 0:
-            valid_loss, valid_score = valid_step_gnn(model, dataset, loss_fn, criterion, edge_mask)
+        if num_val_node > 0:
+            valid_loss, valid_score = valid_step_gnn(model, dataset, loss_fn, criterion, num_val_node, edge_mask)
             res['valid_loss'].append(valid_loss)
             res['valid_score'].append(valid_score)
-            if valid_loss < min_loss:
+            if config.early_stopping > 0 and valid_loss < min_loss:
                 min_loss = valid_loss
                 best_model = deepcopy(model)
                 early_stopping_counter = 0

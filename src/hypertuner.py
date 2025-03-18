@@ -25,6 +25,7 @@ def grid_search(
     desc=f'Running grid search over the following hyperparameters: {", ".join(param_grid.keys())}'
     opt_hyperparams = None
     min_valid_loss = float('inf')
+    final_performance = {}
     for lr, weight_decay, dropout, hidden_dim, epochs in tqdm(list(product(*param_grid.values())), desc=desc):
         train_config = trainer.TrainConfig(
             criterion=criterion,
@@ -37,6 +38,8 @@ def grid_search(
             optimizer=getattr(torch.optim, optimizer),
         )
         valid_losses = []
+        valid_scores = []
+        train_scores = []
         for _ in range(num_samples):
             model = utils.fresh_model(
                 model_type=model_type,
@@ -45,15 +48,19 @@ def grid_search(
                 num_classes=dataset.num_classes,
                 dropout=dropout,
             )
-            valid_loss = min(trainer.train_gnn(
+            train_res = trainer.train_gnn(
                 model=model,
                 dataset=dataset,
                 config=train_config,
                 disable_tqdm=True,
                 inductive_split=inductive_split,
-            )['valid_loss'])
-            valid_losses.append(valid_loss)
+            )
+            valid_losses.append(train_res['valid_loss'][-1])
+            valid_scores.append(train_res['valid_score'][-1])
+            train_scores.append(train_res['train_score'][-1])
         average_valid_loss = mean(valid_losses)
+        average_valid_score = mean(valid_scores)
+        average_gen_gap = mean(train_scores) - average_valid_score
         if average_valid_loss < min_valid_loss:
             min_valid_loss = average_valid_loss
             opt_hyperparams = {
@@ -61,6 +68,11 @@ def grid_search(
                 'weight_decay': weight_decay,
                 'dropout': dropout,
                 'hidden_dim': hidden_dim,
-                'epochs': epochs
+                'epochs': epochs,
             }
+            final_performance = {
+                'gen_gap': average_gen_gap,
+                'valid_score': average_valid_score,
+            }
+    print('Final validation results:', final_performance)
     return opt_hyperparams

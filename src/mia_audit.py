@@ -44,7 +44,7 @@ class MembershipInferenceAudit:
                 f.write(log_info)
         self.config = config
 
-    def train_target_model(self, dataset, plot_training_results=True):
+    def train_target_model(self, dataset):
         config = self.config
         target_model = utils.fresh_model(
             model_type=config.model,
@@ -64,7 +64,7 @@ class MembershipInferenceAudit:
             optimizer=getattr(torch.optim, config.optimizer),
         )
         print(f'Training a {config.model} target model on {config.dataset}...')
-        train_res = trainer.train_gnn(
+        _ = trainer.train_gnn(
             model=target_model,
             dataset=dataset,
             config=train_config,
@@ -75,9 +75,6 @@ class MembershipInferenceAudit:
             dataset=dataset,
             criterion=train_config.criterion,
             inductive_inference=config.inductive_split,
-            training_results=train_res if plot_training_results else None,
-            plot_name="target_model",
-            savedir=config.savedir,
         )
         return target_model
 
