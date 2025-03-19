@@ -20,6 +20,13 @@ from tqdm.auto import tqdm
 import copy
 from collections import defaultdict
 
+import random
+def seed_worker(seed):
+    """Set seed for reproducibility within each process."""
+    torch.manual_seed(seed)
+    np.random.seed(seed)
+    random.seed(seed)
+    
 class MLPAttack:
 
     def __init__(self, target_model, graph, loss_fn, config):
@@ -627,27 +634,53 @@ class StrongGraphLSET:
             preds[i] = self.signal(shadow_models, in_subgraph, out_subgraph)
         assert preds.shape == target_node_index.shape
         return preds
+    
+    
+
 
     def run_attack_mp(self, target_node_index):
         config = self.config
-        preds = torch.zeros_like(target_node_index, dtype=torch.float32).share_memory_()
+        #preds = torch.zeros_like(target_node_index, dtype=torch.float32).share_memory_()
+        preds = [None] * target_node_index.shape[0]
+
         desc = f"Attacking target nodes using StrongGraphLSET using {config.num_processes} processes"
-        pred_idx = 0
-        for _ in tqdm(range(target_node_index.shape[0] // config.num_processes + 1), desc=desc):
-            processes = []
-            for _ in range(config.num_processes):
-                p = mp.Process(target=self.compute_pred, args=(target_node_index[pred_idx], pred_idx, preds))
-                pred_idx += 1
-                p.start()
-                processes.append(p)
-                if pred_idx >= target_node_index.shape[0]:
-                    break
-            for p in processes:
-                p.join()
+        
+        args = [(self, target_node_index[i]) for i in range(target_node_index.shape[0])]
+        from multiprocessing import Pool
+        with Pool(config.num_processes) as pool:
+            results = list(pool.starmap(StrongGraphLSET.compute_pred, args))
+
+        preds = torch.stack(results)  # Convert list to tensor if needed
+
         assert preds.shape == target_node_index.shape
         return preds
 
-    def compute_pred(self, target_idx, pred_idx, preds):
+    # def run_attack_mp(self, target_node_index):
+    #     config = self.config
+    #     preds = torch.zeros_like(target_node_index, dtype=torch.float32).share_memory_()
+    #     desc = f"Attacking target nodes using StrongGraphLSET using {config.num_processes} processes"
+    #     pred_idx = 0
+    #     for _ in tqdm(range(target_node_index.shape[0] // config.num_processes + 1), desc=desc):
+    #         processes = []
+    #         for _ in range(config.num_processes):
+                
+    #             p = mp.Process(target=self.compute_pred, args=(target_node_index[pred_idx], 
+    #                                                            pred_idx, preds))
+                
+    #             pred_idx += 1
+    #             print("entering mp loop")
+    #             p.start()
+    #             print("exiting mp loop")
+    #             processes.append(p)
+    #             if pred_idx >= target_node_index.shape[0]:
+    #                 break
+    #         for p in processes:
+    #             p.join()
+    #     assert preds.shape == target_node_index.shape
+    #     return preds
+
+    def compute_pred(self, target_idx):
+        seed_worker(target_idx.item())
         node_mask = self.graph.train_mask.clone()
         node_mask[target_idx] = True
         in_subgraph = self.masked_subgraph(node_mask)
@@ -655,7 +688,7 @@ class StrongGraphLSET:
         out_subgraph = self.masked_subgraph(node_mask)
         shadow_models = self.train_shadow_models(target_idx, node_mask)
         sig = self.signal(shadow_models, in_subgraph, out_subgraph)
-        preds[pred_idx] = sig
+        return sig
 
 class GraphLSET:
 

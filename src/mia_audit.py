@@ -259,7 +259,11 @@ class MembershipInferenceAudit:
                 stats[attack]['train_acc'].append(target_scores['train_acc'])
                 stats[attack]['test_acc'].append(target_scores['test_acc'])
                 truth = self.dataset.train_mask.long()[target_node_index]
+                import time
+                start_time = time.time()  # Record start time
                 preds = attacker.run_attack(target_node_index=target_node_index)
+                end_time = time.time()  # Record end time
+                print(f"Time taken for attack: {end_time - start_time}")
                 metrics = evaluation.evaluate_binary_classification(preds, truth, config.target_fpr)
                 fpr, tpr = metrics['ROC']
                 stats[attack]['FPR'].append(fpr)
