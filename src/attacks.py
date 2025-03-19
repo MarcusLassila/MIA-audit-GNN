@@ -537,11 +537,23 @@ class StrongLSET:
         return log_conf - threshold
 
     def run_attack(self, target_node_index):
+        if self.config.num_processes > 1:
+            return self.run_attack_mp(target_node_index)
         preds = torch.zeros_like(target_node_index, dtype=torch.float32)
         for i, target_idx in tqdm(enumerate(target_node_index), total=target_node_index.shape[0], desc="Attacking target nodes"):
-            shadow_models = self.train_shadow_models(target_idx)
-            preds[i] = self.log_model_posterior(self.graph.x[target_idx].unsqueeze(0), self.graph.y[target_idx].unsqueeze(0), shadow_models).squeeze()
+            preds[i] = self.compute_pred(target_idx)
         return preds
+
+    def run_attack_mp(self, target_node_index):
+        desc = f"Attacking target nodes using StrongLSET with {self.config.num_processes} processes"
+        with mp.Pool(self.config.num_processes) as pool:
+            preds = torch.tensor(pool.map(self.compute_pred, tqdm(target_node_index, desc=desc)))
+        assert preds.shape == target_node_index.shape
+        return preds
+
+    def compute_pred(self, target_idx):
+        shadow_models = self.train_shadow_models(target_idx)
+        return self.log_model_posterior(self.graph.x[target_idx].unsqueeze(0), self.graph.y[target_idx].unsqueeze(0), shadow_models).squeeze()
 
 class StrongGraphLSET:
 
@@ -617,45 +629,27 @@ class StrongGraphLSET:
         if self.config.num_processes > 1:
             return self.run_attack_mp(target_node_index)
         preds = torch.zeros_like(target_node_index, dtype=torch.float32)
-        for i, target_idx in tqdm(enumerate(target_node_index), total=target_node_index.shape[0], desc="Attacking target nodes using StrongGraphLSET"):
-            node_mask = self.graph.train_mask.clone()
-            node_mask[target_idx] = True
-            in_subgraph = self.masked_subgraph(node_mask)
-            node_mask[target_idx] = False
-            out_subgraph = self.masked_subgraph(node_mask)
-            shadow_models = self.train_shadow_models(target_idx, node_mask)
-            preds[i] = self.signal(shadow_models, in_subgraph, out_subgraph)
+        desc = "Attacking target nodes using StrongGraphLSET"
+        for i, target_idx in tqdm(enumerate(target_node_index), total=target_node_index.shape[0], desc=desc):
+            preds[i] = self.compute_pred(target_idx)
         assert preds.shape == target_node_index.shape
         return preds
 
     def run_attack_mp(self, target_node_index):
-        config = self.config
-        preds = torch.zeros_like(target_node_index, dtype=torch.float32).share_memory_()
-        desc = f"Attacking target nodes using StrongGraphLSET using {config.num_processes} processes"
-        pred_idx = 0
-        for _ in tqdm(range(target_node_index.shape[0] // config.num_processes + 1), desc=desc):
-            processes = []
-            for _ in range(config.num_processes):
-                p = mp.Process(target=self.compute_pred, args=(target_node_index[pred_idx], pred_idx, preds))
-                pred_idx += 1
-                p.start()
-                processes.append(p)
-                if pred_idx >= target_node_index.shape[0]:
-                    break
-            for p in processes:
-                p.join()
+        desc = f"Attacking target nodes using StrongGraphLSET with {self.config.num_processes} processes"
+        with mp.Pool(self.config.num_processes) as pool:
+            preds = torch.tensor(pool.map(self.compute_pred, tqdm(target_node_index, desc=desc)))
         assert preds.shape == target_node_index.shape
         return preds
 
-    def compute_pred(self, target_idx, pred_idx, preds):
+    def compute_pred(self, target_idx):
         node_mask = self.graph.train_mask.clone()
         node_mask[target_idx] = True
         in_subgraph = self.masked_subgraph(node_mask)
         node_mask[target_idx] = False
         out_subgraph = self.masked_subgraph(node_mask)
         shadow_models = self.train_shadow_models(target_idx, node_mask)
-        sig = self.signal(shadow_models, in_subgraph, out_subgraph)
-        preds[pred_idx] = sig
+        return self.signal(shadow_models, in_subgraph, out_subgraph)
 
 class GraphLSET:
 
