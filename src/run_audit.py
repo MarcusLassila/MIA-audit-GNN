@@ -29,7 +29,7 @@ def main(savedir):
         roc_df.to_csv(f'{savedir}/{audit}/roc.csv', sep=',')
 
 if __name__ == "__main__":
-    torch.multiprocessing.set_start_method('spawn')
+    torch.multiprocessing.set_start_method("spawn")
     parser = argparse.ArgumentParser()
     parser.add_argument("--savedir", default="./temp_results", type=str)
     args = parser.parse_args()
