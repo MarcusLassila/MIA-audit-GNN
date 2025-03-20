@@ -764,18 +764,18 @@ class LiraOnline:
     
     EPS = 1e-6
 
-    def __init__(self, target_model, graph, loss_fn, config, shadow_models_and_masks=None):
+    def __init__(self, target_model, graph, loss_fn, config, shadow_models=None, shadow_train_masks=None):
         self.target_model = target_model
         self.graph = graph
         self.loss_fn = loss_fn
         self.config = config
-        if shadow_models_and_masks is None:
+        if shadow_models is None or shadow_train_masks is None:
             self.shadow_models = []
             self.shadow_train_masks = []
             self.train_shadow_models()
         else:
-            self.shadow_models = shadow_models_and_masks[0]
-            self.shadow_train_masks = shadow_models_and_masks[1]
+            self.shadow_models = shadow_models
+            self.shadow_train_masks = shadow_train_masks
 
     def train_shadow_models(self):
         config = self.config

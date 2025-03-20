@@ -176,7 +176,8 @@ class MembershipInferenceAudit:
                     graph=self.dataset,
                     loss_fn=self.loss_fn,
                     config=attack_config,
-                    shadow_models_and_masks=(self.shadow_models, self.shadow_train_masks),
+                    shadow_models=self.shadow_models,
+                    shadow_train_masks=self.shadow_train_masks,
                 )
             case "rmia":
                 attacker = attacks.RmiaOnline(
