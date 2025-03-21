@@ -27,23 +27,15 @@ class MLPAttack:
         self.target_model = target_model
         self.graph = graph
         self.loss_fn = loss_fn
-        self.shadow_graph = datasetup.random_remasked_graph(graph, train_frac=0.5, val_frac=0.0)
-        self.shadow_model = utils.fresh_model(
-            model_type=config.model,
-            num_features=graph.num_features,
-            hidden_dims=config.hidden_dim,
-            num_classes=graph.num_classes,
-            dropout=config.dropout,
-        )
+        self.shadow_models = []
+        self.shadow_graphs = []
         self.queries = config.mlp_attack_queries
         dims = [graph.num_classes * len(self.queries), *config.hidden_dim_mlp, 2]
         self.attack_model = MLP(channel_list=dims, dropout=0.0)
-        self.train_shadow_model()
-        self.shadow_model.eval()
+        self.train_shadow_models()
         self.train_attack_model()
-        self.attack_model.eval()
 
-    def train_shadow_model(self):
+    def train_shadow_models(self):
         config = self.config
         train_config = trainer.TrainConfig(
             criterion=Accuracy(task="multiclass", num_classes=self.graph.num_classes).to(config.device),
@@ -55,33 +47,47 @@ class MLPAttack:
             weight_decay=config.weight_decay,
             optimizer=getattr(torch.optim, config.optimizer),
         )
-        _ = trainer.train_gnn(
-            model=self.shadow_model,
-            dataset=self.shadow_graph,
-            config=train_config,
-            inductive_split=config.inductive_split,
-        )
-        evaluation.evaluate_graph_training(
-            model=self.shadow_model,
-            dataset=self.shadow_graph,
-            criterion=train_config.criterion,
-            inductive_inference=True,
-        )
+        for _ in tqdm(range(config.num_shadow_models), desc=f'Training {config.num_shadow_models} shadow models for MLP attack'):
+            shadow_graph = datasetup.random_remasked_graph(self.graph, train_frac=0.5, val_frac=0.0)
+            shadow_model = utils.fresh_model(
+                model_type=config.model,
+                num_features=shadow_graph.num_features,
+                hidden_dims=config.hidden_dim,
+                num_classes=shadow_graph.num_classes,
+                dropout=config.dropout,
+            )
+            _ = trainer.train_gnn(
+                model=shadow_model,
+                dataset=shadow_graph,
+                config=train_config,
+                inductive_split=config.inductive_split,
+                disable_tqdm=True,
+            )
+            shadow_model.eval()
+            self.shadow_models.append(shadow_model)
+            self.shadow_graphs.append(shadow_graph)
 
     def make_attack_dataset(self):
         features = []
-        row_idx = torch.arange(self.shadow_graph.num_nodes)
-        for num_hops in self.queries:
-            preds = evaluation.k_hop_query(
-                model=self.shadow_model,
-                dataset=self.shadow_graph,
-                query_nodes=row_idx,
-                num_hops=num_hops,
-                inductive_split=True,
-            )
-            features.append(preds)
-        features = torch.cat(features, dim=1).cpu()
-        labels = self.shadow_graph.train_mask.long().cpu()
+        labels = []
+        for shadow_model, shadow_graph in zip(self.shadow_models, self.shadow_graphs):
+            feat = []
+            row_idx = torch.arange(shadow_graph.num_nodes)
+            for num_hops in self.queries:
+                preds = evaluation.k_hop_query(
+                    model=shadow_model,
+                    dataset=shadow_graph,
+                    query_nodes=row_idx,
+                    num_hops=num_hops,
+                    inductive_split=True,
+                )
+                feat.append(preds)
+            feat = torch.cat(feat, dim=1).cpu()
+            lbl = shadow_graph.train_mask.long().cpu()
+            features.append(feat)
+            labels.append(lbl)
+        features = torch.cat(features, dim=0)
+        labels = torch.cat(labels, dim=0)
         train_X, test_X, train_y, test_y = train_test_split(features, labels, test_size=0.2, stratify=labels)
         train_dataset = TensorDataset(train_X, train_y)
         test_dataset = TensorDataset(test_X, test_y)
@@ -108,6 +114,7 @@ class MLPAttack:
             valid_loader=valid_loader,
             config=train_config,
         )
+        self.attack_model.eval()
 
     def run_attack(self, target_node_index):
         # num_hops not used, attack always use both 0-hop and 2-hop queries
@@ -256,7 +263,7 @@ class BayesOptimalMembershipInference:
         ]).logsumexp(0) - np.log(len(self.shadow_models))
         return neg_loss_term - log_Z_term
 
-    def run_attack(self, target_node_index, prior=0.5):
+    def run_attack(self, target_node_index):
         config = self.config
         do_multiprocessing = config.num_processes > 1
         sampling_state = BayesOptimalMembershipInference.SamplingState(
@@ -266,25 +273,24 @@ class BayesOptimalMembershipInference:
             multiprocessing=do_multiprocessing
         )
         if do_multiprocessing:
-            return self.run_attack_mp(target_node_index, sampling_state, prior)
+            return self.run_attack_mp(target_node_index, sampling_state)
         for i in tqdm(range(config.num_sampled_graphs), desc="Computing expactation over sampled graphs"):
             self.update_scores(
                 sample_idx=i,
                 target_node_index=target_node_index,
                 sampling_state=sampling_state,
-                prior=prior,
             )
         preds = sampling_state.score.mean(dim=0)
         assert preds.shape == target_node_index.shape
         return preds
 
-    def run_attack_mp(self, target_node_index, sampling_state, prior=0.5):
+    def run_attack_mp(self, target_node_index, sampling_state):
         config = self.config
         sample_idx = 0
         for _ in tqdm(range(config.num_sampled_graphs // config.num_processes), desc=f"Computing expactation over sampled graphs using {config.num_processes} processes"):
             processes = []
             for _ in range(config.num_processes):
-                p = mp.Process(target=self.update_scores, args=(sample_idx, target_node_index, sampling_state, prior))
+                p = mp.Process(target=self.update_scores, args=(sample_idx, target_node_index, sampling_state))
                 sample_idx += 1
                 p.start()
                 processes.append(p)
@@ -298,7 +304,7 @@ class BayesOptimalMembershipInference:
         assert preds.shape == target_node_index.shape
         return preds
 
-    def update_scores(self, sample_idx, target_node_index, sampling_state, prior):
+    def update_scores(self, sample_idx, target_node_index, sampling_state):
         match self.config.bayes_sampling_strategy:
             case 'model-independent':
                 node_mask = self.sample_random_node_mask(frac_ones=0.5)
@@ -326,9 +332,9 @@ class BayesOptimalMembershipInference:
             subgraph_out = self.masked_subgraph(node_mask)
             log_posterior_out = self.log_model_posterior(subgraph=subgraph_out)
             if node_mask[node_idx]:
-                sampling_state.score[sample_idx][i] = log_posterior_out - log_posterior_in + np.log(prior) - np.log(1 - prior)
+                sampling_state.score[sample_idx][i] = log_posterior_out - log_posterior_in
             else:
-                sampling_state.score[sample_idx][i] = log_posterior_in - log_posterior_out + np.log(prior) - np.log(1 - prior)
+                sampling_state.score[sample_idx][i] = log_posterior_in - log_posterior_out
             node_mask[node_idx] = not node_mask[node_idx]
 
 class LSET:
