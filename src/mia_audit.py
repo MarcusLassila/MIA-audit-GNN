@@ -142,6 +142,15 @@ class MembershipInferenceAudit:
                     graph=self.dataset,
                     loss_fn=self.loss_fn,
                     config=attack_config,
+                    shadow_models=self.shadow_models,
+                )
+            case "graph-lset":
+                attacker = attacks.GraphLSET(
+                    target_model=target_model,
+                    graph=self.dataset,
+                    loss_fn=self.loss_fn,
+                    config=attack_config,
+                    shadow_models=self.shadow_models,
                 )
             case "strong-lset":
                 attacker = attacks.StrongLSET(
@@ -152,13 +161,6 @@ class MembershipInferenceAudit:
                 )
             case "strong-graph-lset":
                 attacker = attacks.StrongGraphLSET(
-                    target_model=target_model,
-                    graph=self.dataset,
-                    loss_fn=self.loss_fn,
-                    config=attack_config,
-                )
-            case "graph-lset":
-                attacker = attacks.GraphLSET(
                     target_model=target_model,
                     graph=self.dataset,
                     loss_fn=self.loss_fn,
