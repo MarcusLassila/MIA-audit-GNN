@@ -288,7 +288,7 @@ def add_attack_parameters(params):
     properties = [
         'model', 'epochs', 'hidden_dim', 'lr', 'weight_decay', 'optimizer', 'dropout',
         'inductive_split', 'device', 'early_stopping', 'train_frac', 'val_frac', 'batch_size',
-        'hidden_dim_mlp', 'epochs_mlp', 'num_processes',
+        'hidden_dim_mlp', 'epochs_mlp', 'num_processes', 'num_shadow_models',
     ]
     for attack_params in params['attacks'].values():
         for prop in properties:

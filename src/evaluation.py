@@ -37,7 +37,7 @@ def evaluate_binary_classification(preds, truth, target_fpr, target_node_index, 
         threshold_fixed_fpr.append(threshold)
     _, top_k_index = torch.topk(torch.from_numpy(preds), top_k)
     top_k_nodes = target_node_index[top_k_index]
-    degree_top_k = degree(graph.edge_index[0, graph.inductive_mask], graph.num_nodes, dtype=torch.long)[top_k_nodes].numpy()
+    degree_top_k = degree(graph.edge_index[0, graph.inductive_mask], graph.num_nodes, dtype=torch.long)[top_k_nodes].cpu().numpy()
     return {
         'AUC': auroc,
         'ROC': (fpr, tpr),
