@@ -263,7 +263,7 @@ class MembershipInferenceAudit:
                 stats[attack]['test_acc'].append(target_scores['test_acc'])
                 truth = self.dataset.train_mask.long()[target_node_index]
                 preds = attacker.run_attack(target_node_index=target_node_index)
-                metrics = evaluation.evaluate_binary_classification(preds, truth, config.target_fpr)
+                metrics = evaluation.evaluate_binary_classification(preds, truth, config.target_fpr, target_node_index, self.dataset)
                 fpr, tpr = metrics['ROC']
                 stats[attack]['FPR'].append(fpr)
                 stats[attack]['TPR'].append(tpr)

@@ -3,7 +3,7 @@ import utils
 
 import numpy as np
 import torch
-from torch_geometric.utils import k_hop_subgraph, subgraph
+from torch_geometric.utils import degree, k_hop_subgraph, subgraph
 from sklearn.metrics import roc_curve, roc_auc_score
 from itertools import combinations
 
@@ -22,7 +22,7 @@ def inclusions(list_of_sets):
             res.append(len(incl - excl))
     return res
 
-def evaluate_binary_classification(preds, truth, target_fpr):
+def evaluate_binary_classification(preds, truth, target_fpr, target_node_index, graph, top_k=20):
     if torch.is_tensor(preds):
         preds = preds.cpu().numpy()
     if torch.is_tensor(truth):
@@ -35,11 +35,15 @@ def evaluate_binary_classification(preds, truth, target_fpr):
         t_tpr, threshold = utils.tpr_at_fixed_fpr(fpr, tpr, t_fpr, thresholds)
         tpr_fixed_fpr.append(t_tpr)
         threshold_fixed_fpr.append(threshold)
+    _, top_k_index = torch.topk(torch.from_numpy(preds), top_k)
+    top_k_nodes = target_node_index[top_k_index]
+    degree_top_k = degree(graph.edge_index[0, graph.inductive_mask], graph.num_nodes, dtype=torch.long)[top_k_nodes].numpy()
     return {
         'AUC': auroc,
         'ROC': (fpr, tpr),
         'TPR@FPR': tpr_fixed_fpr,
         'threshold@FPR': threshold_fixed_fpr,
+        'degree_top_k': degree_top_k,
     }
 
 def k_hop_query(model, dataset, query_nodes, num_hops=0, inductive_split=False):
