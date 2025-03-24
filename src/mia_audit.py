@@ -120,8 +120,8 @@ class MembershipInferenceAudit:
         '''
         attack_config = utils.Config(attack_dict)
         match attack_config.attack:
-            case "bayes-optimal":
-                attacker = attacks.BayesOptimalMembershipInference(
+            case "prior-lset":
+                attacker = attacks.PriorLSET(
                     target_model=target_model,
                     graph=self.dataset,
                     loss_fn=self.loss_fn,

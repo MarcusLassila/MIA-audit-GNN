@@ -132,7 +132,7 @@ class MLPAttack:
             logits = self.attack_model(features)[:,1]
         return logits
 
-class BayesOptimalMembershipInference:
+class PriorLSET:
 
     class SamplingState:
         '''State object when sampling graphs'''
@@ -170,6 +170,7 @@ class BayesOptimalMembershipInference:
                 graph=graph,
                 loss_fn=loss_fn,
                 config=config,
+                shadow_models=shadow_models,
             )
             self.zero_hop_probs = self.zero_hop_attacker.run_attack(torch.arange(self.graph.num_nodes)).sigmoid()
             self.shadow_models = self.zero_hop_attacker.shadow_models
@@ -265,15 +266,12 @@ class BayesOptimalMembershipInference:
 
     def run_attack(self, target_node_index):
         config = self.config
-        do_multiprocessing = config.num_processes > 1
-        sampling_state = BayesOptimalMembershipInference.SamplingState(
+        sampling_state = PriorLSET.SamplingState(
             outer_cls=self,
             score_dim=(config.num_sampled_graphs, target_node_index.shape[0]),
             strategy=config.bayes_sampling_strategy,
-            multiprocessing=do_multiprocessing
+            multiprocessing=False,
         )
-        if do_multiprocessing:
-            return self.run_attack_mp(target_node_index, sampling_state)
         for i in tqdm(range(config.num_sampled_graphs), desc="Computing expactation over sampled graphs"):
             self.update_scores(
                 sample_idx=i,
@@ -281,26 +279,6 @@ class BayesOptimalMembershipInference:
                 sampling_state=sampling_state,
             )
         preds = sampling_state.score.mean(dim=0)
-        assert preds.shape == target_node_index.shape
-        return preds
-
-    def run_attack_mp(self, target_node_index, sampling_state):
-        config = self.config
-        sample_idx = 0
-        for _ in tqdm(range(config.num_sampled_graphs // config.num_processes), desc=f"Computing expactation over sampled graphs using {config.num_processes} processes"):
-            processes = []
-            for _ in range(config.num_processes):
-                p = mp.Process(target=self.update_scores, args=(sample_idx, target_node_index, sampling_state))
-                sample_idx += 1
-                p.start()
-                processes.append(p)
-            for p in processes:
-                p.join()
-        preds = sampling_state.score.mean(dim=0)
-        if config.num_sampled_graphs > 1:
-            pred_var = sampling_state.score.var(dim=0)
-            print(f'Average sample variances: {pred_var.mean().item()}')
-            print(f'Maximum sample variance: {pred_var.max()}')
         assert preds.shape == target_node_index.shape
         return preds
 
