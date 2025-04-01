@@ -95,7 +95,7 @@ def tpr_at_fixed_fpr(fpr, tpr, target_fpr, thresholds):
     idx = np.argmax(fpr >= target_fpr)
     if fpr[idx] > target_fpr + 1e-6:
         idx -= 1
-    return tpr[idx], thresholds[idx]
+    return tpr[idx], thresholds.astype(np.float64)[idx]
 
 def tpr_at_fixed_fpr_multi(soft_preds, truth, target_fpr):
     truth = truth.bool()

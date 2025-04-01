@@ -268,8 +268,9 @@ class MembershipInferenceAudit:
                 stats[attack]['FPR'].append(fpr)
                 stats[attack]['TPR'].append(tpr)
                 stats[attack]['AUC'].append(metrics['AUC'])
-                for t_fpr, t_tpr in zip(config.target_fpr, metrics['TPR@FPR']):
+                for t_fpr, t_tpr, threshold in zip(config.target_fpr, metrics['TPR@FPR'], metrics['threshold@FPR']):
                     stats[attack][f'TPR@{t_fpr}FPR'].append(t_tpr)
+                    stats[attack][f'threshold@{t_fpr}FPR'].append(threshold)
 
         stat_df = self.parse_stats(stats)
         roc_df = pd.DataFrame({})
