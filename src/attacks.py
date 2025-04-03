@@ -315,6 +315,70 @@ class PriorLSET:
                 sampling_state.score[sample_idx][i] = log_posterior_in - log_posterior_out
             node_mask[node_idx] = not node_mask[node_idx]
 
+class MTA:
+
+    def __init__(self, target_model, graph, loss_fn, config, shadow_models=None):
+        self.target_model = target_model
+        self.graph = graph
+        self.loss_fn = loss_fn
+        self.config = config
+        if shadow_models is None:
+            self.shadow_models = []
+            self.train_shadow_models()
+        else:
+            self.shadow_models = shadow_models
+
+    def train_shadow_models(self):
+        config = self.config
+        criterion = Accuracy(task="multiclass", num_classes=self.graph.num_classes).to(config.device)
+        train_config = trainer.TrainConfig(
+            criterion=criterion,
+            device=config.device,
+            epochs=config.epochs,
+            early_stopping=config.early_stopping,
+            loss_fn=self.loss_fn,
+            lr=config.lr,
+            weight_decay=config.weight_decay,
+            optimizer=getattr(torch.optim, config.optimizer),
+        )
+        shadow_train_masks = utils.partition_training_sets(num_nodes=self.graph.num_nodes, num_models=config.num_shadow_models)
+        for shadow_train_mask in tqdm(shadow_train_masks, total=shadow_train_masks.shape[0], desc=f"Training {config.num_shadow_models} shadow models for MTA attack"):
+            shadow_dataset = datasetup.remasked_graph(self.graph, shadow_train_mask)
+            shadow_model = utils.fresh_model(
+                model_type=config.model,
+                num_features=shadow_dataset.num_features,
+                hidden_dims=config.hidden_dim,
+                num_classes=shadow_dataset.num_classes,
+                dropout=config.dropout,
+            )
+            _ = trainer.train_gnn(
+                model=shadow_model,
+                dataset=shadow_dataset,
+                config=train_config,
+                disable_tqdm=True,
+                inductive_split=config.inductive_split,
+            )
+            shadow_model.eval()
+            self.shadow_models.append(shadow_model)
+
+    def unnormalized_confidence(self, model, x, y):
+        with torch.inference_mode():
+            empty_edge_index = torch.tensor([[],[]], dtype=torch.long).to(self.config.device)
+            unnormalized_conf = model(x, empty_edge_index)[torch.arange(x.shape[0]), y]
+        return unnormalized_conf
+
+    def log_model_posterior(self, x, y):
+        unnormalized_conf = self.unnormalized_confidence(self.target_model, x, y)
+        threshold = torch.stack([
+            self.unnormalized_confidence(shadow_model, x, y)
+            for shadow_model in self.shadow_models
+        ]).mean(dim=0)
+        return unnormalized_conf - threshold
+
+    def run_attack(self, target_node_index):
+        preds = self.log_model_posterior(self.graph.x[target_node_index], self.graph.y[target_node_index])
+        return preds
+
 class LSET:
 
     def __init__(self, target_model, graph, loss_fn, config, shadow_models=None):

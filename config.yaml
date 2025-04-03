@@ -3,22 +3,25 @@ cora-GCN:
   dataset: "cora"
   model: "GCN"
   epochs: 15
-  hidden_dim: [32]
+  hidden_dim:
+  - 32
   lr: 0.01
   weight_decay: 0.0001
   dropout: 0.5
-  max_num_nodes: null
-  num_target_nodes: 500
-  num_audits: 5
-  target_fpr: [0.01, 0.005]
-  pretrain_shadow_models: False
+  max_num_nodes: 10000
+  num_target_nodes: -1
+  num_audits: 1
+  target_fpr:
+  - 0.01
+  - 0.001
+  pretrain_shadow_models: True
+  num_shadow_models: 10
+  seed: 0
   attacks:
     lset:
       attack: "lset"
-      num_shadow_models: 20
-    strong-lset:
-      attack: "strong-lset"
-      num_shadow_models: 20
-    strong-graph-lset-in:
-      attack: "strong-graph-lset"
-      num_shadow_models: 20
+    mta:
+      attack: "mta"
+    rmia:
+      attack: "rmia"
+      rmia_gamma: 1

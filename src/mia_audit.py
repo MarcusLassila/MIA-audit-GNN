@@ -119,6 +119,10 @@ class MembershipInferenceAudit:
         Return an instance of the attack class specified by config.attack
         '''
         attack_config = utils.Config(attack_dict)
+        if self.config.pretrain_shadow_models:
+            pretrained_shadow_models = self.shadow_models
+        else:
+            pretrained_shadow_models = None
         match attack_config.attack:
             case "prior-lset":
                 attacker = attacks.PriorLSET(
@@ -126,7 +130,15 @@ class MembershipInferenceAudit:
                     graph=self.dataset,
                     loss_fn=self.loss_fn,
                     config=attack_config,
-                    shadow_models=self.shadow_models,
+                    shadow_models=pretrained_shadow_models,
+                )
+            case "mta":
+                attacker = attacks.MTA(
+                    target_model=target_model,
+                    graph=self.dataset,
+                    loss_fn=self.loss_fn,
+                    config=attack_config,
+                    shadow_models=pretrained_shadow_models,
                 )
             case "lset":
                 attacker = attacks.LSET(
@@ -134,7 +146,7 @@ class MembershipInferenceAudit:
                     graph=self.dataset,
                     loss_fn=self.loss_fn,
                     config=attack_config,
-                    shadow_models=self.shadow_models,
+                    shadow_models=pretrained_shadow_models,
                 )
             case "improved-lset":
                 attacker = attacks.ImprovedLSET(
@@ -142,7 +154,7 @@ class MembershipInferenceAudit:
                     graph=self.dataset,
                     loss_fn=self.loss_fn,
                     config=attack_config,
-                    shadow_models=self.shadow_models,
+                    shadow_models=pretrained_shadow_models,
                 )
             case "graph-lset":
                 attacker = attacks.GraphLSET(
@@ -150,7 +162,7 @@ class MembershipInferenceAudit:
                     graph=self.dataset,
                     loss_fn=self.loss_fn,
                     config=attack_config,
-                    shadow_models=self.shadow_models,
+                    shadow_models=pretrained_shadow_models,
                 )
             case "strong-lset":
                 attacker = attacks.StrongLSET(
@@ -178,7 +190,7 @@ class MembershipInferenceAudit:
                     graph=self.dataset,
                     loss_fn=self.loss_fn,
                     config=attack_config,
-                    shadow_models=self.shadow_models,
+                    shadow_models=pretrained_shadow_models,
                     shadow_train_masks=self.shadow_train_masks,
                 )
             case "rmia":
@@ -187,7 +199,7 @@ class MembershipInferenceAudit:
                     graph=self.dataset,
                     loss_fn=self.loss_fn,
                     config=attack_config,
-                    shadow_models=self.shadow_models,
+                    shadow_models=pretrained_shadow_models,
                 )
             case "mlp-attack":
                 attacker = attacks.MLPAttack(
