@@ -22,7 +22,9 @@ class BaseGNN(nn.Module):
     def dropout_during_inference(self, value):
         self._dropout_during_inference = value
 
-    def forward(self, x, edge_index):
+    def forward(self, x, edge_index=None):
+        if edge_index == None:
+            x, edge_index = x
         for conv in self.convs[:-1]:
             x = conv(x, edge_index)
             x = F.relu(x)

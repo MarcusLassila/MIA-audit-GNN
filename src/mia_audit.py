@@ -148,6 +148,13 @@ class MembershipInferenceAudit:
                     config=attack_config,
                     shadow_models=pretrained_shadow_models,
                 )
+            case "laplace-lset":
+                attacker = attacks.LaplaceLSET(
+                    target_model=target_model,
+                    graph=self.dataset,
+                    loss_fn=self.loss_fn,
+                    config=attack_config,
+                )
             case "improved-lset":
                 attacker = attacks.ImprovedLSET(
                     target_model=target_model,

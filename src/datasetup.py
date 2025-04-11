@@ -3,9 +3,38 @@ import utils
 import numpy as np
 import torch
 import torch_geometric
+from torch.utils.data import Dataset
 from torch_geometric.data import Data
 from torch_geometric.utils import degree, index_to_mask, mask_to_index, subgraph
 from collections import deque
+
+class GraphDatasetWrapper(Dataset):
+    '''Wrapper to use the Laplace approximation module on GNNs'''
+
+    def __init__(self, graph):
+        self.graph = graph
+
+    def __len__(self):
+        return 1
+
+    def __getitem__(self, idx):
+        assert idx == 0
+        return TensorList([self.graph.x, self.graph.edge_index[:,self.graph.inductive_mask]]), self.graph.y
+
+class TensorList(list):
+    '''Wrapper to use the Laplace approximation module on GNNs'''
+
+    def __init__(self, iterable):
+        if not all(isinstance(x, torch.Tensor) for x in iterable):
+            raise TypeError("All elements of a TensorList has to be torch.Tensor instances")
+        super().__init__(iterable)
+        self.shape = self[0].shape
+
+    def to(self, *args, **kwargs):
+        return TensorList([x.to(*args, **kwargs) for x in self])
+
+    def squeeze(self, *args, **kwargs):
+        return TensorList([x.squeeze(*args, **kwargs) for x in self])
 
 def merge_graphs(graph_A, graph_B):
     x = torch.concat([graph_A.x, graph_B.x])

@@ -20,6 +20,8 @@ from tqdm.auto import tqdm
 import copy
 from collections import defaultdict
 
+from laplace import Laplace
+
 class MLPAttack:
 
     def __init__(self, target_model, graph, loss_fn, config):
@@ -443,7 +445,82 @@ class LSET:
 
     def run_attack(self, target_node_index):
         preds = self.log_model_posterior(self.graph.x[target_node_index], self.graph.y[target_node_index])
-        return preds
+        return preds.sigmoid()
+
+class LaplaceLSET:
+
+    def __init__(self, target_model, graph, loss_fn, config):
+        self.target_model = target_model
+        self.graph = graph
+        self.loss_fn = loss_fn
+        self.config = config
+        self.train_shadow_model()
+        self.la = self.laplace_approximation()
+
+    def train_shadow_model(self):
+        config = self.config
+        criterion = Accuracy(task="multiclass", num_classes=self.graph.num_classes).to(config.device)
+        train_config = trainer.TrainConfig(
+            criterion=criterion,
+            device=config.device,
+            epochs=config.epochs,
+            early_stopping=config.early_stopping,
+            loss_fn=self.loss_fn,
+            lr=config.lr,
+            weight_decay=config.weight_decay,
+            optimizer=getattr(torch.optim, config.optimizer),
+        )
+        shadow_dataset = datasetup.remasked_graph(self.graph, torch.rand(self.graph.num_nodes) > 0.5)
+        shadow_model = utils.fresh_model(
+            model_type=config.model,
+            num_features=shadow_dataset.num_features,
+            hidden_dims=config.hidden_dim,
+            num_classes=shadow_dataset.num_classes,
+            dropout=config.dropout,
+        )
+        _ = trainer.train_gnn(
+            model=shadow_model,
+            dataset=shadow_dataset,
+            config=train_config,
+            disable_tqdm=True,
+            inductive_split=config.inductive_split,
+        )
+        shadow_model.eval()
+        self.shadow_model = shadow_model
+        self.shadow_dataset = shadow_dataset
+
+    def laplace_approximation(self):
+        for param in self.shadow_model.convs[0].parameters():
+            param.requires_grad = False
+        la = Laplace(
+            model=self.shadow_model,
+            likelihood='classification',
+            hessian_structure='full',
+            subset_of_weights='all',
+        )
+        def squeeze_collate_fn(batch):
+            X, y = batch[0]
+            X = X.squeeze(0)
+            y = y.squeeze(0)
+            return X, y
+        train_dataset = datasetup.GraphDatasetWrapper(self.shadow_dataset)
+        train_loader = DataLoader(train_dataset, batch_size=1, shuffle=False, collate_fn=squeeze_collate_fn)
+        la.fit(train_loader, progress_bar=True)
+        la.optimize_prior_precision(pred_type='glm', link_approx='probit')
+        return la
+
+    def log_model_posterior(self, x, y):
+        empty_edge_index = torch.tensor([[],[]], dtype=torch.long).to(self.config.device)
+        tl = datasetup.TensorList([x, empty_edge_index])
+        with torch.inference_mode():
+            log_conf = F.log_softmax(self.target_model(x, empty_edge_index), dim=1)[torch.arange(x.shape[0]), y]
+        la_preds = self.la(x=tl, pred_type='glm', link_approx='probit')
+        threshold = la_preds[torch.arange(x.shape[0]), y].log()
+        return log_conf - threshold
+
+    def run_attack(self, target_node_index):
+        preds = self.log_model_posterior(self.graph.x[target_node_index], self.graph.y[target_node_index])
+        return preds.sigmoid()
 
 class ImprovedLSET:
 

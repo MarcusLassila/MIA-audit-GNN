@@ -24,3 +24,4 @@ default-parameters:
   val_frac: 0.0
   seed: 0
   num_processes: 1
+  num_shadow_models: 0
