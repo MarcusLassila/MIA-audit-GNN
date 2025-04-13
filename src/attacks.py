@@ -139,11 +139,8 @@ class PriorLSET:
     class SamplingState:
         '''State object when sampling graphs'''
 
-        def __init__(self, outer_cls, score_dim, strategy='model-independent', multiprocessing=False, MCMC_sampling_iterations=500):
-            if multiprocessing:
-                self.score = torch.zeros(size=score_dim).share_memory_()
-            else:
-                self.score = torch.zeros(size=score_dim)
+        def __init__(self, outer_cls, score_dim, strategy='model-independent', MCMC_sampling_iterations=500):
+            self.score = torch.zeros(size=score_dim)
             self.strategy = strategy
             if strategy == 'MCMC':
                 burn_in_iterations = MCMC_sampling_iterations * 10
@@ -243,17 +240,16 @@ class PriorLSET:
             sampling_state.MCMC_update(mask, log_p, subgraph)
 
     def sample_node_mask_zero_hop_MIA(self):
-        random_ref = torch.rand(size=(self.graph.num_nodes,)).to(self.config.device)
-        node_mask = self.zero_hop_probs > random_ref
-        return node_mask
+        random_ref = torch.rand(self.graph.num_nodes).to(self.config.device)
+        return self.zero_hop_probs > random_ref
 
     def sample_random_node_mask(self, frac_ones=0.5):
-        mask = torch.rand(size=(self.graph.num_nodes,)) < frac_ones
+        mask = torch.rand(self.graph.num_nodes) < frac_ones
         return mask.to(self.config.device)
 
     def neg_loss(self, model, graph):
         with torch.inference_mode():
-            res = -self.loss_fn(model(graph.x, graph.edge_index), graph.y)
+            res = -self.loss_fn(model(graph.x, graph.edge_index), graph.y) * self.graph.num_nodes
         return res
 
     def log_model_posterior(self, subgraph):
@@ -272,7 +268,6 @@ class PriorLSET:
             outer_cls=self,
             score_dim=(config.num_sampled_graphs, target_node_index.shape[0]),
             strategy=config.bayes_sampling_strategy,
-            multiprocessing=False,
         )
         for i in tqdm(range(config.num_sampled_graphs), desc="Computing expactation over sampled graphs"):
             self.update_scores(
@@ -312,9 +307,9 @@ class PriorLSET:
             subgraph_out = self.masked_subgraph(node_mask)
             log_posterior_out = self.log_model_posterior(subgraph=subgraph_out)
             if node_mask[node_idx]:
-                sampling_state.score[sample_idx][i] = log_posterior_out - log_posterior_in
+                sampling_state.score[sample_idx][i] = torch.sigmoid(log_posterior_out - log_posterior_in)
             else:
-                sampling_state.score[sample_idx][i] = log_posterior_in - log_posterior_out
+                sampling_state.score[sample_idx][i] = torch.sigmoid(log_posterior_in - log_posterior_out)
             node_mask[node_idx] = not node_mask[node_idx]
 
 class MTA:
