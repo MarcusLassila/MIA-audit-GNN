@@ -17,6 +17,7 @@ def grid_search(
     model_type: str,
     optimizer: str,
     inductive_split: bool,
+    minimum_average_gen_gap: float,
     num_samples: int = 10,
 ):
     assert torch.any(dataset.val_mask)
@@ -61,7 +62,7 @@ def grid_search(
         average_valid_loss = mean(valid_losses)
         average_valid_score = mean(valid_scores)
         average_gen_gap = mean(train_scores) - average_valid_score
-        if average_valid_loss < min_valid_loss:
+        if average_valid_loss < min_valid_loss and average_gen_gap > minimum_average_gen_gap:
             min_valid_loss = average_valid_loss
             opt_hyperparams = {
                 'lr': lr,

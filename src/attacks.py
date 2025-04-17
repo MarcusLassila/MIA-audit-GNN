@@ -13,7 +13,7 @@ import torch.nn.functional as F
 import torch.multiprocessing as mp
 from torch_geometric.nn import MLP
 from torch_geometric.data import Data
-from torch_geometric.utils import subgraph, k_hop_subgraph, degree
+from torch_geometric.utils import subgraph, k_hop_subgraph, degree, index_to_mask, mask_to_index
 from torch.utils.data import DataLoader, TensorDataset
 from torchmetrics import Accuracy
 from tqdm.auto import tqdm
@@ -194,8 +194,8 @@ class PriorLSET:
         )
         shadow_train_masks = utils.partition_training_sets(num_nodes=self.graph.num_nodes, num_models=config.num_shadow_models)
         tqdm_desc = f"Training {config.num_shadow_models} shadow models for Bayes optimal attack"
-        for shadow_nodes in tqdm(shadow_train_masks, total=shadow_train_masks.shape[0], desc=tqdm_desc):
-            shadow_dataset = datasetup.remasked_graph(self.graph, shadow_nodes)
+        for shadow_train_mask in tqdm(shadow_train_masks, total=shadow_train_masks.shape[0], desc=tqdm_desc):
+            shadow_dataset = datasetup.remasked_graph(self.graph, shadow_train_mask)
             shadow_model = utils.fresh_model(
                 model_type=config.model,
                 num_features=shadow_dataset.num_features,
@@ -436,11 +436,11 @@ class LSET:
         # Subtracting log(num_shadow_models) is not necessary for attack performance,
         # but should be there if we want to get probabilities by applying sigmoid
         ]).logsumexp(0) - np.log(len(self.shadow_models))
-        return log_conf - threshold
+        return torch.sigmoid(log_conf - threshold)
 
     def run_attack(self, target_node_index):
         preds = self.log_model_posterior(self.graph.x[target_node_index], self.graph.y[target_node_index])
-        return preds.sigmoid()
+        return preds
 
 class LaplaceLSET:
 
@@ -449,10 +449,19 @@ class LaplaceLSET:
         self.graph = graph
         self.loss_fn = loss_fn
         self.config = config
-        self.train_shadow_model()
-        self.la = self.laplace_approximation()
 
-    def train_shadow_model(self):
+    def sample_shadow_dataset(self, target_node_index):
+        assert target_node_index.shape[0] * 2 <= self.graph.num_nodes
+        target_node_mask = index_to_mask(target_node_index, self.graph.num_nodes)
+        index_pool = mask_to_index(~target_node_mask)
+        perm_index = torch.randperm(index_pool.shape[0])
+        index_pool = index_pool[perm_index][:self.graph.num_nodes // 2]
+        shadow_train_mask = index_to_mask(index_pool, self.graph.num_nodes)
+        shadow_dataset = datasetup.remasked_graph(self.graph, shadow_train_mask)
+        assert not torch.any(shadow_train_mask & target_node_mask)
+        return shadow_dataset
+
+    def train_shadow_model(self, shadow_dataset):
         config = self.config
         criterion = Accuracy(task="multiclass", num_classes=self.graph.num_classes).to(config.device)
         train_config = trainer.TrainConfig(
@@ -465,7 +474,6 @@ class LaplaceLSET:
             weight_decay=config.weight_decay,
             optimizer=getattr(torch.optim, config.optimizer),
         )
-        shadow_dataset = datasetup.remasked_graph(self.graph, ~self.graph.train_mask)
         shadow_model = utils.fresh_model(
             model_type=config.model,
             num_features=shadow_dataset.num_features,
@@ -481,14 +489,13 @@ class LaplaceLSET:
             inductive_split=config.inductive_split,
         )
         shadow_model.eval()
-        self.shadow_model = shadow_model
-        self.shadow_dataset = shadow_dataset
+        return shadow_model
 
-    def laplace_approximation(self):
-        for param in self.shadow_model.convs[0].parameters():
+    def laplace_approximation(self, shadow_model, shadow_dataset):
+        for param in shadow_model.convs[0].parameters():
             param.requires_grad = False
         la = Laplace(
-            model=self.shadow_model,
+            model=shadow_model,
             likelihood='classification',
             hessian_structure='full',
             subset_of_weights='all',
@@ -498,24 +505,27 @@ class LaplaceLSET:
             X = X.squeeze(0)
             y = y.squeeze(0)
             return X, y
-        train_dataset = datasetup.GraphDatasetWrapper(self.shadow_dataset)
+        train_dataset = datasetup.GraphDatasetWrapper(shadow_dataset)
         train_loader = DataLoader(train_dataset, batch_size=1, shuffle=False, collate_fn=squeeze_collate_fn)
         la.fit(train_loader, progress_bar=True)
-        la.optimize_prior_precision(pred_type='glm', link_approx='probit')
+        la.optimize_prior_precision(pred_type='nn', link_approx='mc')
         return la
 
-    def log_model_posterior(self, x, y):
+    def log_model_posterior(self, x, y, la):
         empty_edge_index = torch.tensor([[],[]], dtype=torch.long).to(self.config.device)
         tl = datasetup.TensorList([x, empty_edge_index])
         with torch.inference_mode():
             log_conf = F.log_softmax(self.target_model(x, empty_edge_index), dim=1)[torch.arange(x.shape[0]), y]
-        la_preds = self.la(x=tl, pred_type='glm', link_approx='probit')
+        la_preds = la(x=tl, pred_type='nn', link_approx='mc')
         threshold = la_preds[torch.arange(x.shape[0]), y].log()
         return log_conf - threshold
 
     @utils.measure_execution_time
     def run_attack(self, target_node_index):
-        preds = self.log_model_posterior(self.graph.x[target_node_index], self.graph.y[target_node_index])
+        shadow_dataset = self.sample_shadow_dataset(target_node_index)
+        shadow_model = self.train_shadow_model(shadow_dataset)
+        la = self.laplace_approximation(shadow_model, shadow_dataset)
+        preds = self.log_model_posterior(self.graph.x[target_node_index], self.graph.y[target_node_index], la)
         return preds
 
 class ImprovedLSET:
@@ -921,12 +931,18 @@ class BMIA:
         self.graph = graph
         self.loss_fn = loss_fn
         self.config = config
-        self.shadow_model = None
-        self.shadow_dataset = None
-        self.train_shadow_model()
-        self.la = self.laplace_approximation()
     
-    def train_shadow_model(self):
+    def sample_shadow_dataset(self, target_node_index):
+        assert target_node_index.shape[0] * 2 <= self.graph.num_nodes
+        target_node_mask = index_to_mask(target_node_index, self.graph.num_nodes)
+        index_pool = mask_to_index(~target_node_mask)
+        perm_index = torch.randperm(index_pool.shape[0])
+        index_pool = index_pool[perm_index]
+        shadow_train_mask = index_to_mask(index_pool, self.graph.num_nodes)
+        shadow_dataset = datasetup.remasked_graph(self.graph, shadow_train_mask)
+        return shadow_dataset
+
+    def train_shadow_model(self, shadow_dataset):
         config = self.config
         criterion = Accuracy(task="multiclass", num_classes=self.graph.num_classes).to(config.device)
         train_config = trainer.TrainConfig(
@@ -939,7 +955,6 @@ class BMIA:
             weight_decay=config.weight_decay,
             optimizer=getattr(torch.optim, config.optimizer),
         )
-        shadow_dataset = datasetup.remasked_graph(self.graph, ~self.graph.train_mask)
         shadow_model = utils.fresh_model(
             model_type=config.model,
             num_features=shadow_dataset.num_features,
@@ -955,14 +970,13 @@ class BMIA:
             inductive_split=config.inductive_split,
         )
         shadow_model.eval()
-        self.shadow_model = shadow_model
-        self.shadow_dataset = shadow_dataset
+        return shadow_model
 
-    def laplace_approximation(self):
-        for param in self.shadow_model.convs[0].parameters():
+    def laplace_approximation(self, shadow_model, shadow_dataset):
+        for param in shadow_model.convs[0].parameters():
             param.requires_grad = False
         la = Laplace(
-            model=self.shadow_model,
+            model=shadow_model,
             likelihood='classification',
             hessian_structure='full',
             subset_of_weights='all',
@@ -972,32 +986,40 @@ class BMIA:
             X = X.squeeze(0)
             y = y.squeeze(0)
             return X, y
-        train_dataset = datasetup.GraphDatasetWrapper(self.shadow_dataset)
+        train_dataset = datasetup.GraphDatasetWrapper(shadow_dataset)
         train_loader = DataLoader(train_dataset, batch_size=1, shuffle=False, collate_fn=squeeze_collate_fn)
         la.fit(train_loader, progress_bar=True)
-        la.optimize_prior_precision(pred_type='glm', link_approx='probit')
+        la.optimize_prior_precision(pred_type='nn', link_approx='mc')
         return la
 
     @utils.measure_execution_time
     def run_attack(self, target_node_index):
         config = self.config
+        shadow_dataset = self.sample_shadow_dataset(target_node_index)
+        shadow_model = self.train_shadow_model(shadow_dataset)
+        la = self.laplace_approximation(shadow_model, shadow_dataset)
         n_samples = 100
         x = self.graph.x[target_node_index]
         y = self.graph.y[target_node_index]
         empty_edge_index = torch.tensor([[],[]], dtype=torch.long).to(config.device)
         with torch.inference_mode():
             preds = self.target_model(x, empty_edge_index)
-        target_scores = F.softmax(preds, dim=1)[torch.arange(x.shape[0]), y]
+        row_idx = torch.arange(x.shape[0])
+        target_scores = F.softmax(preds, dim=1)[row_idx, y]
         tl = datasetup.TensorList([x, empty_edge_index])
-        sampled_preds = self.la.predictive_samples(tl, pred_type='glm', n_samples=n_samples)
+        sampled_preds = la.predictive_samples(tl, pred_type='nn', n_samples=n_samples)
+        sampled_zs = la.functional_samples(tl, pred_type='nn', n_samples=n_samples)
         sampled_scores = []
         for i in range(n_samples):
-            sampled_scores.append(sampled_preds[i][torch.arange(x.shape[0]), y])
+            confs = sampled_preds[i][row_idx, y]
+            log_p = ((confs + 1e-8) / (1 - confs + 1e-8)).log()
+            hinge_score = utils.hinge_loss(sampled_zs[i], y)
+            sampled_scores.append(hinge_score)
         sampled_scores = torch.stack(sampled_scores)
         ds = target_scores - sampled_scores
         d_mean = ds.mean(0)
         d_std = ds.std(0)
-        t = n_samples ** -0.5 * d_mean / d_std
+        t = n_samples ** 0.5 * d_mean / d_std
         preds = t_dist.cdf(t, n_samples - 1)
         assert preds.shape == target_node_index.shape
         return preds

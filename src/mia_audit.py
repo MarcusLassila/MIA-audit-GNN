@@ -36,6 +36,7 @@ class MembershipInferenceAudit:
                 model_type=config.model,
                 optimizer=config.optimizer,
                 inductive_split=config.inductive_split,
+                minimum_average_gen_gap=config.minimum_average_gen_gap,
             )
             print(f'Hyperparameter search results: {opt_hyperparams}')
             Path("results/hyperparams").mkdir(parents=True, exist_ok=True)
@@ -232,10 +233,12 @@ class MembershipInferenceAudit:
             target_node_index = torch.arange(self.dataset.num_nodes)
         else:
             assert config.num_target_nodes <= self.dataset.num_nodes
-            truth = self.dataset.train_mask.long()
+            assert not torch.any(self.dataset.train_mask & self.dataset.test_mask)
+            train_nodes = self.dataset.train_mask.long()
+            test_nodes = self.dataset.test_mask.long()
             num_targets = config.num_target_nodes
-            positives = truth.nonzero().squeeze()
-            negatives = (truth ^ 1).nonzero().squeeze()
+            positives = train_nodes.nonzero().squeeze()
+            negatives = test_nodes.nonzero().squeeze()
             perm_mask = torch.randperm(positives.shape[0])
             positives = positives[perm_mask][:num_targets // 2]
             perm_mask = torch.randperm(negatives.shape[0])

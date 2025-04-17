@@ -23,7 +23,7 @@ class BaseGNN(nn.Module):
         self._dropout_during_inference = value
 
     def forward(self, x, edge_index=None):
-        if edge_index == None:
+        if edge_index is None:
             x, edge_index = x
         for conv in self.convs[:-1]:
             x = conv(x, edge_index)
@@ -64,7 +64,7 @@ class GraphSAGE(BaseGNN):
 
 class GAT(BaseGNN):
 
-    def __init__(self, in_dim, hidden_dims, out_dim, heads=(2,1), dropout=0.0):
+    def __init__(self, in_dim, hidden_dims, out_dim, heads=(8,1), dropout=0.0):
         super(GAT, self).__init__(dropout=dropout)
         channel_list = [in_dim, *hidden_dims, out_dim]
         self.convs = nn.ModuleList([])

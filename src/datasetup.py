@@ -307,10 +307,13 @@ def remasked_graph(graph, train_mask, mutate=False):
         data = graph
     else:
         data = graph.clone()
-    train_mask = train_mask.to(graph.x.device)
+    train_mask = train_mask.clone().to(graph.x.device)
+    train_mask[graph.val_mask] = False
+    test_mask = ~train_mask
+    test_mask[graph.val_mask] = False
     data.train_mask = train_mask
-    data.test_mask = ~train_mask
-    data.val_mask = torch.zeros_like(train_mask, dtype=torch.bool)
+    data.test_mask = test_mask
+    data.val_mask = graph.val_mask
     data.inductive_mask = train_split_interconnection_mask(data)
     return data
 
