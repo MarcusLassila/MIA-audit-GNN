@@ -191,6 +191,13 @@ class MembershipInferenceAudit:
                     graph=self.dataset,
                     config=attack_config,
                 )
+            case "bmia":
+                attacker = attacks.BMIA(
+                    target_model=target_model,
+                    graph=self.dataset,
+                    loss_fn=self.loss_fn,
+                    config=attack_config,
+                )
             case "lira":
                 attacker = attacks.LiraOnline(
                     target_model=target_model,

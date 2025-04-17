@@ -10,18 +10,15 @@ cora-GCN:
   dropout: 0.5
   max_num_nodes: 10000
   num_target_nodes: -1
-  num_audits: 1
+  num_audits: 100
   target_fpr:
   - 0.01
   - 0.001
-  pretrain_shadow_models: True
+  pretrain_shadow_models: False
   num_shadow_models: 10
   seed: 0
   attacks:
+    bmia:
+      attack: "bmia"
     lset:
-      attack: "lset"
-    mta:
-      attack: "mta"
-    rmia:
-      attack: "rmia"
-      rmia_gamma: 1
+      attack: "laplace-lset"

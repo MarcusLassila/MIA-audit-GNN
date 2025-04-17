@@ -4,7 +4,7 @@ import trainer
 import utils
 
 import numpy as np
-from scipy.stats import norm
+from scipy.stats import norm, t as t_dist
 from sklearn.metrics import roc_auc_score
 from sklearn.model_selection import train_test_split
 import torch
@@ -465,7 +465,7 @@ class LaplaceLSET:
             weight_decay=config.weight_decay,
             optimizer=getattr(torch.optim, config.optimizer),
         )
-        shadow_dataset = datasetup.remasked_graph(self.graph, torch.rand(self.graph.num_nodes) > 0.5)
+        shadow_dataset = datasetup.remasked_graph(self.graph, ~self.graph.train_mask)
         shadow_model = utils.fresh_model(
             model_type=config.model,
             num_features=shadow_dataset.num_features,
@@ -513,9 +513,10 @@ class LaplaceLSET:
         threshold = la_preds[torch.arange(x.shape[0]), y].log()
         return log_conf - threshold
 
+    @utils.measure_execution_time
     def run_attack(self, target_node_index):
         preds = self.log_model_posterior(self.graph.x[target_node_index], self.graph.y[target_node_index])
-        return preds.sigmoid()
+        return preds
 
 class ImprovedLSET:
 
@@ -911,6 +912,94 @@ class ConfidenceAttack:
         empty_edge_index = torch.tensor([[],[]], dtype=torch.long).to(self.config.device)
         with torch.inference_mode():
             preds = F.softmax(self.target_model(self.graph.x, empty_edge_index), dim=1)[target_node_index, self.graph.y[target_node_index]]
+        return preds
+
+class BMIA:
+
+    def __init__(self, target_model, graph, loss_fn, config):
+        self.target_model = target_model
+        self.graph = graph
+        self.loss_fn = loss_fn
+        self.config = config
+        self.shadow_model = None
+        self.shadow_dataset = None
+        self.train_shadow_model()
+        self.la = self.laplace_approximation()
+    
+    def train_shadow_model(self):
+        config = self.config
+        criterion = Accuracy(task="multiclass", num_classes=self.graph.num_classes).to(config.device)
+        train_config = trainer.TrainConfig(
+            criterion=criterion,
+            device=config.device,
+            epochs=config.epochs,
+            early_stopping=config.early_stopping,
+            loss_fn=self.loss_fn,
+            lr=config.lr,
+            weight_decay=config.weight_decay,
+            optimizer=getattr(torch.optim, config.optimizer),
+        )
+        shadow_dataset = datasetup.remasked_graph(self.graph, ~self.graph.train_mask)
+        shadow_model = utils.fresh_model(
+            model_type=config.model,
+            num_features=shadow_dataset.num_features,
+            hidden_dims=config.hidden_dim,
+            num_classes=shadow_dataset.num_classes,
+            dropout=config.dropout,
+        )
+        _ = trainer.train_gnn(
+            model=shadow_model,
+            dataset=shadow_dataset,
+            config=train_config,
+            disable_tqdm=True,
+            inductive_split=config.inductive_split,
+        )
+        shadow_model.eval()
+        self.shadow_model = shadow_model
+        self.shadow_dataset = shadow_dataset
+
+    def laplace_approximation(self):
+        for param in self.shadow_model.convs[0].parameters():
+            param.requires_grad = False
+        la = Laplace(
+            model=self.shadow_model,
+            likelihood='classification',
+            hessian_structure='full',
+            subset_of_weights='all',
+        )
+        def squeeze_collate_fn(batch):
+            X, y = batch[0]
+            X = X.squeeze(0)
+            y = y.squeeze(0)
+            return X, y
+        train_dataset = datasetup.GraphDatasetWrapper(self.shadow_dataset)
+        train_loader = DataLoader(train_dataset, batch_size=1, shuffle=False, collate_fn=squeeze_collate_fn)
+        la.fit(train_loader, progress_bar=True)
+        la.optimize_prior_precision(pred_type='glm', link_approx='probit')
+        return la
+
+    @utils.measure_execution_time
+    def run_attack(self, target_node_index):
+        config = self.config
+        n_samples = 100
+        x = self.graph.x[target_node_index]
+        y = self.graph.y[target_node_index]
+        empty_edge_index = torch.tensor([[],[]], dtype=torch.long).to(config.device)
+        with torch.inference_mode():
+            preds = self.target_model(x, empty_edge_index)
+        target_scores = F.softmax(preds, dim=1)[torch.arange(x.shape[0]), y]
+        tl = datasetup.TensorList([x, empty_edge_index])
+        sampled_preds = self.la.predictive_samples(tl, pred_type='glm', n_samples=n_samples)
+        sampled_scores = []
+        for i in range(n_samples):
+            sampled_scores.append(sampled_preds[i][torch.arange(x.shape[0]), y])
+        sampled_scores = torch.stack(sampled_scores)
+        ds = target_scores - sampled_scores
+        d_mean = ds.mean(0)
+        d_std = ds.std(0)
+        t = n_samples ** -0.5 * d_mean / d_std
+        preds = t_dist.cdf(t, n_samples - 1)
+        assert preds.shape == target_node_index.shape
         return preds
 
 class LiraOnline:
