@@ -41,7 +41,7 @@ class MembershipInferenceAudit:
             print(f'Hyperparameter search results: {opt_hyperparams}')
             Path("results/hyperparams").mkdir(parents=True, exist_ok=True)
             log_info = f'dataset: {config.dataset}\nmodel: {config.model}\nnum_nodes: {self.dataset.num_nodes}\n' + '\n'.join(f'{k}: {v}' for k, v in opt_hyperparams.items())
-            with open(f"results/hyperparams/{config.dataset}_{self.dataset.num_nodes}.txt", "w") as f:
+            with open(f"results/hyperparams/{config.dataset}_{config.model}_{self.dataset.num_nodes}.txt", "w") as f:
                 f.write(log_info)
         self.config = config
 
@@ -127,14 +127,6 @@ class MembershipInferenceAudit:
         match attack_config.attack:
             case "prior-lset":
                 attacker = attacks.PriorLSET(
-                    target_model=target_model,
-                    graph=self.dataset,
-                    loss_fn=self.loss_fn,
-                    config=attack_config,
-                    shadow_models=pretrained_shadow_models,
-                )
-            case "mta":
-                attacker = attacks.MTA(
                     target_model=target_model,
                     graph=self.dataset,
                     loss_fn=self.loss_fn,
@@ -267,6 +259,9 @@ class MembershipInferenceAudit:
         for i_audit in range(1, config.num_audits + 1):
             print(f'Running audit {i_audit}/{config.num_audits}')
             _ = datasetup.random_remasked_graph(self.dataset, train_frac=config.train_frac, val_frac=config.val_frac, mutate=True)
+            assert not torch.any(self.dataset.val_mask), "Validation mask not fully supported"
+            assert not torch.any(self.dataset.train_mask & self.dataset.test_mask)
+            assert torch.all(self.dataset.train_mask | self.dataset.test_mask)
             target_node_index = self.get_target_nodes()
             target_model = self.train_target_model(self.dataset)
             target_model.eval()

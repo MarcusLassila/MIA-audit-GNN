@@ -252,14 +252,16 @@ class PriorLSET:
             res = -self.loss_fn(model(graph.x, graph.edge_index), graph.y) * self.graph.num_nodes
         return res
 
-    def log_model_posterior(self, subgraph):
+    def log_model_posterior(self, subgraph, shadow_models=None):
         # Only loss values over the k-hop neighborhood is necessary (for a k-layer GNN)
         # but we compute loss values over all node for simplicity
+        if shadow_models is None:
+            shadow_models = self.shadow_models
         neg_loss_term = self.neg_loss(self.target_model, subgraph)
         log_Z_term = torch.tensor([
             self.neg_loss(shadow_model, subgraph)
-            for shadow_model in self.shadow_models
-        ]).logsumexp(0) - np.log(len(self.shadow_models))
+            for shadow_model in shadow_models
+        ]).logsumexp(0) - np.log(len(shadow_models))
         return neg_loss_term - log_Z_term
 
     def run_attack(self, target_node_index):
@@ -311,70 +313,6 @@ class PriorLSET:
             else:
                 sampling_state.score[sample_idx][i] = torch.sigmoid(log_posterior_in - log_posterior_out)
             node_mask[node_idx] = not node_mask[node_idx]
-
-class MTA:
-
-    def __init__(self, target_model, graph, loss_fn, config, shadow_models=None):
-        self.target_model = target_model
-        self.graph = graph
-        self.loss_fn = loss_fn
-        self.config = config
-        if shadow_models is None:
-            self.shadow_models = []
-            self.train_shadow_models()
-        else:
-            self.shadow_models = shadow_models
-
-    def train_shadow_models(self):
-        config = self.config
-        criterion = Accuracy(task="multiclass", num_classes=self.graph.num_classes).to(config.device)
-        train_config = trainer.TrainConfig(
-            criterion=criterion,
-            device=config.device,
-            epochs=config.epochs,
-            early_stopping=config.early_stopping,
-            loss_fn=self.loss_fn,
-            lr=config.lr,
-            weight_decay=config.weight_decay,
-            optimizer=getattr(torch.optim, config.optimizer),
-        )
-        shadow_train_masks = utils.partition_training_sets(num_nodes=self.graph.num_nodes, num_models=config.num_shadow_models)
-        for shadow_train_mask in tqdm(shadow_train_masks, total=shadow_train_masks.shape[0], desc=f"Training {config.num_shadow_models} shadow models for MTA attack"):
-            shadow_dataset = datasetup.remasked_graph(self.graph, shadow_train_mask)
-            shadow_model = utils.fresh_model(
-                model_type=config.model,
-                num_features=shadow_dataset.num_features,
-                hidden_dims=config.hidden_dim,
-                num_classes=shadow_dataset.num_classes,
-                dropout=config.dropout,
-            )
-            _ = trainer.train_gnn(
-                model=shadow_model,
-                dataset=shadow_dataset,
-                config=train_config,
-                disable_tqdm=True,
-                inductive_split=config.inductive_split,
-            )
-            shadow_model.eval()
-            self.shadow_models.append(shadow_model)
-
-    def unnormalized_confidence(self, model, x, y):
-        with torch.inference_mode():
-            empty_edge_index = torch.tensor([[],[]], dtype=torch.long).to(self.config.device)
-            unnormalized_conf = model(x, empty_edge_index)[torch.arange(x.shape[0]), y]
-        return unnormalized_conf
-
-    def log_model_posterior(self, x, y):
-        unnormalized_conf = self.unnormalized_confidence(self.target_model, x, y)
-        threshold = torch.stack([
-            self.unnormalized_confidence(shadow_model, x, y)
-            for shadow_model in self.shadow_models
-        ]).mean(dim=0)
-        return unnormalized_conf - threshold
-
-    def run_attack(self, target_node_index):
-        preds = self.log_model_posterior(self.graph.x[target_node_index], self.graph.y[target_node_index])
-        return preds
 
 class LSET:
 
@@ -508,19 +446,18 @@ class LaplaceLSET:
         train_dataset = datasetup.GraphDatasetWrapper(shadow_dataset)
         train_loader = DataLoader(train_dataset, batch_size=1, shuffle=False, collate_fn=squeeze_collate_fn)
         la.fit(train_loader, progress_bar=True)
-        la.optimize_prior_precision(pred_type='nn', link_approx='mc')
+        la.optimize_prior_precision(pred_type='glm', link_approx='probit')
         return la
 
     def log_model_posterior(self, x, y, la):
         empty_edge_index = torch.tensor([[],[]], dtype=torch.long).to(self.config.device)
-        tl = datasetup.TensorList([x, empty_edge_index])
+        nfeic = datasetup.NodeFeatureEdgeIndexContainer(x, empty_edge_index)
         with torch.inference_mode():
             log_conf = F.log_softmax(self.target_model(x, empty_edge_index), dim=1)[torch.arange(x.shape[0]), y]
-        la_preds = la(x=tl, pred_type='nn', link_approx='mc')
+        la_preds = la(x=nfeic, pred_type='glm', link_approx='probit')
         threshold = la_preds[torch.arange(x.shape[0]), y].log()
-        return log_conf - threshold
+        return torch.sigmoid(log_conf - threshold)
 
-    @utils.measure_execution_time
     def run_attack(self, target_node_index):
         shadow_dataset = self.sample_shadow_dataset(target_node_index)
         shadow_model = self.train_shadow_model(shadow_dataset)
@@ -931,6 +868,7 @@ class BMIA:
         self.graph = graph
         self.loss_fn = loss_fn
         self.config = config
+        self.eps = 1e-7
     
     def sample_shadow_dataset(self, target_node_index):
         assert target_node_index.shape[0] * 2 <= self.graph.num_nodes
@@ -989,37 +927,32 @@ class BMIA:
         train_dataset = datasetup.GraphDatasetWrapper(shadow_dataset)
         train_loader = DataLoader(train_dataset, batch_size=1, shuffle=False, collate_fn=squeeze_collate_fn)
         la.fit(train_loader, progress_bar=True)
-        la.optimize_prior_precision(pred_type='nn', link_approx='mc')
+        la.optimize_prior_precision(pred_type='glm', link_approx='probit')
         return la
 
-    @utils.measure_execution_time
-    def run_attack(self, target_node_index):
+    def run_attack(self, target_node_index, n_samples=100):
         config = self.config
         shadow_dataset = self.sample_shadow_dataset(target_node_index)
         shadow_model = self.train_shadow_model(shadow_dataset)
         la = self.laplace_approximation(shadow_model, shadow_dataset)
-        n_samples = 100
         x = self.graph.x[target_node_index]
         y = self.graph.y[target_node_index]
         empty_edge_index = torch.tensor([[],[]], dtype=torch.long).to(config.device)
         with torch.inference_mode():
             preds = self.target_model(x, empty_edge_index)
         row_idx = torch.arange(x.shape[0])
-        target_scores = F.softmax(preds, dim=1)[row_idx, y]
-        tl = datasetup.TensorList([x, empty_edge_index])
-        sampled_preds = la.predictive_samples(tl, pred_type='nn', n_samples=n_samples)
-        sampled_zs = la.functional_samples(tl, pred_type='nn', n_samples=n_samples)
+        target_scores = F.softmax(preds, dim=1)[row_idx, y].logit(eps=self.eps)
+        nfeic = datasetup.NodeFeatureEdgeIndexContainer(x, empty_edge_index)
+        sampled_preds = la.predictive_samples(nfeic, pred_type='glm', n_samples=n_samples)
         sampled_scores = []
         for i in range(n_samples):
-            confs = sampled_preds[i][row_idx, y]
-            log_p = ((confs + 1e-8) / (1 - confs + 1e-8)).log()
-            hinge_score = utils.hinge_loss(sampled_zs[i], y)
-            sampled_scores.append(hinge_score)
+            logit = sampled_preds[i][row_idx, y].logit(eps=self.eps)
+            sampled_scores.append(logit)
         sampled_scores = torch.stack(sampled_scores)
         ds = target_scores - sampled_scores
         d_mean = ds.mean(0)
-        d_std = ds.std(0)
-        t = n_samples ** 0.5 * d_mean / d_std
+        d_stdn = ds.std(0) / np.sqrt(n_samples)
+        t = d_mean / (d_stdn + self.eps)
         preds = t_dist.cdf(t, n_samples - 1)
         assert preds.shape == target_node_index.shape
         return preds

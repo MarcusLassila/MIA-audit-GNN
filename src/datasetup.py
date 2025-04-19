@@ -9,7 +9,7 @@ from torch_geometric.utils import degree, index_to_mask, mask_to_index, subgraph
 from collections import deque
 
 class GraphDatasetWrapper(Dataset):
-    '''Wrapper to use the Laplace approximation module on GNNs'''
+    '''Trivial dataset class to enable the Laplace approximation module on GNNs'''
 
     def __init__(self, graph):
         self.graph = graph
@@ -19,22 +19,25 @@ class GraphDatasetWrapper(Dataset):
 
     def __getitem__(self, idx):
         assert idx == 0
-        return TensorList([self.graph.x, self.graph.edge_index[:,self.graph.inductive_mask]]), self.graph.y
+        return NodeFeatureEdgeIndexContainer(self.graph.x, self.graph.edge_index[:,self.graph.inductive_mask]), self.graph.y
 
-class TensorList(list):
-    '''Wrapper to use the Laplace approximation module on GNNs'''
+class NodeFeatureEdgeIndexContainer:
+    '''Node feature and edge index container class to enable the Laplace approximation module on GNNs'''
 
-    def __init__(self, iterable):
-        if not all(isinstance(x, torch.Tensor) for x in iterable):
-            raise TypeError("All elements of a TensorList has to be torch.Tensor instances")
-        super().__init__(iterable)
-        self.shape = self[0].shape
+    def __init__(self, x, edge_index):
+        self.x = x
+        self.edge_index = edge_index
+        self.shape = x.shape
+
+    def __iter__(self):
+        yield self.x
+        yield self.edge_index
 
     def to(self, *args, **kwargs):
-        return TensorList([x.to(*args, **kwargs) for x in self])
+        return NodeFeatureEdgeIndexContainer(self.x.to(*args, **kwargs), self.edge_index.to(*args, **kwargs))
 
     def squeeze(self, *args, **kwargs):
-        return TensorList([x.squeeze(*args, **kwargs) for x in self])
+        return NodeFeatureEdgeIndexContainer(self.x.to(*args, **kwargs), self.edge_index.to(*args, **kwargs))
 
 def merge_graphs(graph_A, graph_B):
     x = torch.concat([graph_A.x, graph_B.x])
@@ -307,6 +310,8 @@ def remasked_graph(graph, train_mask, mutate=False):
         data = graph
     else:
         data = graph.clone()
+    if not hasattr(graph, "val_mask"):
+        graph.val_mask = torch.zeros_like(train_mask).to(graph.x.device)
     train_mask = train_mask.clone().to(graph.x.device)
     train_mask[graph.val_mask] = False
     test_mask = ~train_mask
