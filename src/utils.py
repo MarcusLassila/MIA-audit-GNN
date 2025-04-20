@@ -41,7 +41,7 @@ def fresh_model(model_type, num_features, hidden_dims, num_classes, dropout=0.0)
 def hinge_loss(pred, target):
     mask = torch.ones_like(pred, dtype=bool)
     mask[np.arange(target.shape[0]), target] = False
-    return pred[~mask] - torch.max(pred[mask].reshape(target.shape[0], -1), dim=1).values
+    return pred[~mask] - torch.logsumexp(pred[mask].reshape(target.shape[0], -1), dim=1)
 
 def measure_execution_time(callable):
     def wrapper(*args, **kwargs):
