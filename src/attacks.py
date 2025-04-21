@@ -461,7 +461,7 @@ class LaplaceLSET:
                 hidden_dims=config.hidden_dim,
                 num_classes=shadow_dataset.num_classes,
                 dropout=config.dropout,
-            )
+            ).to(config.device)
             for j in range(sampled_model.num_layers - 1):
                 sampled_model.convs[j].load_state_dict(shadow_model.convs[j].state_dict())
             bias = sampled_weights[i][:shadow_dataset.num_classes]
@@ -977,7 +977,7 @@ class BMIA:
                 hidden_dims=config.hidden_dim,
                 num_classes=shadow_dataset.num_classes,
                 dropout=config.dropout,
-            )
+            ).to(config.device)
             for j in range(sampled_model.num_layers - 1):
                 sampled_model.convs[j].load_state_dict(shadow_model.convs[j].state_dict())
             bias = sampled_weights[i][:shadow_dataset.num_classes]
@@ -1012,7 +1012,7 @@ class BMIA:
         d_mean = ds.mean(0)
         d_stdn = ds.std(0) / np.sqrt(n_samples)
         t = d_mean / (d_stdn + self.eps)
-        preds = t_dist.cdf(t, n_samples - 1)
+        preds = t_dist.cdf(t.cpu().numpy(), n_samples - 1)
         assert preds.shape == target_node_index.shape
         return preds
 

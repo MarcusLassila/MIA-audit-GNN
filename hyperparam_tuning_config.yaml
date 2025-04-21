@@ -1,24 +1,39 @@
 ---
-cora-GCN:
-  dataset: "cora"
+amazon-photo-GCN:
+  dataset: "amazon-photo"
   model: "GCN"
   epochs: 0
-  hidden_dim: [0]
+  hidden_dim:
+  - 0
   lr: 0.0
   weight_decay: 0.0
   dropout: 0.0
   max_num_nodes: null
   num_target_nodes: 500
   num_audits: 1
-  target_fpr: [0.01]
+  target_fpr: 
+  - 0.01
   hyperparam_search: True
   train_frac: 0.5
   val_frac: 0.5
   minimum_average_gen_gap: 0.08
   hyperparam_grid:
-    lr: [0.01]
-    weight_decay: [0.0001, 0.00001]
-    dropout: [0.0, 0.5]
-    hidden_dim: [[32], [128], [512]]
-    epochs: [20]
+    lr:
+    - 0.01
+    - 0.001
+    weight_decay:
+    - 0.0001
+    - 0.00001
+    dropout:
+    - 0.0
+    - 0.25
+    - 0.5
+    hidden_dim:
+    - - 64
+    - - 128
+    - - 256
+    - - 512
+    epochs:
+    - 2000
+    - 2500
   attacks: null

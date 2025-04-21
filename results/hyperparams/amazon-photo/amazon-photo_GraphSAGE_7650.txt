@@ -1,0 +1,8 @@
+dataset: amazon-photo
+model: GraphSAGE
+num_nodes: 7650
+lr: 0.01
+weight_decay: 0.0001
+dropout: 0.0
+hidden_dim: [256]
+epochs: 200

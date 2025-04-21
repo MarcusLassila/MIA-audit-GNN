@@ -1,0 +1,8 @@
+Bootstrap: docker
+From: quay.io/condaforge/miniforge3:24.11.3-0
+
+%files
+    conda_env_gpu.yaml
+
+%post
+    /opt/conda/bin/conda env update --name conda_env_gpu --file conda_env_gpu.yaml --prune

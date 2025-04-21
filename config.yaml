@@ -8,17 +8,45 @@ cora-GCN:
   lr: 0.01
   weight_decay: 0.0001
   dropout: 0.5
-  max_num_nodes: 10000
-  num_target_nodes: -1
-  num_audits: 100
+  max_num_nodes: null
+  num_target_nodes: 1200
+  num_audits: 10
   target_fpr:
   - 0.01
   - 0.001
-  pretrain_shadow_models: False
-  num_shadow_models: 10
+  pretrain_shadow_models: True
+  num_shadow_models: 8
   seed: 0
   attacks:
     bmia:
       attack: "bmia"
     lset:
-      attack: "laplace-lset"
+      attack: "lset"
+    rmia:
+      attack: "rmia"
+      rmia_gamma: 2
+    lira:
+      attack: "lira"
+    MLP-attack:
+      attack: "mlp-attack"
+      mlp_attack_queries:
+      - 0
+      mlp_hidden_dim:
+      - 128
+      - 128
+    confidence:
+      attack: "confidence"
+    prior-lset-MCMC:
+      attack: "prior-lset"
+      num_sampled_graphs: 10
+      sampling_strategy: "MCMC"
+    prior-lset-MIA:
+      attack: "prior-lset"
+      num_sampled_graphs: 10
+      sampling_strategy: "mia"
+    improved-lset:
+      attack: "improved-lset"
+      additional_shadow_models: 92
+    graph-lset:
+      attack: "improved-graph-lset"
+      additional_shadow_models: 92
