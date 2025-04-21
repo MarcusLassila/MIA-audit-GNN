@@ -43,7 +43,7 @@ cora-GCN:
     prior-lset-MIA:
       attack: "prior-lset"
       num_sampled_graphs: 10
-      sampling_strategy: "mia"
+      sampling_strategy: "MIA"
     improved-lset:
       attack: "improved-lset"
       additional_shadow_models: 92

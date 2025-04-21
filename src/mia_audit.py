@@ -386,7 +386,7 @@ if __name__ == '__main__':
             'attack': config['attack'],
             'num_shadow_models': config['num_shadow_models'],
             'num_sampled_graphs': config['num_sampled_graphs'],
-            'bayes_sampling_strategy': config['bayes_sampling_strategy'],
+            'sampling_strategy': config['sampling_strategy'],
             'mlp_attack_queries': list(config['mlp_attack_queries']),
         }
     }

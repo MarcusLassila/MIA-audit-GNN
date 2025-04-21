@@ -163,7 +163,7 @@ class PriorLSET:
         self.graph = graph
         self.loss_fn = loss_fn
         self.config = config
-        if config.bayes_sampling_strategy == 'mia-0-hop':
+        if config.sampling_strategy == 'MIA':
             self.zero_hop_attacker = LSET(
                 target_model=target_model,
                 graph=graph,
@@ -269,7 +269,7 @@ class PriorLSET:
         sampling_state = PriorLSET.SamplingState(
             outer_cls=self,
             score_dim=(config.num_sampled_graphs, target_node_index.shape[0]),
-            strategy=config.bayes_sampling_strategy,
+            strategy=config.sampling_strategy,
         )
         for i in tqdm(range(config.num_sampled_graphs), desc="Computing expactation over sampled graphs"):
             self.update_scores(
@@ -282,12 +282,12 @@ class PriorLSET:
         return preds
 
     def update_scores(self, sample_idx, target_node_index, sampling_state):
-        match self.config.bayes_sampling_strategy:
+        match self.config.sampling_strategy:
             case 'model-independent':
                 node_mask = self.sample_random_node_mask(frac_ones=0.5)
                 subgraph_in = self.masked_subgraph(node_mask)
                 log_posterior_in = self.log_model_posterior(subgraph=subgraph_in)
-            case 'mia-0-hop':
+            case 'MIA':
                 node_mask = self.sample_node_mask_zero_hop_MIA()
                 subgraph_in = self.masked_subgraph(node_mask)
                 log_posterior_in = self.log_model_posterior(subgraph=subgraph_in)
@@ -302,7 +302,7 @@ class PriorLSET:
                 subgraph_in = self.masked_subgraph(node_mask)
                 log_posterior_in = self.log_model_posterior(subgraph=subgraph_in)
             case _:
-                raise ValueError(f'Unsupported sampling strategy: {self.config.bayes_sampling_strategy}')
+                raise ValueError(f'Unsupported sampling strategy: {self.config.sampling_strategy}')
 
         for i, node_idx in enumerate(target_node_index):
             node_mask[node_idx] = not node_mask[node_idx]
@@ -532,7 +532,7 @@ class ImprovedLSET:
             weight_decay=config.weight_decay,
             optimizer=getattr(torch.optim, config.optimizer),
         )
-        for _ in tqdm(range(config.more_shadow_models), desc="Training additional shadow models"):
+        for _ in tqdm(range(config.additional_shadow_models), desc="Training additional shadow models"):
             train_mask = self.sample_node_mask_zero_hop_MIA()
             shadow_graph = datasetup.remasked_graph(self.graph, train_mask)
             shadow_model = utils.fresh_model(
@@ -626,7 +626,7 @@ class GraphLSET:
             weight_decay=config.weight_decay,
             optimizer=getattr(torch.optim, config.optimizer),
         )
-        for _ in tqdm(range(config.more_shadow_models), desc="Training additional shadow models"):
+        for _ in tqdm(range(config.additional_shadow_models), desc="Training additional shadow models"):
             train_mask = self.sample_node_mask_zero_hop_MIA()
             shadow_graph = datasetup.remasked_graph(self.graph, train_mask)
             shadow_model = utils.fresh_model(
