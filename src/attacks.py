@@ -1164,19 +1164,31 @@ class RmiaOnline:
     def run_attack(self, target_node_index):
         empty_edge_index = torch.tensor([[],[]], dtype=torch.long).to(self.config.device)
         num_target_nodes = target_node_index.shape[0]
-        row_idx = torch.arange(num_target_nodes)
+        row_idx = torch.arange(self.graph.num_nodes)
         with torch.inference_mode():
             p_x = []
             for shadow_model in self.shadow_models:
-                preds = F.softmax(shadow_model(self.graph.x[target_node_index], empty_edge_index), dim=1)[row_idx, self.graph.y[target_node_index]]
+                preds = F.softmax(
+                    shadow_model(self.graph.x[target_node_index], empty_edge_index),
+                    dim=1
+                )[torch.arange(target_node_index.shape[0]), self.graph.y[target_node_index]]
                 p_x.append(preds)
             p_x = torch.stack(p_x)
             assert p_x.shape == (len(self.shadow_models), num_target_nodes)
             p_x = p_x.mean(dim=0)
-            p_x_target = F.softmax(self.target_model(self.graph.x[target_node_index], empty_edge_index), dim=1)[row_idx, self.graph.y[target_node_index]]
+            preds_target = F.softmax(self.target_model(self.graph.x, empty_edge_index), dim=1)
+            p_x_target = preds_target[target_node_index, self.graph.y[target_node_index]]
             ratio_x = p_x_target / p_x
             # Let Z be all nodes in the graph. We compare each x with all nodes z (including x=z which has a negligible effect).
-            score = torch.tensor([(x > ratio_x * self.config.rmia_gamma).float().mean().item() for x in ratio_x])
+            p_z = []
+            for shadow_model in self.shadow_models:
+                preds = F.softmax(shadow_model(self.graph.x, empty_edge_index), dim=1)[row_idx, self.graph.y]
+                p_z.append(preds)
+            p_z = torch.stack(p_z)
+            assert p_z.shape == (len(self.shadow_models), self.graph.num_nodes)
+            p_z_target = preds_target[row_idx, self.graph.y]
+            ratio_z = p_z_target / p_z
+            score = torch.tensor([(x > ratio_z * self.config.rmia_gamma).float().mean().item() for x in ratio_x])
         return score
 
 ##### Offline versions #####
