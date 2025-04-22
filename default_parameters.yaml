@@ -7,7 +7,7 @@ default-parameters:
   epochs_mlp: 500
   num_audits: 1
   max_num_nodes: null
-  num_target_nodes: -1 # -1 uses all nodes
+  frac_target_nodes: 0.5
   hidden_dim: [32]
   hidden_dim_mlp: [128]
   target_fpr: 0.01

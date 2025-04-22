@@ -1122,6 +1122,8 @@ class RmiaOnline:
         self.graph = graph
         self.loss_fn = loss_fn
         self.config = config
+        self.num_z = int(config.Z_frac * graph.num_nodes)
+        self.z_set = torch.randperm(self.graph.num_nodes)[:self.num_z].sort()[0]
         if shadow_models is None:
             self.shadow_models = []
             self.train_shadow_models()
@@ -1164,7 +1166,6 @@ class RmiaOnline:
     def run_attack(self, target_node_index):
         empty_edge_index = torch.tensor([[],[]], dtype=torch.long).to(self.config.device)
         num_target_nodes = target_node_index.shape[0]
-        row_idx = torch.arange(self.graph.num_nodes)
         with torch.inference_mode():
             p_x = []
             for shadow_model in self.shadow_models:
@@ -1179,14 +1180,16 @@ class RmiaOnline:
             preds_target = F.softmax(self.target_model(self.graph.x, empty_edge_index), dim=1)
             p_x_target = preds_target[target_node_index, self.graph.y[target_node_index]]
             ratio_x = p_x_target / p_x
-            # Let Z be all nodes in the graph. We compare each x with all nodes z (including x=z which has a negligible effect).
             p_z = []
             for shadow_model in self.shadow_models:
-                preds = F.softmax(shadow_model(self.graph.x, empty_edge_index), dim=1)[row_idx, self.graph.y]
+                preds = F.softmax(
+                    shadow_model(self.graph.x[self.z_set], empty_edge_index),
+                    dim=1
+                )[torch.arange(self.num_z), self.graph.y[self.z_set]]
                 p_z.append(preds)
             p_z = torch.stack(p_z)
-            assert p_z.shape == (len(self.shadow_models), self.graph.num_nodes)
-            p_z_target = preds_target[row_idx, self.graph.y]
+            assert p_z.shape == (len(self.shadow_models), self.num_z)
+            p_z_target = preds_target[self.z_set, self.graph.y[self.z_set]]
             ratio_z = p_z_target / p_z
             score = torch.tensor([(x > ratio_z * self.config.rmia_gamma).float().mean().item() for x in ratio_x])
         return score

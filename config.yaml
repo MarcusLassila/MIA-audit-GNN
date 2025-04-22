@@ -9,7 +9,7 @@ cora-GCN:
   weight_decay: 0.0001
   dropout: 0.5
   max_num_nodes: null
-  num_target_nodes: 1200
+  frac_target_nodes: 0.5
   num_audits: 10
   target_fpr:
   - 0.01
@@ -25,6 +25,7 @@ cora-GCN:
     rmia:
       attack: "rmia"
       rmia_gamma: 2
+      Z_frac: 1.0
     lira:
       attack: "lira"
     MLP-attack:
@@ -44,9 +45,3 @@ cora-GCN:
       attack: "prior-lset"
       num_sampled_graphs: 10
       sampling_strategy: "MIA"
-    improved-lset:
-      attack: "improved-lset"
-      additional_shadow_models: 92
-    graph-lset:
-      attack: "improved-graph-lset"
-      additional_shadow_models: 92

@@ -221,23 +221,21 @@ class MembershipInferenceAudit:
 
     def get_target_nodes(self):
         config = self.config
-        if config.num_target_nodes == -1:
-            target_node_index = torch.arange(self.dataset.num_nodes)
-        else:
-            assert config.num_target_nodes <= self.dataset.num_nodes
-            assert not torch.any(self.dataset.train_mask & self.dataset.test_mask)
-            train_nodes = self.dataset.train_mask.long()
-            test_nodes = self.dataset.test_mask.long()
-            num_targets = config.num_target_nodes
-            positives = train_nodes.nonzero().squeeze()
-            negatives = test_nodes.nonzero().squeeze()
-            perm_mask = torch.randperm(positives.shape[0])
-            positives = positives[perm_mask][:num_targets // 2]
-            perm_mask = torch.randperm(negatives.shape[0])
-            negatives = negatives[perm_mask][:num_targets // 2]
-            perm_mask = torch.randperm(num_targets)
-            target_node_index = torch.concat((positives, negatives))[perm_mask]
-            assert target_node_index.shape == (num_targets,)
+        assert 0.0 <= config.frac_target_nodes <= 1.0
+        assert not torch.any(self.dataset.train_mask & self.dataset.test_mask)
+        num_target_nodes = int(config.frac_target_nodes * self.dataset.num_nodes)
+        train_nodes = self.dataset.train_mask.long()
+        test_nodes = self.dataset.test_mask.long()
+        positives = train_nodes.nonzero().squeeze()
+        negatives = test_nodes.nonzero().squeeze()
+        num_target_nodes = min(num_target_nodes, 2 * positives.shape[0])
+        perm_mask = torch.randperm(positives.shape[0])
+        positives = positives[perm_mask][:num_target_nodes // 2]
+        perm_mask = torch.randperm(negatives.shape[0])
+        negatives = negatives[perm_mask][:num_target_nodes // 2]
+        perm_mask = torch.randperm(num_target_nodes)
+        target_node_index = torch.concat((positives, negatives))[perm_mask]
+        assert target_node_index.shape == (num_target_nodes,)
         return target_node_index
 
     def parse_stats(self, stats):

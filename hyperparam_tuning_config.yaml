@@ -9,7 +9,7 @@ amazon-photo-GCN:
   weight_decay: 0.0
   dropout: 0.0
   max_num_nodes: null
-  num_target_nodes: 500
+  frac_target_nodes: 0.0
   num_audits: 1
   target_fpr: 
   - 0.01
