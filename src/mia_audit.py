@@ -41,7 +41,7 @@ class MembershipInferenceAudit:
             print(f'Hyperparameter search results: {opt_hyperparams}')
             Path("results/hyperparams").mkdir(parents=True, exist_ok=True)
             log_info = f'dataset: {config.dataset}\nmodel: {config.model}\nnum_nodes: {self.dataset.num_nodes}\n' + '\n'.join(f'{k}: {v}' for k, v in opt_hyperparams.items())
-            with open(f"results/hyperparams/{config.dataset}_{config.model}_{self.dataset.num_nodes}.txt", "w") as f:
+            with open(f"results/hyperparams/{config.dataset}/{config.dataset}_{config.model}_{self.dataset.num_nodes}.txt", "w") as f:
                 f.write(log_info)
         self.config = config
 

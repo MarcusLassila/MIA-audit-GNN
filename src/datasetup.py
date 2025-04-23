@@ -408,7 +408,7 @@ def parse_dataset(root, name, max_num_nodes=None):
         case "pubmed":
             dataset = torch_geometric.datasets.Planetoid(root=root, name="PubMed")
         case "reddit":
-            dataset = torch_geometric.datasets.Reddit(root=f'{root}/Reddit')
+            dataset = torch_geometric.datasets.Reddit2(root=f'{root}/Reddit')
         case "sbm":
             dataset = stochastic_block_model(root)
         case _:
