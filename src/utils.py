@@ -148,6 +148,12 @@ def write_flat_params_to_layer(flat_params, layer):
         idx += numel
     layer.load_state_dict(state_dict)
 
+def count_parameters(model, only_requires_grad=True):
+    if only_requires_grad:
+        return sum(p.numel() for p in model.parameters() if p.requires_grad)
+    else:
+        return sum(p.numel() for p in model.parameters())
+
 ########## Plotting helpers ##########
 
 def plot_graph(graph):

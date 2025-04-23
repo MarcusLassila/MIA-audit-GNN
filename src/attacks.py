@@ -1,5 +1,6 @@
 import datasetup
 import evaluation
+import models
 import trainer
 import utils
 
@@ -32,8 +33,19 @@ class MLPAttack:
         self.shadow_models = []
         self.shadow_graphs = []
         self.queries = config.mlp_attack_queries
-        dims = [graph.num_classes * len(self.queries), *config.hidden_dim_mlp, 2]
-        self.attack_model = MLP(channel_list=dims, dropout=0.0)
+        if hasattr(config, 'use_xmlp') and config.use_xmlp:
+            self.attack_model = models.XMLP(
+                concats=len(self.queries),
+                in_dim=graph.num_classes,
+                hidden_dims=config.hidden_dim_mlp,
+                out_dim=2,
+            )
+        else:
+            self.attack_model = models.MLP(
+                in_dim=graph.num_classes*len(self.queries),
+                hidden_dims=config.hidden_dim_mlp,
+                out_dim=2,
+            )
         self.train_shadow_models()
         self.train_attack_model()
 

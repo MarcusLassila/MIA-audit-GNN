@@ -87,3 +87,23 @@ class MLP(gnn.MLP):
     def __init__(self, in_dim, hidden_dims, out_dim, dropout=0.0):
         channel_list = [in_dim, *hidden_dims, out_dim]
         super(MLP, self).__init__(channel_list, dropout=dropout)
+
+class XMLP(nn.Module):
+    ''' Attack model from Xinlei He et al. that pass the concatenated query to separate linear layers before applying the MLP '''
+
+    def __init__(self, concats, in_dim, hidden_dims, out_dim, dropout=0.0):
+        super(XMLP, self).__init__()
+        self.concats = concats
+        self.in_dim = in_dim
+        self.concat_linear_embedding_dim = hidden_dims[0]
+        self.lin_layers = nn.ModuleList([
+            nn.Linear(in_features=in_dim, out_features=hidden_dims[0]) for _ in range(concats)
+        ])
+        channel_list = [concats * hidden_dims[0], *hidden_dims[1:], out_dim]
+        self.mlp = gnn.MLP(channel_list, dropout=dropout)
+
+    def forward(self, x):
+        x = x.view(-1, self.concats, self.in_dim).permute(1, 0, 2)
+        x = torch.cat([lin_layer(z) for lin_layer, z in zip(self.lin_layers, x)], dim=1)
+        x = self.mlp(x)
+        return x
