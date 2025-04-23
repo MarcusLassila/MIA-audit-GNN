@@ -1,0 +1,8 @@
+dataset: pubmed
+model: GCN
+num_nodes: 19717
+lr: 0.01
+weight_decay: 1e-05
+dropout: 0.25
+hidden_dim: [64]
+epochs: 400
