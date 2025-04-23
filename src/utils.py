@@ -138,6 +138,16 @@ def partition_training_sets(num_nodes, num_models):
             train_masks[j][i] = model_mask[j]
     return train_masks
 
+def write_flat_params_to_layer(flat_params, layer):
+    state_dict = {}
+    idx = 0
+    for name, params in layer.state_dict().items():
+        numel = params.numel()
+        new_params = flat_params[idx: idx + numel].view_as(params)
+        state_dict[name] = new_params
+        idx += numel
+    layer.load_state_dict(state_dict)
+
 ########## Plotting helpers ##########
 
 def plot_graph(graph):

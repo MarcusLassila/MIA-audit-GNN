@@ -360,24 +360,23 @@ class LSET:
             shadow_model.eval()
             self.shadow_models.append(shadow_model)
 
-    def log_confidence(self, model, x, y):
+    def log_confidence(self, model, x, edge_index, y):
         with torch.inference_mode():
-            empty_edge_index = torch.tensor([[],[]], dtype=torch.long).to(self.config.device)
-            log_conf = F.log_softmax(model(x, empty_edge_index), dim=1)[torch.arange(x.shape[0]), y]
+            log_conf = F.log_softmax(model(x, edge_index), dim=1)[torch.arange(x.shape[0]), y]
         return log_conf
 
-    def log_model_posterior(self, x, y):
-        log_conf = self.log_confidence(self.target_model, x, y)
+    def run_attack(self, target_node_index):
+        x = self.graph.x[target_node_index]
+        y = self.graph.y[target_node_index]
+        empty_edge_index = torch.tensor([[],[]], dtype=torch.long).to(self.config.device)
+        log_conf = self.log_confidence(self.target_model, x, empty_edge_index, y)
         threshold = torch.stack([
-            self.log_confidence(shadow_model, x, y)
+            self.log_confidence(shadow_model, x, empty_edge_index, y)
             for shadow_model in self.shadow_models
         # Subtracting log(num_shadow_models) is not necessary for attack performance,
         # but should be there if we want to get probabilities by applying sigmoid
         ]).logsumexp(0) - np.log(len(self.shadow_models))
-        return torch.sigmoid(log_conf - threshold)
-
-    def run_attack(self, target_node_index):
-        preds = self.log_model_posterior(self.graph.x[target_node_index], self.graph.y[target_node_index])
+        preds = torch.sigmoid(log_conf - threshold)
         return preds
 
 class LaplaceLSET:
@@ -450,36 +449,29 @@ class LaplaceLSET:
         la.optimize_prior_precision(pred_type='glm', link_approx='probit')
         return la
     
-    def sample_models(self, n_samples, la, shadow_model, shadow_dataset):
-        config = self.config
+    def sample_models(self, n_samples, la, shadow_model):
         sampled_weights = la.sample(n_samples)
         sampled_models = []
         for i in range(n_samples):
-            sampled_model = utils.fresh_model(
-                model_type=config.model,
-                num_features=shadow_dataset.num_features,
-                hidden_dims=config.hidden_dim,
-                num_classes=shadow_dataset.num_classes,
-                dropout=config.dropout,
-            ).to(config.device)
-            for j in range(sampled_model.num_layers - 1):
-                sampled_model.convs[j].load_state_dict(shadow_model.convs[j].state_dict())
-            bias = sampled_weights[i][:shadow_dataset.num_classes]
-            lin_weight = sampled_weights[i][shadow_dataset.num_classes:].reshape(shadow_dataset.num_classes, -1)
-            sampled_model.convs[-1].load_state_dict({
-                'bias': bias,
-                'lin.weight': lin_weight,
-            })
+            sampled_model = copy.deepcopy(shadow_model)
+            # Update weights in last layer
+            utils.write_flat_params_to_layer(sampled_weights[i], sampled_model.convs[-1])
             sampled_models.append(sampled_model)
         return sampled_models
 
-    def log_model_posterior(self, x, y, la, sampled_models):
+    def run_attack(self, target_node_index, n_samples=100):
+        shadow_dataset = self.sample_shadow_dataset(target_node_index)
+        shadow_model = self.train_shadow_model(shadow_dataset)
+        la = self.laplace_approximation(shadow_model, shadow_dataset)
+        x = self.graph.x[target_node_index]
+        y = self.graph.y[target_node_index]
         empty_edge_index = torch.tensor([[],[]], dtype=torch.long).to(self.config.device)
         row_idx = torch.arange(x.shape[0])
         with torch.inference_mode():
             log_conf = F.log_softmax(self.target_model(x, empty_edge_index), dim=1)[row_idx, y]
         if self.config.sample_models:
             log_conf_samples = []
+            sampled_models = self.sample_models(n_samples, la, shadow_model)
             with torch.inference_mode():
                 for sampled_model in sampled_models:
                     sampled_log_conf = F.log_softmax(sampled_model(x, empty_edge_index), dim=1)[row_idx, y]
@@ -490,14 +482,7 @@ class LaplaceLSET:
             nfeic = datasetup.NodeFeatureEdgeIndexContainer(x, empty_edge_index)
             la_preds = la(x=nfeic, pred_type='glm', link_approx='probit')
             threshold = la_preds[torch.arange(x.shape[0]), y].log()
-        return torch.sigmoid(log_conf - threshold)
-
-    def run_attack(self, target_node_index, n_samples=100):
-        shadow_dataset = self.sample_shadow_dataset(target_node_index)
-        shadow_model = self.train_shadow_model(shadow_dataset)
-        la = self.laplace_approximation(shadow_model, shadow_dataset)
-        sampled_models = self.sample_models(n_samples, la, shadow_model, shadow_dataset)
-        preds = self.log_model_posterior(self.graph.x[target_node_index], self.graph.y[target_node_index], la, sampled_models)
+        preds = torch.sigmoid(log_conf - threshold)
         return preds
 
 class ImprovedLSET:
@@ -966,26 +951,13 @@ class BMIA:
         la.optimize_prior_precision(pred_type='glm', link_approx='probit')
         return la
 
-    def sample_models(self, n_samples, la, shadow_model, shadow_dataset):
-        config = self.config
+    def sample_models(self, n_samples, la, shadow_model):
         sampled_weights = la.sample(n_samples)
         sampled_models = []
         for i in range(n_samples):
-            sampled_model = utils.fresh_model(
-                model_type=config.model,
-                num_features=shadow_dataset.num_features,
-                hidden_dims=config.hidden_dim,
-                num_classes=shadow_dataset.num_classes,
-                dropout=config.dropout,
-            ).to(config.device)
-            for j in range(sampled_model.num_layers - 1):
-                sampled_model.convs[j].load_state_dict(shadow_model.convs[j].state_dict())
-            bias = sampled_weights[i][:shadow_dataset.num_classes]
-            lin_weight = sampled_weights[i][shadow_dataset.num_classes:].reshape(shadow_dataset.num_classes, -1)
-            sampled_model.convs[-1].load_state_dict({
-                'bias': bias,
-                'lin.weight': lin_weight,
-            })
+            sampled_model = copy.deepcopy(shadow_model)
+            # Update weights in last layer
+            utils.write_flat_params_to_layer(sampled_weights[i], sampled_model.convs[-1])
             sampled_models.append(sampled_model)
         return sampled_models
 
@@ -1000,7 +972,7 @@ class BMIA:
         with torch.inference_mode():
             preds = self.target_model(x, empty_edge_index)
         target_scores = utils.hinge_loss(preds, y)
-        sampled_models = self.sample_models(n_samples, la, shadow_model, shadow_dataset)
+        sampled_models = self.sample_models(n_samples, la, shadow_model)
         sampled_scores = []
         with torch.inference_mode():
             for sampled_model in sampled_models:
