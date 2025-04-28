@@ -39,6 +39,21 @@ class NodeFeatureEdgeIndexContainer:
     def squeeze(self, *args, **kwargs):
         return NodeFeatureEdgeIndexContainer(self.x.to(*args, **kwargs), self.edge_index.to(*args, **kwargs))
 
+def remove_node(graph, node_idx):
+    node_mask = torch.ones(graph.num_nodes, dtype=torch.bool)
+    node_mask[node_idx] = False
+    edge_index, _ = subgraph(
+        subset=node_mask,
+        edge_index=graph.edge_index,
+        relabel_nodes=True,
+    )
+    return Data(
+        x=graph.x[node_mask],
+        edge_index=edge_index,
+        y=graph.y[node_mask],
+        num_classes=graph.num_classes,
+    )
+
 def merge_graphs(graph_A, graph_B):
     x = torch.concat([graph_A.x, graph_B.x])
     y = torch.concat([graph_A.y, graph_B.y])

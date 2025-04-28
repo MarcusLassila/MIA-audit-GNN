@@ -53,7 +53,7 @@ def measure_execution_time(callable):
     return wrapper
 
 def average_degree(graph):
-    return degree(graph.edge_index[0], num_nodes=graph.num_nodes, dtype=torch.float).mean().item()
+    return degree(graph.edge_index[0], num_nodes=graph.num_nodes, dtype=torch.float32).mean().item()
 
 def fraction_isolated_nodes(graph):
     _, _, mask = remove_isolated_nodes(graph.edge_index, num_nodes=graph.num_nodes)

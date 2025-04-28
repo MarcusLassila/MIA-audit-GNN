@@ -116,17 +116,22 @@ class MLPAttack:
             criterion=Accuracy(task="multiclass", num_classes=2).to(config.device),
             device=config.device,
             epochs=config.epochs_mlp,
-            early_stopping=100,
+            early_stopping=50,
             loss_fn=nn.CrossEntropyLoss(),
             lr=1e-3,
             weight_decay=1e-4,
             optimizer=torch.optim.Adam,
         )
-        trainer.train_mlp(
+        train_res = trainer.train_mlp(
             model=self.attack_model,
             train_loader=train_loader,
             valid_loader=valid_loader,
             config=train_config,
+        )
+        utils.plot_training_results(
+            train_res,
+            name=f'{"XMLP" if config.use_xmlp else "MLP"} attack training result',
+            savedir='temp_results/MLP_attack_train_results'
         )
         self.attack_model.eval()
 
@@ -183,7 +188,9 @@ class PriorLSET:
                 config=config,
                 shadow_models=shadow_models,
             )
-            self.zero_hop_probs = self.zero_hop_attacker.run_attack(torch.arange(self.graph.num_nodes)).sigmoid()
+            self.zero_hop_probs = self.zero_hop_attacker.run_attack(torch.arange(self.graph.num_nodes))
+            assert torch.all(self.zero_hop_probs >= 0.0)
+            assert torch.all(self.zero_hop_probs <= 1.0)
             self.shadow_models = self.zero_hop_attacker.shadow_models
         elif shadow_models is None:
             self.shadow_models = []
@@ -261,19 +268,23 @@ class PriorLSET:
 
     def neg_loss(self, model, graph):
         with torch.inference_mode():
-            res = -self.loss_fn(model(graph.x, graph.edge_index), graph.y) * self.graph.num_nodes
+            res = -F.cross_entropy(model(graph.x, graph.edge_index), graph.y, reduction='sum')
         return res
 
-    def log_model_posterior(self, subgraph, shadow_models=None):
-        # Only loss values over the k-hop neighborhood is necessary (for a k-layer GNN)
-        # but we compute loss values over all node for simplicity
-        if shadow_models is None:
-            shadow_models = self.shadow_models
+    def loss_signal(self, in_subgraph, out_subgraph):
+        target_loss_diff = self.neg_loss(self.target_model, in_subgraph) - self.neg_loss(self.target_model, out_subgraph)
+        shadow_loss_diff = torch.tensor([
+            self.neg_loss(shadow_model, in_subgraph) - self.neg_loss(shadow_model, out_subgraph)
+            for shadow_model in self.shadow_models
+        ]).logsumexp(0) - np.log(len(self.shadow_models))
+        return target_loss_diff - shadow_loss_diff
+
+    def log_model_posterior(self, subgraph):
         neg_loss_term = self.neg_loss(self.target_model, subgraph)
         log_Z_term = torch.tensor([
             self.neg_loss(shadow_model, subgraph)
-            for shadow_model in shadow_models
-        ]).logsumexp(0) - np.log(len(shadow_models))
+            for shadow_model in self.shadow_models
+        ]).logsumexp(0) - np.log(len(self.shadow_models))
         return neg_loss_term - log_Z_term
 
     def run_attack(self, target_node_index):
@@ -292,39 +303,53 @@ class PriorLSET:
         preds = sampling_state.score.mean(dim=0)
         assert preds.shape == target_node_index.shape
         return preds
-
+    
     def update_scores(self, sample_idx, target_node_index, sampling_state):
         match self.config.sampling_strategy:
             case 'model-independent':
                 node_mask = self.sample_random_node_mask(frac_ones=0.5)
-                subgraph_in = self.masked_subgraph(node_mask)
-                log_posterior_in = self.log_model_posterior(subgraph=subgraph_in)
             case 'MIA':
                 node_mask = self.sample_node_mask_zero_hop_MIA()
-                subgraph_in = self.masked_subgraph(node_mask)
-                log_posterior_in = self.log_model_posterior(subgraph=subgraph_in)
             case 'MCMC':
                 for _ in range(sampling_state.MCMC_sampling_iterations):
                     self.MCMC_update_step(sampling_state=sampling_state)
                 node_mask = sampling_state.mask
-                subgraph_in = sampling_state.subgraph
-                log_posterior_in = sampling_state.log_p
             case 'strong':
                 node_mask = self.graph.train_mask.clone()
-                subgraph_in = self.masked_subgraph(node_mask)
-                log_posterior_in = self.log_model_posterior(subgraph=subgraph_in)
             case _:
                 raise ValueError(f'Unsupported sampling strategy: {self.config.sampling_strategy}')
 
         for i, node_idx in enumerate(target_node_index):
-            node_mask[node_idx] = not node_mask[node_idx]
-            subgraph_out = self.masked_subgraph(node_mask)
-            log_posterior_out = self.log_model_posterior(subgraph=subgraph_out)
-            if node_mask[node_idx]:
-                sampling_state.score[sample_idx][i] = torch.sigmoid(log_posterior_out - log_posterior_in)
+            node_mask_copy = node_mask.clone()
+            node_mask_copy[node_idx] = True
+            edge_index, _ = subgraph(
+                subset=node_mask_copy,
+                edge_index=self.graph.edge_index,
+                relabel_nodes=False,
+            )
+            subset, edge_index, center_idx, _ = k_hop_subgraph(
+                node_idx=node_idx.item(),
+                # We need to determine how the precense or absence of the target node affects the embeddings in
+                # the L-hop neighborhood of the target node, and the neighbors are likewise affected by the nodes
+                # in their L-hop neighborhood
+                num_hops=self.shadow_models[0].num_layers ** 2,
+                edge_index=edge_index,
+                relabel_nodes=True,
+                num_nodes=self.graph.num_nodes,
+            )
+            subgraph_in = Data(
+                x=self.graph.x[subset],
+                edge_index=edge_index,
+                y=self.graph.y[subset],
+                num_classes=self.graph.num_classes,
+            )
+            if subgraph_in.num_nodes == 1:
+                score = self.log_model_posterior(subgraph_in)
             else:
-                sampling_state.score[sample_idx][i] = torch.sigmoid(log_posterior_in - log_posterior_out)
-            node_mask[node_idx] = not node_mask[node_idx]
+                subgraph_out = datasetup.remove_node(subgraph_in, center_idx.item())
+                assert subgraph_in.num_nodes - subgraph_out.num_nodes == 1
+                score = self.loss_signal(in_subgraph=subgraph_in, out_subgraph=subgraph_out)
+            sampling_state.score[sample_idx][i] = score.sigmoid()
 
 class LSET:
 
@@ -388,8 +413,8 @@ class LSET:
         # Subtracting log(num_shadow_models) is not necessary for attack performance,
         # but should be there if we want to get probabilities by applying sigmoid
         ]).logsumexp(0) - np.log(len(self.shadow_models))
-        preds = torch.sigmoid(log_conf - threshold)
-        return preds
+        preds = log_conf - threshold
+        return preds.sigmoid()
 
 class LaplaceLSET:
 
@@ -494,8 +519,8 @@ class LaplaceLSET:
             nfeic = datasetup.NodeFeatureEdgeIndexContainer(x, empty_edge_index)
             la_preds = la(x=nfeic, pred_type='glm', link_approx='probit')
             threshold = la_preds[torch.arange(x.shape[0]), y].log()
-        preds = torch.sigmoid(log_conf - threshold)
-        return preds
+        preds = log_conf - threshold
+        return preds.sigmoid()
 
 class ImprovedLSET:
 
@@ -511,7 +536,7 @@ class ImprovedLSET:
             config=config,
             shadow_models=shadow_models,
         )
-        self.zero_hop_probs = self.zero_hop_attacker.run_attack(torch.arange(self.graph.num_nodes)).sigmoid()
+        self.zero_hop_probs = self.zero_hop_attacker.run_attack(torch.arange(self.graph.num_nodes))
         self.shadow_models = []
         self.train_masks = []
         self.train_shadow_models()
@@ -605,7 +630,7 @@ class GraphLSET:
             config=config,
             shadow_models=shadow_models,
         )
-        self.zero_hop_probs = self.zero_hop_attacker.run_attack(torch.arange(self.graph.num_nodes)).sigmoid()
+        self.zero_hop_probs = self.zero_hop_attacker.run_attack(torch.arange(self.graph.num_nodes))
         self.shadow_models = []
         self.train_masks = []
         self.train_shadow_models()

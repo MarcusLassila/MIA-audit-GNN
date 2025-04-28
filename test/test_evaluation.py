@@ -19,7 +19,7 @@ class TestEvaluation(unittest.TestCase):
             config = utils.Config(yaml.safe_load(file)['default-parameters'])
             config.device = 'cpu'
         dataset = datasetup.parse_dataset(config.datadir, 'cora')
-        target_dataset, _, _, _ = datasetup.disjoint_graph_split(dataset, train_frac=config.train_frac, val_frac=config.val_frac)
+        _ = datasetup.random_remasked_graph(dataset, train_frac=0.5, val_frac=0.0, mutate=True)
         criterion = Accuracy(task="multiclass", num_classes=dataset.num_classes)
         target_model = utils.fresh_model(
             model_type=config.model,
@@ -40,16 +40,18 @@ class TestEvaluation(unittest.TestCase):
         )
         _ = trainer.train_gnn(
             model=target_model,
-            dataset=target_dataset,
+            dataset=dataset,
             config=train_config,
             inductive_split=config.inductive_split,
         )
         attacker = attacks.ConfidenceAttack(
             target_model=target_model,
+            graph=dataset,
             config=config,
         )
-        preds = attacker.run_attack(target_samples=target_dataset, num_hops=0, inductive_inference=config.inductive_inference).numpy()
-        truth = target_dataset.train_mask.long().numpy()
+        target_node_index = torch.randperm(dataset.num_nodes)[:500]
+        preds = attacker.run_attack(target_node_index=target_node_index).numpy()
+        truth = dataset.train_mask.long().numpy()[target_node_index]
         fpr, tpr, thresholds = roc_curve(y_true=truth, y_score=preds)
         tpr_fixed_fpr, threshold = utils.tpr_at_fixed_fpr(fpr, tpr, config.target_fpr, thresholds)
         hard_preds = (preds >= threshold).astype(np.int64)

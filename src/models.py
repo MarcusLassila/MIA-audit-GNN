@@ -64,12 +64,12 @@ class GraphSAGE(BaseGNN):
 
 class GAT(BaseGNN):
 
-    def __init__(self, in_dim, hidden_dims, out_dim, heads=(8,1), dropout=0.0):
+    def __init__(self, in_dim, hidden_dims, out_dim, heads=(4,2), dropout=0.0):
         super(GAT, self).__init__(dropout=dropout)
         channel_list = [in_dim, *hidden_dims, out_dim]
         self.convs = nn.ModuleList([])
         for i, in_c, out_c, heads_prev, heads_curr in zip(range(len(channel_list)), channel_list, channel_list[1:], [1, *heads], heads):
-            self.convs.append(gnn.GATConv(in_c * heads_prev, out_c, heads=heads_curr, concat=i+1<len(channel_list)))
+            self.convs.append(gnn.GATConv(in_c * heads_prev, out_c, heads=heads_curr, concat=i+2<len(channel_list))) # Do not concat final multi-head attention
         self.num_layers = len(self.convs)
 
 class GIN(BaseGNN):

@@ -224,6 +224,9 @@ class MembershipInferenceAudit:
         assert 0.0 <= config.frac_target_nodes <= 1.0
         assert not torch.any(self.dataset.train_mask & self.dataset.test_mask)
         num_target_nodes = int(config.frac_target_nodes * self.dataset.num_nodes)
+        # Make sure the number of targets is even so there can be an equal amount of members and non-members
+        if num_target_nodes % 2 == 1:
+            num_target_nodes -= 1
         train_nodes = self.dataset.train_mask.long()
         test_nodes = self.dataset.test_mask.long()
         positives = train_nodes.nonzero().squeeze()
