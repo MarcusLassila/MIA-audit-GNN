@@ -1,0 +1,8 @@
+dataset: flickr
+model: GraphSAGE
+num_nodes: 89250
+lr: 0.001
+weight_decay: 1e-05
+dropout: 0.0
+hidden_dim: [128]
+epochs: 400

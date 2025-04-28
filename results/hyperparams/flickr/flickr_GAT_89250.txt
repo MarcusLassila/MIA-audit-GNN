@@ -1,0 +1,8 @@
+dataset: flickr
+model: GAT
+num_nodes: 89250
+lr: 0.001
+weight_decay: 1e-05
+dropout: 0.5
+hidden_dim: [256]
+epochs: 400
