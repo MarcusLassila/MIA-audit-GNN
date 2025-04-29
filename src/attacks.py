@@ -351,6 +351,186 @@ class PriorLSET:
                 score = self.loss_signal(in_subgraph=subgraph_in, out_subgraph=subgraph_out)
             sampling_state.score[sample_idx][i] = score.sigmoid()
 
+class OldPriorLSET:
+
+    class SamplingState:
+        '''State object when sampling graphs'''
+
+        def __init__(self, outer_cls, score_dim, strategy='model-independent', MCMC_sampling_iterations=500):
+            self.score = torch.zeros(size=score_dim)
+            self.strategy = strategy
+            if strategy == 'MCMC':
+                burn_in_iterations = MCMC_sampling_iterations * 10
+                self.MCMC_sampling_iterations = MCMC_sampling_iterations
+                self.mask = outer_cls.sample_random_node_mask(frac_ones=0.5)
+                self.log_p, self.subgraph = outer_cls.evaluate_mask(self.mask)
+                print(f'Log model posterior before burn-in: {self.log_p}')
+                for _ in tqdm(range(burn_in_iterations), desc='MCMC burn-in'):
+                    outer_cls.MCMC_update_step(self)
+                print(f'Log model posterior after burn-in: {self.log_p}')
+
+        def MCMC_update(self, mask, log_p, subgraph):
+            assert self.strategy == 'MCMC'
+            self.mask = mask
+            self.log_p = log_p
+            self.subgraph = subgraph
+
+    def __init__(self, target_model, graph, loss_fn, config, shadow_models=None):
+        self.target_model = target_model
+        self.graph = graph
+        self.loss_fn = loss_fn
+        self.config = config
+        if config.sampling_strategy == 'MIA':
+            self.zero_hop_attacker = LSET(
+                target_model=target_model,
+                graph=graph,
+                loss_fn=loss_fn,
+                config=config,
+                shadow_models=shadow_models,
+            )
+            self.zero_hop_probs = self.zero_hop_attacker.run_attack(torch.arange(self.graph.num_nodes))
+            self.shadow_models = self.zero_hop_attacker.shadow_models
+        elif shadow_models is None:
+            self.shadow_models = []
+            self.train_shadow_models()
+        else:
+            self.shadow_models = shadow_models
+
+    def train_shadow_models(self):
+        config = self.config
+        criterion = Accuracy(task="multiclass", num_classes=self.graph.num_classes).to(config.device)
+        train_config = trainer.TrainConfig(
+            criterion=criterion,
+            device=config.device,
+            epochs=config.epochs,
+            early_stopping=config.early_stopping,
+            loss_fn=self.loss_fn,
+            lr=config.lr,
+            weight_decay=config.weight_decay,
+            optimizer=getattr(torch.optim, config.optimizer),
+        )
+        shadow_train_masks = utils.partition_training_sets(num_nodes=self.graph.num_nodes, num_models=config.num_shadow_models)
+        tqdm_desc = f"Training {config.num_shadow_models} shadow models for Bayes optimal attack"
+        for shadow_train_mask in tqdm(shadow_train_masks, total=shadow_train_masks.shape[0], desc=tqdm_desc):
+            shadow_dataset = datasetup.remasked_graph(self.graph, shadow_train_mask)
+            shadow_model = utils.fresh_model(
+                model_type=config.model,
+                num_features=shadow_dataset.num_features,
+                hidden_dims=config.hidden_dim,
+                num_classes=shadow_dataset.num_classes,
+                dropout=config.dropout,
+            )
+            _ = trainer.train_gnn(
+                model=shadow_model,
+                dataset=shadow_dataset,
+                config=train_config,
+                disable_tqdm=True,
+                inductive_split=config.inductive_split,
+            )
+            shadow_model.eval()
+            self.shadow_models.append(shadow_model)
+
+    def masked_subgraph(self, node_mask):
+        edge_index, _ = subgraph(
+            subset=node_mask,
+            edge_index=self.graph.edge_index,
+            relabel_nodes=True,
+        )
+        return Data(
+            x=self.graph.x[node_mask],
+            edge_index=edge_index,
+            y=self.graph.y[node_mask],
+            num_classes=self.graph.num_classes,
+        )
+
+    def evaluate_mask(self, mask):
+        subgraph = self.masked_subgraph(mask)
+        log_p = self.log_model_posterior(subgraph)
+        return log_p, subgraph
+
+    def MCMC_update_step(self, sampling_state, eps=0.01):
+        u = np.random.rand()
+        mask = self.sample_random_node_mask(frac_ones=eps) ^ sampling_state.mask
+        log_p, subgraph = self.evaluate_mask(mask)
+        crit = torch.exp(log_p - sampling_state.log_p).item()
+        if crit > u:
+            sampling_state.MCMC_update(mask, log_p, subgraph)
+
+    def sample_node_mask_zero_hop_MIA(self):
+        random_ref = torch.rand(self.graph.num_nodes).to(self.config.device)
+        return self.zero_hop_probs > random_ref
+
+    def sample_random_node_mask(self, frac_ones=0.5):
+        mask = torch.rand(self.graph.num_nodes) < frac_ones
+        return mask.to(self.config.device)
+
+    def neg_loss(self, model, graph):
+        with torch.inference_mode():
+            res = -self.loss_fn(model(graph.x, graph.edge_index), graph.y) * self.graph.num_nodes
+        return res
+
+    def log_model_posterior(self, subgraph, shadow_models=None):
+        # Only loss values over the k-hop neighborhood is necessary (for a k-layer GNN)
+        # but we compute loss values over all node for simplicity
+        if shadow_models is None:
+            shadow_models = self.shadow_models
+        neg_loss_term = self.neg_loss(self.target_model, subgraph)
+        log_Z_term = torch.tensor([
+            self.neg_loss(shadow_model, subgraph)
+            for shadow_model in shadow_models
+        ]).logsumexp(0) - np.log(len(shadow_models))
+        return neg_loss_term - log_Z_term
+
+    def run_attack(self, target_node_index):
+        config = self.config
+        sampling_state = OldPriorLSET.SamplingState(
+            outer_cls=self,
+            score_dim=(config.num_sampled_graphs, target_node_index.shape[0]),
+            strategy=config.sampling_strategy,
+        )
+        for i in tqdm(range(config.num_sampled_graphs), desc="Computing expactation over sampled graphs"):
+            self.update_scores(
+                sample_idx=i,
+                target_node_index=target_node_index,
+                sampling_state=sampling_state,
+            )
+        preds = sampling_state.score.mean(dim=0)
+        assert preds.shape == target_node_index.shape
+        return preds
+
+    def update_scores(self, sample_idx, target_node_index, sampling_state):
+        match self.config.sampling_strategy:
+            case 'model-independent':
+                node_mask = self.sample_random_node_mask(frac_ones=0.5)
+                subgraph_in = self.masked_subgraph(node_mask)
+                log_posterior_in = self.log_model_posterior(subgraph=subgraph_in)
+            case 'MIA':
+                node_mask = self.sample_node_mask_zero_hop_MIA()
+                subgraph_in = self.masked_subgraph(node_mask)
+                log_posterior_in = self.log_model_posterior(subgraph=subgraph_in)
+            case 'MCMC':
+                for _ in range(sampling_state.MCMC_sampling_iterations):
+                    self.MCMC_update_step(sampling_state=sampling_state)
+                node_mask = sampling_state.mask
+                subgraph_in = sampling_state.subgraph
+                log_posterior_in = sampling_state.log_p
+            case 'strong':
+                node_mask = self.graph.train_mask.clone()
+                subgraph_in = self.masked_subgraph(node_mask)
+                log_posterior_in = self.log_model_posterior(subgraph=subgraph_in)
+            case _:
+                raise ValueError(f'Unsupported sampling strategy: {self.config.sampling_strategy}')
+
+        for i, node_idx in enumerate(target_node_index):
+            node_mask[node_idx] = not node_mask[node_idx]
+            subgraph_out = self.masked_subgraph(node_mask)
+            log_posterior_out = self.log_model_posterior(subgraph=subgraph_out)
+            if node_mask[node_idx]:
+                sampling_state.score[sample_idx][i] = torch.sigmoid(log_posterior_out - log_posterior_in)
+            else:
+                sampling_state.score[sample_idx][i] = torch.sigmoid(log_posterior_in - log_posterior_out)
+            node_mask[node_idx] = not node_mask[node_idx]
+
 class LSET:
 
     def __init__(self, target_model, graph, loss_fn, config, shadow_models=None):
