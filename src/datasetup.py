@@ -40,7 +40,7 @@ class NodeFeatureEdgeIndexContainer:
         return NodeFeatureEdgeIndexContainer(self.x.to(*args, **kwargs), self.edge_index.to(*args, **kwargs))
 
 def remove_node(graph, node_idx):
-    node_mask = torch.ones(graph.num_nodes, dtype=torch.bool)
+    node_mask = torch.ones(graph.num_nodes, dtype=torch.bool).to(graph.x.device)
     node_mask[node_idx] = False
     edge_index, _ = subgraph(
         subset=node_mask,
