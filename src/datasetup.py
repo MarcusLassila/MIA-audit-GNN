@@ -86,25 +86,31 @@ def train_split_interconnection_mask(dataset):
         | (dataset.test_mask[dataset.edge_index[0]] & dataset.test_mask[dataset.edge_index[1]])
     )
 
-def masked_subgraph(graph, mask):
-    '''
-    Return the subgraph specified by the mask, keeping train, val, test and inductive masks of original graph.
-    '''
+def masked_subgraph(graph, mask, include_train_masks=False):
+    ''' Return the subgraph specified by the mask '''
     edge_index, _ = subgraph(
         subset=mask,
         edge_index=graph.edge_index,
         relabel_nodes=True,
     )
-    data = Data(
-        x=graph.x[mask],
-        edge_index=edge_index,
-        y=graph.y[mask],
-        train_mask=graph.train_mask[mask],
-        val_mask=graph.val_mask[mask],
-        test_mask=graph.test_mask[mask],
-        num_classes=graph.num_classes,
-    )
-    data.inductive_mask = train_split_interconnection_mask(data)
+    if include_train_masks:
+        data = Data(
+            x=graph.x[mask],
+            edge_index=edge_index,
+            y=graph.y[mask],
+            train_mask=graph.train_mask[mask],
+            val_mask=graph.val_mask[mask],
+            test_mask=graph.test_mask[mask],
+            num_classes=graph.num_classes,
+        )
+        data.inductive_mask = train_split_interconnection_mask(data)
+    else:
+        data = Data(
+            x=graph.x[mask],
+            edge_index=edge_index,
+            y=graph.y[mask],
+            num_classes=graph.num_classes,
+        )
     return data
 
 def train_val_test_masks(num_nodes, train_frac, val_frac, stratify=None):

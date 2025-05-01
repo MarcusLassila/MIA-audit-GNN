@@ -162,7 +162,7 @@ class LOOD:
             # )
             sub_node_index = node
             mask[sub_node_index] = False
-            sub_dataset= datasetup.masked_subgraph(dataset, mask)
+            sub_dataset= datasetup.masked_subgraph(dataset, mask, include_train_masks=True)
             assert sub_dataset.num_nodes + sub_node_index.shape[0] == dataset.num_nodes
             for _ in range(num_shadow_models):
                 out_model = self.train_model(sub_dataset)
@@ -213,7 +213,7 @@ class LOOD:
             # )
             sub_node_index = node
             mask[sub_node_index] = False
-            sub_dataset= datasetup.masked_subgraph(dataset, mask)
+            sub_dataset= datasetup.masked_subgraph(dataset, mask, include_train_masks=True)
             assert sub_dataset.num_nodes + sub_node_index.shape[0] == dataset.num_nodes
             for in_model in in_models:
                 out_model = self.train_model(sub_dataset)
