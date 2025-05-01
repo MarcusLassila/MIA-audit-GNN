@@ -46,7 +46,7 @@ def evaluate_binary_classification(preds, truth, target_fpr, target_node_index, 
         'degree_top_k': degree_top_k,
     }
 
-def k_hop_query(model, dataset, query_nodes, num_hops=0, inductive_split=False):
+def k_hop_query(model, dataset, query_nodes, num_hops=0, inductive_split=False, edge_dropout=0.0):
     '''
     Queries the model for each node in in query_nodes,
     using the local subgraph definded by the "num_hops"-hop neigborhood.
@@ -56,15 +56,19 @@ def k_hop_query(model, dataset, query_nodes, num_hops=0, inductive_split=False):
     Output: Matrix of size "number of query nodes" times "number of classes",
             consisting of logits/predictions for each query node.
     '''
+    assert 0.0 <= edge_dropout <= 1.0
     model.eval()
     if not torch.is_tensor(query_nodes):
         query_nodes = torch.tensor(query_nodes, dtype=torch.int64)
     if query_nodes.shape == ():
         query_nodes.unsqueeze(dim=0)
-    edge_mask = torch.ones(dataset.edge_index.shape[1], dtype=torch.bool).to(dataset.edge_index.device)
-    if inductive_split:
-        edge_mask = edge_mask & dataset.inductive_mask
-    edge_index = dataset.edge_index[:, edge_mask]
+    if num_hops != 0:
+        edge_mask = torch.ones(dataset.edge_index.shape[1], dtype=torch.bool).to(dataset.edge_index.device)
+        if edge_dropout > 0.0:
+            edge_mask = edge_mask & (torch.rand(edge_mask.shape) > edge_dropout).to(dataset.edge_index.device)
+        if inductive_split:
+            edge_mask = edge_mask & dataset.inductive_mask
+        edge_index = dataset.edge_index[:, edge_mask]
     with torch.inference_mode():
         if num_hops == 0:
             empty_edge_index = torch.tensor([[],[]], dtype=torch.long).to(dataset.edge_index.device)

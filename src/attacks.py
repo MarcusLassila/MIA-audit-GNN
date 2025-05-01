@@ -96,6 +96,7 @@ class MLPAttack:
                     query_nodes=row_idx,
                     num_hops=num_hops,
                     inductive_split=True,
+                    edge_dropout=self.config.edge_dropout,
                 )
                 feat.append(preds)
             feat = torch.cat(feat, dim=1).cpu()
@@ -147,6 +148,7 @@ class MLPAttack:
                     dataset=self.graph,
                     query_nodes=target_node_index,
                     num_hops=num_hops,
+                    edge_dropout=self.config.edge_dropout,
                 )
                 features.append(preds)
             features = torch.cat(features, dim=1)
@@ -1219,7 +1221,7 @@ class LiraOffline:
             shadow_model.eval()
             self.shadow_models.append(shadow_model)
     
-    def get_mean_and_std(self, target_samples, num_hops, inductive_inference, monte_carlo_masks):
+    def get_mean_and_std(self, target_samples, num_hops, inductive_inference):
         hinges = []
         for shadow_model in self.shadow_models:
             with torch.inference_mode():
@@ -1229,7 +1231,6 @@ class LiraOffline:
                     query_nodes=torch.arange(target_samples.num_nodes),
                     num_hops=num_hops,
                     inductive_split=inductive_inference,
-                    monte_carlo_masks=monte_carlo_masks,
                 )
                 # Approximate logits of confidence values using the hinge loss.
                 hinges.append(utils.hinge_loss(preds, target_samples.y))
@@ -1246,9 +1247,9 @@ class LiraOffline:
         )
         return means, stds
 
-    def run_attack(self, target_samples, num_hops=0, inductive_inference=True, monte_carlo_masks=None):
+    def run_attack(self, target_samples, num_hops=0, inductive_inference=True):
         target_samples.to(self.config.device)
-        means, stds = self.get_mean_and_std(target_samples, num_hops, inductive_inference, monte_carlo_masks)
+        means, stds = self.get_mean_and_std(target_samples, num_hops, inductive_inference)
         with torch.inference_mode():
             preds = evaluation.k_hop_query(
                 model=self.target_model,
@@ -1256,7 +1257,6 @@ class LiraOffline:
                 query_nodes=torch.arange(target_samples.num_nodes),
                 num_hops=num_hops,
                 inductive_split=inductive_inference,
-                monte_carlo_masks=monte_carlo_masks,
             )
             target_hinges = utils.hinge_loss(preds, target_samples.y)
 
@@ -1288,9 +1288,6 @@ class RmiaOffline:
         self.partition_population()
         self.train_shadow_models()
         self.offline_a = self.select_offline_a()
-        self.monte_carlo_masks = []
-        for _ in range(config.mc_inference_samples):
-            self.monte_carlo_masks.append(datasetup.random_edge_mask(self.population, 0.8))
         print("offline_a:", self.offline_a)
 
     # TODO: Use utils.partition_training_sets instead of this
@@ -1389,7 +1386,7 @@ class RmiaOffline:
                 best_offline_a = offline_a
         return best_offline_a
 
-    def ratio(self, target_samples, num_hops, inductive_inference, monte_carlo_masks, interp_from_out_models):
+    def ratio(self, target_samples, num_hops, inductive_inference, interp_from_out_models):
         row_idx = torch.arange(target_samples.num_nodes)
         shadow_confidences = []
         for shadow_model in self.shadow_models:
@@ -1400,7 +1397,6 @@ class RmiaOffline:
                     query_nodes=row_idx,
                     num_hops=num_hops,
                     inductive_split=inductive_inference,
-                    monte_carlo_masks=monte_carlo_masks,
                 )
                 shadow_confidences.append(F.softmax(preds, dim=1)[row_idx, target_samples.y])
         shadow_confidences = torch.stack(shadow_confidences)
@@ -1418,21 +1414,17 @@ class RmiaOffline:
                 query_nodes=row_idx,
                 num_hops=num_hops,
                 inductive_split=inductive_inference,
-                monte_carlo_masks=monte_carlo_masks,
             )
             target_confidence = F.softmax(preds, dim=1)[row_idx, target_samples.y]
         assert pr.shape == target_confidence.shape == (target_samples.num_nodes,)
         return target_confidence / pr
 
-    def score(self, target_samples, num_hops, inductive_inference, monte_carlo_masks):
-        ratioX = self.ratio(target_samples, num_hops, inductive_inference, monte_carlo_masks, interp_from_out_models=True)
-        if monte_carlo_masks is not None:
-            ratioZ = self.ratio(self.population, num_hops, inductive_inference, self.monte_carlo_masks, interp_from_out_models=False)
-        else:
-            ratioZ = self.ratio(self.population, num_hops, inductive_inference, None, interp_from_out_models=False)
+    def score(self, target_samples, num_hops, inductive_inference):
+        ratioX = self.ratio(target_samples, num_hops, inductive_inference, interp_from_out_models=True)
+        ratioZ = self.ratio(self.population, num_hops, inductive_inference, None, interp_from_out_models=False)
         return torch.tensor([(x > ratioZ * self.gamma).float().mean().item() for x in ratioX])
 
-    def run_attack(self, target_samples, num_hops=0, inductive_inference=True, monte_carlo_masks=None):
+    def run_attack(self, target_samples, num_hops=0, inductive_inference=True):
         target_samples.to(self.config.device)
         self.population.to(self.config.device)
-        return self.score(target_samples, num_hops, inductive_inference, monte_carlo_masks)
+        return self.score(target_samples, num_hops, inductive_inference)
