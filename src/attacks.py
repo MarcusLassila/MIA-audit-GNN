@@ -184,6 +184,7 @@ class GraphLSET:
         self.graph = graph
         self.loss_fn = loss_fn
         self.config = config
+        self.offline = config.offline
         if config.sampling_strategy == 'MIA':
             self.zero_hop_attacker = LSET(
                 target_model=target_model,
@@ -227,20 +228,28 @@ class GraphLSET:
             res = -F.cross_entropy(model(graph.x, graph.edge_index), graph.y, reduction='sum')
         return res
 
-    def loss_signal(self, in_subgraph, out_subgraph):
+    def score(self, in_subgraph, out_subgraph, target_idx):
         target_loss_diff = self.neg_loss(self.target_model, in_subgraph) - self.neg_loss(self.target_model, out_subgraph)
         shadow_loss_diff = torch.tensor([
             self.neg_loss(shadow_model, in_subgraph) - self.neg_loss(shadow_model, out_subgraph)
-            for shadow_model in self.shadow_models
-        ]).logsumexp(0) - np.log(len(self.shadow_models))
-        return target_loss_diff - shadow_loss_diff
+            for shadow_model, train_index in self.shadow_models
+            # Use shadow model if online, or if offline and target is not in shadow dataset
+            if not self.offline or not train_index[target_idx]
+        ])
+        assert shadow_loss_diff.shape[0] * (2 if self.offline else 1) == self.config.num_shadow_models
+        threshold = shadow_loss_diff.logsumexp(0) - np.log(shadow_loss_diff.shape[0])
+        score = target_loss_diff - threshold
+        return score
 
-    def log_model_posterior(self, subgraph):
+    def log_model_posterior(self, subgraph, target_idx):
         neg_loss_term = self.neg_loss(self.target_model, subgraph)
-        log_Z_term = torch.tensor([
+        shadow_losses = torch.tensor([
             self.neg_loss(shadow_model, subgraph)
-            for shadow_model in self.shadow_models
-        ]).logsumexp(0) - np.log(len(self.shadow_models))
+            for shadow_model, train_index in self.shadow_models
+            # Use shadow model if online, or if offline and target is not in shadow dataset
+            if not self.offline or not train_index[target_idx]
+        ])
+        log_Z_term = shadow_losses.logsumexp(0) - np.log(shadow_losses.shape[0])
         return neg_loss_term - log_Z_term
 
     def run_attack(self, target_node_index):
@@ -288,7 +297,7 @@ class GraphLSET:
                 # We need to determine how the precense or absence of the target node affects the embeddings in
                 # the L-hop neighborhood of the target node, and the neighbors are likewise affected by the nodes
                 # in their L-hop neighborhood
-                num_hops=self.shadow_models[0].num_layers ** 2,
+                num_hops=self.shadow_models[0][0].num_layers ** 2,
                 edge_index=edge_index,
                 relabel_nodes=True,
                 num_nodes=self.graph.num_nodes,
@@ -300,11 +309,11 @@ class GraphLSET:
                 num_classes=self.graph.num_classes,
             )
             if subgraph_in.num_nodes == 1:
-                score = self.log_model_posterior(subgraph_in)
+                score = self.log_model_posterior(subgraph_in, node_idx)
             else:
                 subgraph_out = datasetup.remove_node(subgraph_in, center_idx.item())
                 assert subgraph_in.num_nodes - subgraph_out.num_nodes == 1
-                score = self.loss_signal(in_subgraph=subgraph_in, out_subgraph=subgraph_out)
+                score = self.score(in_subgraph=subgraph_in, out_subgraph=subgraph_out, target_idx=node_idx)
             sampling_state.score[sample_idx][i] = score.sigmoid()
 
 class LSET:
