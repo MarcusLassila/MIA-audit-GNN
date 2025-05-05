@@ -197,44 +197,9 @@ class GraphLSET:
             assert torch.all(self.zero_hop_probs <= 1.0)
             self.shadow_models = self.zero_hop_attacker.shadow_models
         elif shadow_models is None:
-            self.shadow_models = []
-            self.train_shadow_models()
+            self.shadow_models = trainer.train_shadow_models(self.graph, self.loss_fn, self.config)
         else:
             self.shadow_models = shadow_models
-
-    def train_shadow_models(self):
-        config = self.config
-        criterion = Accuracy(task="multiclass", num_classes=self.graph.num_classes).to(config.device)
-        train_config = trainer.TrainConfig(
-            criterion=criterion,
-            device=config.device,
-            epochs=config.epochs,
-            early_stopping=config.early_stopping,
-            loss_fn=self.loss_fn,
-            lr=config.lr,
-            weight_decay=config.weight_decay,
-            optimizer=getattr(torch.optim, config.optimizer),
-        )
-        shadow_train_masks = utils.partition_training_sets(num_nodes=self.graph.num_nodes, num_models=config.num_shadow_models)
-        tqdm_desc = f"Training {config.num_shadow_models} shadow models for GraphLSET attack"
-        for shadow_train_mask in tqdm(shadow_train_masks, total=shadow_train_masks.shape[0], desc=tqdm_desc):
-            shadow_dataset = datasetup.remasked_graph(self.graph, shadow_train_mask)
-            shadow_model = utils.fresh_model(
-                model_type=config.model,
-                num_features=shadow_dataset.num_features,
-                hidden_dims=config.hidden_dim,
-                num_classes=shadow_dataset.num_classes,
-                dropout=config.dropout,
-            )
-            _ = trainer.train_gnn(
-                model=shadow_model,
-                dataset=shadow_dataset,
-                config=train_config,
-                disable_tqdm=True,
-                inductive_split=config.inductive_split,
-            )
-            shadow_model.eval()
-            self.shadow_models.append(shadow_model)
 
     def evaluate_mask(self, mask):
         subgraph = datasetup.masked_subgraph(self.graph, mask)
@@ -349,44 +314,11 @@ class LSET:
         self.graph = graph
         self.loss_fn = loss_fn
         self.config = config
-        if shadow_models is None:
-            self.shadow_models = []
-            self.train_shadow_models()
+        self.offline = config.offline
+        if shadow_models is None or config.num_shadow_models != len(shadow_models):
+            self.shadow_models = trainer.train_shadow_models(self.graph, self.loss_fn, self.config)
         else:
             self.shadow_models = shadow_models
-
-    def train_shadow_models(self):
-        config = self.config
-        criterion = Accuracy(task="multiclass", num_classes=self.graph.num_classes).to(config.device)
-        train_config = trainer.TrainConfig(
-            criterion=criterion,
-            device=config.device,
-            epochs=config.epochs,
-            early_stopping=config.early_stopping,
-            loss_fn=self.loss_fn,
-            lr=config.lr,
-            weight_decay=config.weight_decay,
-            optimizer=getattr(torch.optim, config.optimizer),
-        )
-        shadow_train_masks = utils.partition_training_sets(num_nodes=self.graph.num_nodes, num_models=config.num_shadow_models)
-        for shadow_train_mask in tqdm(shadow_train_masks, total=shadow_train_masks.shape[0], desc=f"Training {config.num_shadow_models} shadow models for LSET attack"):
-            shadow_dataset = datasetup.remasked_graph(self.graph, shadow_train_mask)
-            shadow_model = utils.fresh_model(
-                model_type=config.model,
-                num_features=shadow_dataset.num_features,
-                hidden_dims=config.hidden_dim,
-                num_classes=shadow_dataset.num_classes,
-                dropout=config.dropout,
-            )
-            _ = trainer.train_gnn(
-                model=shadow_model,
-                dataset=shadow_dataset,
-                config=train_config,
-                disable_tqdm=True,
-                inductive_split=config.inductive_split,
-            )
-            shadow_model.eval()
-            self.shadow_models.append(shadow_model)
 
     def log_confidence(self, model, x, edge_index, y):
         with torch.inference_mode():
@@ -398,14 +330,19 @@ class LSET:
         y = self.graph.y[target_node_index]
         empty_edge_index = torch.tensor([[],[]], dtype=torch.long).to(self.config.device)
         log_conf = self.log_confidence(self.target_model, x, empty_edge_index, y)
-        threshold = torch.stack([
+        log_conf_shadow = torch.stack([
             self.log_confidence(shadow_model, x, empty_edge_index, y)
-            for shadow_model in self.shadow_models
+            for shadow_model, _ in self.shadow_models
         # Subtracting log(num_shadow_models) is not necessary for attack performance,
         # but should be there if we want to get probabilities by applying sigmoid
-        ]).logsumexp(0) - np.log(len(self.shadow_models))
-        preds = log_conf - threshold
-        return preds.sigmoid()
+        ]).t()
+        if self.offline:
+            mask = utils.offline_shadow_model_mask(target_node_index, [train_mask for _, train_mask in self.shadow_models])
+            log_conf_shadow = log_conf_shadow[mask].reshape(-1, len(self.shadow_models) // 2)
+            assert 2 * log_conf_shadow.shape[1] == self.config.num_shadow_models
+        threshold = log_conf_shadow.logsumexp(1) - np.log(log_conf_shadow.shape[1])
+        score = log_conf - threshold
+        return score.sigmoid()
 
 class LaplaceLSET:
 
@@ -988,63 +925,27 @@ class BMIA:
         assert preds.shape == target_node_index.shape
         return preds
 
-class LiraOnline:
+class Lira:
     
     EPS = 1e-7
 
-    def __init__(self, target_model, graph, loss_fn, config, shadow_models=None, shadow_train_masks=None):
+    def __init__(self, target_model, graph, loss_fn, config, shadow_models=None):
         self.target_model = target_model
         self.graph = graph
         self.loss_fn = loss_fn
         self.config = config
-        if shadow_models is None or shadow_train_masks is None:
-            self.shadow_models = []
-            self.shadow_train_masks = []
-            self.train_shadow_models()
+        self.offline = config.offline
+        if shadow_models is None or len(shadow_models) != config.num_shadow_models:
+            self.shadow_models = trainer.train_shadow_models(self.graph, self.loss_fn, self.config)
         else:
             self.shadow_models = shadow_models
-            self.shadow_train_masks = shadow_train_masks
 
-    def train_shadow_models(self):
-        config = self.config
-        criterion = Accuracy(task="multiclass", num_classes=self.graph.num_classes).to(config.device)
-        train_config = trainer.TrainConfig(
-            criterion=criterion,
-            device=config.device,
-            epochs=config.epochs,
-            early_stopping=config.early_stopping,
-            loss_fn=self.loss_fn,
-            lr=config.lr,
-            weight_decay=config.weight_decay,
-            optimizer=getattr(torch.optim, config.optimizer),
-        )
-        shadow_train_masks = utils.partition_training_sets(num_nodes=self.graph.num_nodes, num_models=config.num_shadow_models)
-        for shadow_train_mask in tqdm(shadow_train_masks, total=shadow_train_masks.shape[0], desc=f"Training {config.num_shadow_models} shadow models for LiRA online"):
-            shadow_dataset = datasetup.remasked_graph(self.graph, shadow_train_mask)
-            shadow_model = utils.fresh_model(
-                model_type=config.model,
-                num_features=shadow_dataset.num_features,
-                hidden_dims=config.hidden_dim,
-                num_classes=shadow_dataset.num_classes,
-                dropout=config.dropout,
-            )
-            _ = trainer.train_gnn(
-                model=shadow_model,
-                dataset=shadow_dataset,
-                config=train_config,
-                disable_tqdm=True,
-                inductive_split=config.inductive_split,
-            )
-            shadow_model.eval()
-            self.shadow_models.append(shadow_model)
-            self.shadow_train_masks.append(shadow_train_mask)
-    
     def query_shadow_models(self, target_node_index, edge_index):
         hinges_in = defaultdict(list)
         hinges_out = defaultdict(list)
         num_target_nodes = target_node_index.shape[0]
         with torch.inference_mode():
-            for shadow_model, train_mask in zip(self.shadow_models, self.shadow_train_masks):
+            for shadow_model, train_mask in self.shadow_models:
                 preds = shadow_model(self.graph.x[target_node_index], edge_index)
                 # Approximate logits of confidence values using the hinge loss.
                 hinges = utils.hinge_loss(preds, self.graph.y[target_node_index])
@@ -1074,357 +975,126 @@ class LiraOnline:
         with torch.inference_mode():
             preds = self.target_model(self.graph.x[target_node_index], empty_edge_index)
             target_hinges = utils.hinge_loss(preds, self.graph.y[target_node_index])
-        p_in = norm.logpdf(
-            target_hinges.cpu().numpy(),
-            loc=mean_in.cpu().numpy(),
-            scale=std_in.cpu().numpy() + self.EPS,
-        )
-        p_out = norm.logpdf(
-            target_hinges.cpu().numpy(),
-            loc=mean_out.cpu().numpy(),
-            scale=std_out.cpu().numpy() + self.EPS,
-        )
-        assert p_in.shape == p_out.shape == (target_node_index.shape[0],)
-        return torch.tensor(p_in - p_out)
+        if self.offline:
+            # In offline LiRA the test statistic is Lambda = 1 - P(Z > conf_target), where Z is a sample from
+            # a normal distribution with mean and variance given by the shadow models confidences.
+            # We normalize the target confidence and compute the test statistic Lambda' = P(Z < x), Z ~ Normal(0, 1)
+            # For numerical stability, compute the log CDF.
+            score = norm.cdf(
+                target_hinges.cpu().numpy(),
+                loc=mean_out.cpu().numpy(),
+                scale=std_out.cpu().numpy() + self.EPS,
+            )
+            score = torch.tensor(score)
+        else:
+            p_in = norm.pdf(
+                target_hinges.cpu().numpy(),
+                loc=mean_in.cpu().numpy(),
+                scale=std_in.cpu().numpy() + self.EPS,
+            )
+            p_out = norm.pdf(
+                target_hinges.cpu().numpy(),
+                loc=mean_out.cpu().numpy(),
+                scale=std_out.cpu().numpy() + self.EPS,
+            )
+            assert p_in.shape == p_out.shape == (target_node_index.shape[0],)
+            score = torch.tensor(p_in / p_out)
+        return score
 
-class RmiaOnline:
+class Rmia:
 
     def __init__(self, target_model, graph, loss_fn, config, shadow_models=None):
         self.target_model = target_model
         self.graph = graph
         self.loss_fn = loss_fn
         self.config = config
+        self.offline = config.offline
         self.num_z = int(config.Z_frac * graph.num_nodes)
         self.z_set = torch.randperm(self.graph.num_nodes)[:self.num_z].sort()[0]
         if shadow_models is None:
-            self.shadow_models = []
-            self.train_shadow_models()
+            self.shadow_models = trainer.train_shadow_models(self.graph, self.loss_fn, self.config)
         else:
             self.shadow_models = shadow_models
+        if self.offline:
+            self.interp_param = self.find_offline_interp_param()
+        else:
+            self.interp_param = None
 
-    def train_shadow_models(self):
-        config = self.config
-        criterion = Accuracy(task="multiclass", num_classes=self.graph.num_classes).to(config.device)
-        train_config = trainer.TrainConfig(
-            criterion=criterion,
-            device=config.device,
-            epochs=config.epochs,
-            early_stopping=config.early_stopping,
-            loss_fn=self.loss_fn,
-            lr=config.lr,
-            weight_decay=config.weight_decay,
-            optimizer=getattr(torch.optim, config.optimizer),
-        )
-        shadow_train_masks = utils.partition_training_sets(num_nodes=self.graph.num_nodes, num_models=config.num_shadow_models)
-        for shadow_nodes in tqdm(shadow_train_masks, total=shadow_train_masks.shape[0], desc=f"Training {config.num_shadow_models} shadow models for RMIA online"):
-            shadow_dataset = datasetup.remasked_graph(self.graph, shadow_nodes)
-            shadow_model = utils.fresh_model(
-                model_type=config.model,
-                num_features=shadow_dataset.num_features,
-                hidden_dims=config.hidden_dim,
-                num_classes=shadow_dataset.num_classes,
-                dropout=config.dropout,
+    def find_offline_interp_param(self):
+        target_index, shadow_index = np.random.choice(self.config.num_shadow_models, 2, replace=False)
+        sim_target_model, sim_target_train_mask = self.shadow_models[target_index]
+        sim_shadow_model, sim_shadow_train_mask = self.shadow_models[shadow_index]
+        sim_shadow_models = [(sim_shadow_model, sim_shadow_train_mask)]
+        # Assumes the nodes are labeled the same in sim_target_dataset and sim_shadow_dataset.
+        target_node_index = mask_to_index(~sim_shadow_train_mask)
+        best_auroc = 0
+        best_interp_param = 0.0
+        for interp_param in np.linspace(0, 1, 11):
+            score = self.score(
+                target_node_index=target_node_index,
+                target_model=sim_target_model,
+                shadow_models=sim_shadow_models,
+                interp_param=interp_param,
             )
-            _ = trainer.train_gnn(
-                model=shadow_model,
-                dataset=shadow_dataset,
-                config=train_config,
-                disable_tqdm=True,
-                inductive_split=config.inductive_split,
-            )
-            shadow_model.eval()
-            self.shadow_models.append(shadow_model)
+            auroc = roc_auc_score(y_true=sim_target_train_mask[target_node_index], y_score=score)
+            if auroc > best_auroc:
+                best_auroc = auroc
+                best_interp_param = interp_param
+        print(f'RMIA offline interpolation param: {best_interp_param:.2f}')
+        return best_interp_param
 
-    def run_attack(self, target_node_index):
+    def score(self, target_node_index, target_model, shadow_models, interp_param=None):
         empty_edge_index = torch.tensor([[],[]], dtype=torch.long).to(self.config.device)
         num_target_nodes = target_node_index.shape[0]
         with torch.inference_mode():
             # Compute ratio_x over target nodes
             p_x = []
-            for shadow_model in self.shadow_models:
+            for shadow_model, _ in shadow_models:
                 preds = F.softmax(
                     shadow_model(self.graph.x[target_node_index], empty_edge_index),
                     dim=1
                 )[torch.arange(target_node_index.shape[0]), self.graph.y[target_node_index]]
                 p_x.append(preds)
-            p_x = torch.stack(p_x)
-            assert p_x.shape == (len(self.shadow_models), num_target_nodes)
-            p_x = p_x.mean(dim=0)
+            p_x = torch.stack(p_x).t()
+            assert p_x.shape == (num_target_nodes, len(shadow_models))
+            if self.offline:
+                if len(shadow_models) > 1:
+                    mask = utils.offline_shadow_model_mask(target_node_index, [train_mask for _, train_mask in shadow_models])
+                    p_x_out = p_x[mask].reshape(-1, len(shadow_models) // 2)
+                else:
+                    # This is case is used for offline interpolation parameter search
+                    p_x_out = p_x
+                p_x_out = p_x_out.mean(dim=1)
+                p_x = 0.5 * ((1 + interp_param) * p_x_out + 1 - interp_param)
+            else:
+                p_x = p_x.mean(dim=1)
             p_x_target = F.softmax(
-                self.target_model(self.graph.x[target_node_index], empty_edge_index),
+                target_model(self.graph.x[target_node_index], empty_edge_index),
                 dim=1,
             )[torch.arange(target_node_index.shape[0]), self.graph.y[target_node_index]]
             ratio_x = p_x_target / p_x
             # Compute ratio_z over self.z_set
             p_z = []
-            for shadow_model in self.shadow_models:
+            for shadow_model, _ in shadow_models:
                 preds = F.softmax(
                     shadow_model(self.graph.x[self.z_set], empty_edge_index),
                     dim=1
                 )[torch.arange(self.num_z), self.graph.y[self.z_set]]
                 p_z.append(preds)
             p_z = torch.stack(p_z)
-            assert p_z.shape == (len(self.shadow_models), self.num_z)
+            assert p_z.shape == (len(shadow_models), self.num_z)
             p_z_target = F.softmax(
-                self.target_model(self.graph.x[self.z_set], empty_edge_index),
+                target_model(self.graph.x[self.z_set], empty_edge_index),
                 dim=1,
             )[torch.arange(self.num_z), self.graph.y[self.z_set]]
             ratio_z = p_z_target / p_z
             score = torch.tensor([(x > ratio_z * self.config.rmia_gamma).float().mean().item() for x in ratio_x])
         return score
 
-##### Offline versions #####
-
-class LiraOffline:
-    '''
-    The (offline) likelihood ratio attack from "Membership Inference Attacks From First Principles"
-    '''
-    EPS = 1e-8
-
-    def __init__(self, target_model, population, config):
-        target_model.eval()
-        self.target_model = target_model
-        self.shadow_models = []
-        self.population = population # Should not contain target samples.
-        self.config = config
-        self.train_shadow_models()
-
-    def train_shadow_models(self):
-        config = self.config
-        criterion = Accuracy(task="multiclass", num_classes=self.population.num_classes).to(config.device)
-        train_config = trainer.TrainConfig(
-            criterion=criterion,
-            device=config.device,
-            epochs=config.epochs,
-            early_stopping=config.early_stopping,
-            loss_fn=F.cross_entropy,
-            lr=config.lr,
-            weight_decay=config.weight_decay,
-            optimizer=getattr(torch.optim, config.optimizer),
+    def run_attack(self, target_node_index):
+        return self.score(
+            target_node_index=target_node_index,
+            target_model=self.target_model,
+            shadow_models=self.shadow_models,
+            interp_param=self.interp_param,
         )
-        for _ in tqdm(range(config.num_shadow_models), desc=f"Training {config.num_shadow_models} shadow models for LiRA"):
-            shadow_dataset = datasetup.remasked_graph(self.population, train_frac=config.train_frac, val_frac=config.val_frac, stratify=self.population.y)
-            shadow_model = utils.fresh_model(
-                model_type=config.model,
-                num_features=shadow_dataset.num_features,
-                hidden_dims=config.hidden_dim,
-                num_classes=shadow_dataset.num_classes,
-                dropout=config.dropout,
-            )
-            _ = trainer.train_gnn(
-                model=shadow_model,
-                dataset=shadow_dataset,
-                config=train_config,
-                disable_tqdm=True,
-                inductive_split=config.inductive_split,
-            )
-            shadow_model.eval()
-            self.shadow_models.append(shadow_model)
-    
-    def get_mean_and_std(self, target_samples, num_hops, inductive_inference):
-        hinges = []
-        for shadow_model in self.shadow_models:
-            with torch.inference_mode():
-                preds = evaluation.k_hop_query(
-                    model=shadow_model,
-                    dataset=target_samples,
-                    query_nodes=torch.arange(target_samples.num_nodes),
-                    num_hops=num_hops,
-                    inductive_split=inductive_inference,
-                )
-                # Approximate logits of confidence values using the hinge loss.
-                hinges.append(utils.hinge_loss(preds, target_samples.y))
-        hinges = torch.stack(hinges)
-        assert hinges.shape == (len(self.shadow_models), target_samples.num_nodes)
-        means = hinges.mean(dim=0)
-        stds = hinges.std(dim=0)
-        utils.plot_histogram_and_fitted_gaussian(
-            x=hinges[:,0].cpu().numpy(),
-            mean=means[0].cpu().numpy(),
-            std=stds[0].cpu().numpy(),
-            bins=min(self.config.num_shadow_models // 4, 50),
-            savepath="./results/LiRA_gaussian_fit_histogram.png",
-        )
-        return means, stds
-
-    def run_attack(self, target_samples, num_hops=0, inductive_inference=True):
-        target_samples.to(self.config.device)
-        means, stds = self.get_mean_and_std(target_samples, num_hops, inductive_inference)
-        with torch.inference_mode():
-            preds = evaluation.k_hop_query(
-                model=self.target_model,
-                dataset=target_samples,
-                query_nodes=torch.arange(target_samples.num_nodes),
-                num_hops=num_hops,
-                inductive_split=inductive_inference,
-            )
-            target_hinges = utils.hinge_loss(preds, target_samples.y)
-
-        # In offline LiRA the test statistic is Lambda = 1 - P(Z > conf_target), where Z is a sample from
-        # a normal distribution with mean and variance given by the shadow models confidences.
-        # We normalize the target confidence and compute the test statistic Lambda' = P(Z < x), Z ~ Normal(0, 1)
-        # For numerical stability, compute the log CDF.
-        preds = norm.logcdf(
-            target_hinges.cpu().numpy(),
-            loc=means.cpu().numpy(),
-            scale=stds.cpu().numpy() + self.EPS,
-        )
-        return torch.tensor(preds)
-
-class RmiaOffline:
-    '''
-    The offline RMIA attack from "Low-Cost High-Power Membership Inference Attacks".
-    '''
-
-    def __init__(self, target_model, population, config):
-        target_model.eval()
-        self.target_model = target_model
-        self.population = population
-        self.config = config
-        self.shadow_models = []
-        self.shadow_datasets = []
-        self.out_size = population.num_nodes
-        self.gamma = config.rmia_gamma
-        self.partition_population()
-        self.train_shadow_models()
-        self.offline_a = self.select_offline_a()
-        print("offline_a:", self.offline_a)
-
-    # TODO: Use utils.partition_training_sets instead of this
-    def partition_population(self, unbiased_in_expectation=True):
-        '''
-        Partition the training nodes for the shadow models such that each model is trained on 50% of the population nodes.
-        '''
-        config = self.config
-        if unbiased_in_expectation:
-            for _ in range(config.num_shadow_models):
-                shadow_dataset = datasetup.remasked_graph(self.population, train_frac=0.5, val_frac=0.0)
-                self.shadow_datasets.append(shadow_dataset)
-        else:
-            shadow_indices = [[] for _ in range(config.num_shadow_models)]
-            node_indices = np.arange(self.population.num_nodes)
-            for node_index in node_indices:
-                chosen_models = np.random.choice(config.num_shadow_models, config.num_shadow_models // 2, replace=False)
-                for model_index in chosen_models:
-                    shadow_indices[model_index].append(node_index)
-            for node_index in shadow_indices:
-                node_index = torch.tensor(node_index, dtype=torch.long)
-                shadow_dataset = copy.deepcopy(self.population)
-                train_mask = torch.zeros(shadow_dataset.num_nodes, dtype=torch.bool)
-                train_mask[node_index] = True
-                test_mask = torch.zeros(shadow_dataset.num_nodes, dtype=torch.bool)
-                test_mask[~node_index] = True
-                val_mask = torch.zeros(shadow_dataset.num_nodes, dtype=torch.bool)
-                shadow_dataset.train_mask = train_mask
-                shadow_dataset.test_mask = test_mask
-                shadow_dataset.val_mask = val_mask
-                shadow_dataset.inductive_mask = datasetup.train_split_interconnection_mask(shadow_dataset)
-                self.shadow_datasets.append(shadow_dataset)
-
-    def train_shadow_models(self):
-        config = self.config
-        criterion = Accuracy(task="multiclass", num_classes=self.population.num_classes).to(config.device)
-        train_config = trainer.TrainConfig(
-            criterion=criterion,
-            device=config.device,
-            epochs=config.epochs,
-            early_stopping=0,
-            loss_fn=F.cross_entropy,
-            lr=config.lr,
-            weight_decay=config.weight_decay,
-            optimizer=getattr(torch.optim, config.optimizer),
-        )
-        for i in tqdm(range(config.num_shadow_models), desc=f"Training {config.num_shadow_models} out models for RMIA"):
-            shadow_dataset = self.shadow_datasets[i]
-            shadow_model = utils.fresh_model(
-                model_type=config.model,
-                num_features=shadow_dataset.num_features,
-                hidden_dims=config.hidden_dim,
-                num_classes=shadow_dataset.num_classes,
-                dropout=config.dropout,
-            )
-            _ = trainer.train_gnn(
-                model=shadow_model,
-                dataset=shadow_dataset,
-                config=train_config,
-                disable_tqdm=True,
-                inductive_split=config.inductive_split,
-            )
-            shadow_model.eval()
-            self.shadow_models.append(shadow_model)
-
-    def select_offline_a(self):
-        target_index, shadow_index = np.random.choice(self.config.num_shadow_models, 2, replace=False)
-        sim_target_model, sim_target_dataset = self.shadow_models[target_index], self.shadow_datasets[target_index]
-        sim_shadow_model, sim_shadow_dataset = self.shadow_models[shadow_index], self.shadow_datasets[shadow_index]
-        # Assumes the nodes are labeled the same in sim_target_dataset and sim_shadow_dataset.
-        target_samples = datasetup.masked_subgraph(sim_target_dataset, ~(sim_target_dataset.val_mask | sim_shadow_dataset.train_mask), include_train_masks=True)
-        population = datasetup.masked_subgraph(sim_shadow_dataset, ~(sim_target_dataset.train_mask), include_train_masks=True)
-        best_auroc = 0
-        best_offline_a = 0.0
-        for offline_a in np.linspace(0, 1, 11):
-            sim_shadow_model.eval()
-            confidences = []
-            with torch.inference_mode():
-                for model, dataset in (sim_shadow_model, target_samples), (sim_target_model, target_samples), (sim_shadow_model, population), (sim_target_model, population):
-                    row_idx = torch.arange(dataset.num_nodes)
-                    preds = evaluation.k_hop_query(
-                        model=model,
-                        dataset=dataset,
-                        query_nodes=row_idx,
-                        num_hops=0,
-                        inductive_split=self.config.inductive_inference,
-                    )
-                    confidences.append(F.softmax(preds, dim=1)[row_idx, dataset.y])
-
-            ratioX = confidences[1] / (0.5 * ((offline_a + 1) * confidences[0] + 1 - offline_a))
-            ratioZ = confidences[3] / confidences[2]
-            score = torch.tensor([(x > ratioZ * self.gamma).float().mean().item() for x in ratioX])
-            auroc = roc_auc_score(y_true=target_samples.train_mask, y_score=score)
-            if auroc > best_auroc:
-                best_auroc = auroc
-                best_offline_a = offline_a
-        return best_offline_a
-
-    def ratio(self, target_samples, num_hops, inductive_inference, interp_from_out_models):
-        row_idx = torch.arange(target_samples.num_nodes)
-        shadow_confidences = []
-        for shadow_model in self.shadow_models:
-            with torch.inference_mode():
-                preds = evaluation.k_hop_query(
-                    model=shadow_model,
-                    dataset=target_samples,
-                    query_nodes=row_idx,
-                    num_hops=num_hops,
-                    inductive_split=inductive_inference,
-                )
-                shadow_confidences.append(F.softmax(preds, dim=1)[row_idx, target_samples.y])
-        shadow_confidences = torch.stack(shadow_confidences)
-        if interp_from_out_models:
-            pr_out = shadow_confidences.mean(dim=0)
-            # Heuristic to approximate the average of in and out, from out only.
-            pr = 0.5 * ((self.offline_a + 1) * pr_out + 1 - self.offline_a)
-        else:
-            pr = shadow_confidences.mean(dim=0)
-
-        with torch.inference_mode():
-            preds = evaluation.k_hop_query(
-                model=self.target_model,
-                dataset=target_samples,
-                query_nodes=row_idx,
-                num_hops=num_hops,
-                inductive_split=inductive_inference,
-            )
-            target_confidence = F.softmax(preds, dim=1)[row_idx, target_samples.y]
-        assert pr.shape == target_confidence.shape == (target_samples.num_nodes,)
-        return target_confidence / pr
-
-    def score(self, target_samples, num_hops, inductive_inference):
-        ratioX = self.ratio(target_samples, num_hops, inductive_inference, interp_from_out_models=True)
-        ratioZ = self.ratio(self.population, num_hops, inductive_inference, None, interp_from_out_models=False)
-        return torch.tensor([(x > ratioZ * self.gamma).float().mean().item() for x in ratioX])
-
-    def run_attack(self, target_samples, num_hops=0, inductive_inference=True):
-        target_samples.to(self.config.device)
-        self.population.to(self.config.device)
-        return self.score(target_samples, num_hops, inductive_inference)

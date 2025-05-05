@@ -1,6 +1,10 @@
+import datasetup
+import utils
+
 import numpy as np
 import torch
 from tqdm.auto import tqdm
+from torchmetrics import Accuracy
 from collections import defaultdict
 from copy import deepcopy
 from dataclasses import dataclass
@@ -133,3 +137,38 @@ def train_mlp(model, train_loader, valid_loader, config: TrainConfig):
     if config.early_stopping:
         model = best_model
     return res
+
+def train_shadow_models(graph, loss_fn, config):
+    ''' Train shadow models such that each node is used in the training set of half of the models. '''
+    shadow_models = []
+    criterion = Accuracy(task="multiclass", num_classes=graph.num_classes).to(config.device)
+    train_config = TrainConfig(
+        criterion=criterion,
+        device=config.device,
+        epochs=config.epochs,
+        early_stopping=config.early_stopping,
+        loss_fn=loss_fn,
+        lr=config.lr,
+        weight_decay=config.weight_decay,
+        optimizer=getattr(torch.optim, config.optimizer),
+    )
+    shadow_train_masks = utils.partition_training_sets(num_nodes=graph.num_nodes, num_models=config.num_shadow_models)
+    for shadow_train_mask in tqdm(shadow_train_masks, total=shadow_train_masks.shape[0], desc=f"Training {config.num_shadow_models} shadow models"):
+        shadow_dataset = datasetup.remasked_graph(graph, shadow_train_mask)
+        shadow_model = utils.fresh_model(
+            model_type=config.model,
+            num_features=shadow_dataset.num_features,
+            hidden_dims=config.hidden_dim,
+            num_classes=shadow_dataset.num_classes,
+            dropout=config.dropout,
+        )
+        _ = train_gnn(
+            model=shadow_model,
+            dataset=shadow_dataset,
+            config=train_config,
+            disable_tqdm=True,
+            inductive_split=config.inductive_split,
+        )
+        shadow_model.eval()
+        shadow_models.append((shadow_model, shadow_train_mask))
+    return shadow_models

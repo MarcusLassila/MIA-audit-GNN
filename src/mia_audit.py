@@ -24,8 +24,7 @@ class MembershipInferenceAudit:
         self.dataset = datasetup.parse_dataset(root=config.datadir, name=config.dataset, max_num_nodes=config.max_num_nodes)
         self.criterion = Accuracy(task="multiclass", num_classes=self.dataset.num_classes).to(config.device)
         self.loss_fn = nn.CrossEntropyLoss(reduction='mean')
-        self.shadow_models = None
-        self.shadow_train_masks = None
+        self.shadow_models = []
         print(utils.graph_info(self.dataset))
         if config.hyperparam_search:
             val_frac = config.val_frac or config.train_frac
@@ -81,8 +80,6 @@ class MembershipInferenceAudit:
 
     def train_shadow_models(self):
         config = self.config
-        self.shadow_models = []
-        self.shadow_train_masks = []
         criterion = Accuracy(task="multiclass", num_classes=self.dataset.num_classes).to(config.device)
         train_config = trainer.TrainConfig(
             criterion=criterion,
@@ -112,8 +109,7 @@ class MembershipInferenceAudit:
                 inductive_split=config.inductive_split,
             )
             shadow_model.eval()
-            self.shadow_models.append(shadow_model)
-            self.shadow_train_masks.append(shadow_train_mask)
+            self.shadow_models.append((shadow_model, shadow_train_mask))
 
     def get_attacker(self, attack_dict, target_model):
         '''
@@ -192,16 +188,15 @@ class MembershipInferenceAudit:
                     config=attack_config,
                 )
             case "lira":
-                attacker = attacks.LiraOnline(
+                attacker = attacks.Lira(
                     target_model=target_model,
                     graph=self.dataset,
                     loss_fn=self.loss_fn,
                     config=attack_config,
                     shadow_models=pretrained_shadow_models,
-                    shadow_train_masks=self.shadow_train_masks,
                 )
             case "rmia":
-                attacker = attacks.RmiaOnline(
+                attacker = attacks.Rmia(
                     target_model=target_model,
                     graph=self.dataset,
                     loss_fn=self.loss_fn,
@@ -314,7 +309,7 @@ def add_attack_parameters(params):
     properties = [
         'model', 'epochs', 'hidden_dim', 'lr', 'weight_decay', 'optimizer', 'dropout',
         'inductive_split', 'device', 'early_stopping', 'train_frac', 'val_frac', 'batch_size',
-        'hidden_dim_mlp', 'epochs_mlp', 'num_processes', 'num_shadow_models',
+        'hidden_dim_mlp', 'epochs_mlp', 'num_processes', 'num_shadow_models', 'offline',
     ]
     for attack_params in params['attacks'].values():
         for prop in properties:

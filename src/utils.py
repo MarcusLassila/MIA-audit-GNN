@@ -40,7 +40,7 @@ def fresh_model(model_type, num_features, hidden_dims, num_classes, dropout=0.0)
 
 def hinge_loss(pred, target):
     mask = torch.ones_like(pred, dtype=bool)
-    mask[np.arange(target.shape[0]), target] = False
+    mask[torch.arange(target.shape[0]), target] = False
     return pred[~mask] - torch.logsumexp(pred[mask].reshape(target.shape[0], -1), dim=1)
 
 def measure_execution_time(callable):
@@ -128,7 +128,7 @@ def min_max_normalization(*args):
     return tuple((arg - low) / (high - low) for arg in args)
 
 def partition_training_sets(num_nodes, num_models):
-    '''Partition nodes such that each model is trained on half of the nodes. For e.g. LiRA and RMIA.'''
+    ''' Partition nodes such that each model is trained on half of the nodes. For e.g. LiRA and RMIA. '''
     assert num_models > 1
     train_masks = torch.zeros(size=(num_models, num_nodes), dtype=torch.bool)
     for i in range(num_nodes):
@@ -137,6 +137,15 @@ def partition_training_sets(num_nodes, num_models):
         for j in range(num_models):
             train_masks[j][i] = model_mask[j]
     return train_masks
+
+def offline_shadow_model_mask(target_node_index, shadow_train_masks):
+    ''' Mask to filter out shadow models trained on the target index. '''
+    num_shadow_models = len(shadow_train_masks)
+    mask = torch.zeros(size=(target_node_index.shape[0], num_shadow_models), dtype=torch.bool)
+    for i in range(num_shadow_models):
+        for j, target_idx in enumerate(target_node_index):
+            mask[j][i] = not shadow_train_masks[i][target_idx]
+    return mask
 
 def write_flat_params_to_layer(flat_params, layer):
     state_dict = {}
