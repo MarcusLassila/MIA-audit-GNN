@@ -980,25 +980,25 @@ class Lira:
             # a normal distribution with mean and variance given by the shadow models confidences.
             # We normalize the target confidence and compute the test statistic Lambda' = P(Z < x), Z ~ Normal(0, 1)
             # For numerical stability, compute the log CDF.
-            score = norm.cdf(
+            score = norm.logcdf(
                 target_hinges.cpu().numpy(),
                 loc=mean_out.cpu().numpy(),
                 scale=std_out.cpu().numpy() + self.EPS,
             )
             score = torch.tensor(score)
         else:
-            p_in = norm.pdf(
+            p_in = norm.logpdf(
                 target_hinges.cpu().numpy(),
                 loc=mean_in.cpu().numpy(),
                 scale=std_in.cpu().numpy() + self.EPS,
             )
-            p_out = norm.pdf(
+            p_out = norm.logpdf(
                 target_hinges.cpu().numpy(),
                 loc=mean_out.cpu().numpy(),
                 scale=std_out.cpu().numpy() + self.EPS,
             )
             assert p_in.shape == p_out.shape == (target_node_index.shape[0],)
-            score = torch.tensor(p_in / p_out)
+            score = torch.tensor(p_in - p_out)
         return score
 
 class Rmia:
