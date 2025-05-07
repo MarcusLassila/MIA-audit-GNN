@@ -8,8 +8,10 @@ import torch.nn.functional as F
 from torch_geometric.data import Data
 from torchmetrics import Accuracy
 from tqdm.auto import tqdm
+from sklearn.metrics import roc_auc_score
 from itertools import product
 from statistics import mean
+import optuna
 
 def grid_search(
     param_grid: dict,
@@ -77,3 +79,19 @@ def grid_search(
             }
     print('Final validation results:', final_performance)
     return opt_hyperparams
+
+def optuna_offline_hyperparam_tuner(attacker, hyperparam_attr_name, n_trials=100):
+    def objective(trial):
+        hyperparam_value = trial.suggest_float(hyperparam_attr_name, 0.0, 1.0)
+        setattr(attacker, hyperparam_attr_name, hyperparam_value)
+        target_node_index = torch.arange(attacker.graph.num_nodes)
+        score = attacker.run_attack(target_node_index)
+        truth = attacker.graph.train_mask.long()
+        auroc = roc_auc_score(y_true=truth, y_score=score)
+        return auroc
+
+    study = optuna.create_study(direction='maximize')
+    utils.execute_silently(study.optimize, objective, n_trials=n_trials, show_progress_bar=True)
+    print(f"Best hyperparameters: {study.best_params}")
+    print(f"Best optimized value: {study.best_value}")
+    setattr(attacker, hyperparam_attr_name, study.best_params[hyperparam_attr_name])
