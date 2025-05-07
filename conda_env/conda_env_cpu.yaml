@@ -18,3 +18,4 @@ dependencies:
   - torchmetrics
   - tqdm
   - PyYAML
+  - optuna

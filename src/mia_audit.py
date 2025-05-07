@@ -24,7 +24,7 @@ class MembershipInferenceAudit:
         self.dataset = datasetup.parse_dataset(root=config.datadir, name=config.dataset, max_num_nodes=config.max_num_nodes)
         self.criterion = Accuracy(task="multiclass", num_classes=self.dataset.num_classes).to(config.device)
         self.loss_fn = nn.CrossEntropyLoss(reduction='mean')
-        self.shadow_models = []
+        self.shadow_models = None
         print(utils.graph_info(self.dataset))
         if config.hyperparam_search:
             val_frac = config.val_frac or config.train_frac
@@ -78,38 +78,54 @@ class MembershipInferenceAudit:
         )
         return target_model
 
-    def train_shadow_models(self):
-        config = self.config
-        criterion = Accuracy(task="multiclass", num_classes=self.dataset.num_classes).to(config.device)
-        train_config = trainer.TrainConfig(
-            criterion=criterion,
-            device=config.device,
-            epochs=config.epochs,
-            early_stopping=config.early_stopping,
-            loss_fn=self.loss_fn,
-            lr=config.lr,
-            weight_decay=config.weight_decay,
-            optimizer=getattr(torch.optim, config.optimizer),
-        )
-        shadow_train_masks = utils.partition_training_sets(num_nodes=self.dataset.num_nodes, num_models=config.num_shadow_models)
-        for shadow_train_mask in tqdm(shadow_train_masks, total=shadow_train_masks.shape[0], desc=f"Training {config.num_shadow_models} shadow models"):
-            shadow_dataset = datasetup.remasked_graph(self.dataset, shadow_train_mask)
-            shadow_model = utils.fresh_model(
-                model_type=config.model,
-                num_features=shadow_dataset.num_features,
-                hidden_dims=config.hidden_dim,
-                num_classes=shadow_dataset.num_classes,
-                dropout=config.dropout,
-            )
-            _ = trainer.train_gnn(
-                model=shadow_model,
-                dataset=shadow_dataset,
-                config=train_config,
-                disable_tqdm=True,
-                inductive_split=config.inductive_split,
-            )
-            shadow_model.eval()
-            self.shadow_models.append((shadow_model, shadow_train_mask))
+    def tune_attack_hyperparams(self):
+        for attack_dict in self.config.attacks.values():
+            attack_config = utils.Config(attack_dict)
+            mode = 'offline' if attack_config.offline else 'online'
+            name = mode + '-' + attack_config.attack
+            match name:
+                case 'offline-lset':
+                    hyperparam_name = 'threshold_scale_factor'
+                    if hasattr(attack_config, hyperparam_name):
+                        continue
+                    print('Tuning threshold scale factor for offline LSET using optuna')
+                    simul_target, simul_target_train_mask = self.shadow_models[0]
+                    simul_graph = datasetup.remasked_graph(self.dataset, simul_target_train_mask)
+                    simul_attacker = attacks.LSET(
+                        target_model=simul_target,
+                        graph=simul_graph,
+                        loss_fn=self.loss_fn,
+                        config=attack_config,
+                        shadow_models=self.shadow_models[2:],
+                    )
+                    hyperparam_value = hypertuner.optuna_offline_hyperparam_tuner(
+                        simul_attacker,
+                        hyperparam_name,
+                        n_trials=100,
+                    )
+                    attack_dict[hyperparam_name] = hyperparam_value
+                case 'offline-rmia':
+                    hyperparam_name = 'interp_param'
+                    if hasattr(attack_config, hyperparam_name):
+                        continue
+                    print('Tuning interpolation parameter for offline RMIA using optuna')
+                    simul_target, simul_target_train_mask = self.shadow_models[0]
+                    simul_graph = datasetup.remasked_graph(self.dataset, simul_target_train_mask)
+                    simul_attacker = attacks.RMIA(
+                        target_model=simul_target,
+                        graph=simul_graph,
+                        loss_fn=self.loss_fn,
+                        config=attack_config,
+                        shadow_models=self.shadow_models[2:],
+                    )
+                    hyperparam_value = hypertuner.optuna_offline_hyperparam_tuner(
+                        simul_attacker,
+                        hyperparam_name,
+                        n_trials=100,
+                    )
+                    attack_dict[hyperparam_name] = hyperparam_value
+                case _:
+                    pass
 
     def get_attacker(self, attack_dict, target_model):
         '''
@@ -188,7 +204,7 @@ class MembershipInferenceAudit:
                     config=attack_config,
                 )
             case "lira":
-                attacker = attacks.Lira(
+                attacker = attacks.LiRA(
                     target_model=target_model,
                     graph=self.dataset,
                     loss_fn=self.loss_fn,
@@ -196,7 +212,7 @@ class MembershipInferenceAudit:
                     shadow_models=pretrained_shadow_models,
                 )
             case "rmia":
-                attacker = attacks.Rmia(
+                attacker = attacks.RMIA(
                     target_model=target_model,
                     graph=self.dataset,
                     loss_fn=self.loss_fn,
@@ -251,7 +267,8 @@ class MembershipInferenceAudit:
         config = self.config
         stats = defaultdict(lambda: defaultdict(list))
         if config.pretrain_shadow_models:
-            self.train_shadow_models()
+            self.shadow_models = trainer.train_shadow_models(self.dataset, self.loss_fn, config)
+            self.tune_attack_hyperparams()
         for i_audit in range(1, config.num_audits + 1):
             print(f'Running audit {i_audit}/{config.num_audits}')
             _ = datasetup.random_remasked_graph(self.dataset, train_frac=config.train_frac, val_frac=config.val_frac, mutate=True)

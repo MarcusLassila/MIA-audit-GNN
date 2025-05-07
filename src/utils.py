@@ -130,13 +130,14 @@ def min_max_normalization(*args):
 def partition_training_sets(num_nodes, num_models):
     ''' Partition nodes such that each model is trained on half of the nodes. For e.g. LiRA and RMIA. '''
     assert num_models > 1
-    train_masks = torch.zeros(size=(num_models, num_nodes), dtype=torch.bool)
-    for i in range(num_nodes):
-        models = np.random.choice(num_models, num_models // 2, replace=False)
-        model_mask = index_to_mask(torch.from_numpy(models), size=num_models)
-        for j in range(num_models):
-            train_masks[j][i] = model_mask[j]
-    return train_masks
+    train_masks = []
+    for _ in range(num_models // 2):
+        perm_index = torch.randperm(num_nodes)
+        in_mask = index_to_mask(perm_index[:num_nodes // 2], size=num_nodes)
+        out_mask = ~in_mask
+        train_masks.append(in_mask)
+        train_masks.append(out_mask)
+    return torch.stack(train_masks)
 
 def offline_shadow_model_mask(target_node_index, shadow_train_masks):
     ''' Mask to filter out shadow models trained on the target index. '''

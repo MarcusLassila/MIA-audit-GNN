@@ -80,7 +80,7 @@ def grid_search(
     print('Final validation results:', final_performance)
     return opt_hyperparams
 
-def optuna_offline_hyperparam_tuner(attacker, hyperparam_attr_name, n_trials=100):
+def optuna_offline_hyperparam_tuner(attacker, hyperparam_attr_name, n_trials=100, execute_silently=False):
     def objective(trial):
         hyperparam_value = trial.suggest_float(hyperparam_attr_name, 0.0, 1.0)
         setattr(attacker, hyperparam_attr_name, hyperparam_value)
@@ -91,7 +91,10 @@ def optuna_offline_hyperparam_tuner(attacker, hyperparam_attr_name, n_trials=100
         return auroc
 
     study = optuna.create_study(direction='maximize')
-    utils.execute_silently(study.optimize, objective, n_trials=n_trials, show_progress_bar=True)
+    if execute_silently:
+        utils.execute_silently(study.optimize, objective, n_trials=n_trials, show_progress_bar=True)
+    else:
+        study.optimize(objective, n_trials=n_trials, show_progress_bar=True)
     print(f"Best hyperparameters: {study.best_params}")
     print(f"Best optimized value: {study.best_value}")
-    setattr(attacker, hyperparam_attr_name, study.best_params[hyperparam_attr_name])
+    return study.best_params[hyperparam_attr_name]

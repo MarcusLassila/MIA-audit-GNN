@@ -327,79 +327,40 @@ class LSET:
         self.loss_fn = loss_fn
         self.config = config
         self.offline = config.offline
-        if shadow_models is None or config.num_shadow_models != len(shadow_models):
+        if shadow_models is None:
             self.shadow_models = trainer.train_shadow_models(self.graph, self.loss_fn, self.config)
         else:
             self.shadow_models = shadow_models
         if self.offline:
             try:
-                self.threshold_scale_factor = config.threshold_scale_parameter
+                self.threshold_scale_factor = config.threshold_scale_factor
             except AttributeError:
-                print('No offline threshold scale parameter specified. Searching for value...')
-                if config.use_optuna:
-                    hypertuner.optuna_offline_hyperparam_tuner(self, 'threshold_scale_factor')
-                    print('After optuna:', self.threshold_scale_factor)
-                else:
-                    self.find_threshold_scale_factor()
+                self.threshold_scale_factor = None
         else:
-            try:
-                self.threshold_scale_factor = config.threshold_scale_parameter
-            except AttributeError:
-                self.threshold_scale_factor = 1.0
-
-    def find_threshold_scale_factor(self):
-        target_index, shadow_index = np.random.choice(self.config.num_shadow_models, 2, replace=False)
-        sim_target_model, sim_target_train_mask = self.shadow_models[target_index]
-        sim_shadow_model, sim_shadow_train_mask = self.shadow_models[shadow_index]
-        sim_shadow_models = [(sim_shadow_model, sim_shadow_train_mask)]
-        # Assumes the nodes are labeled the same in sim_target_dataset and sim_shadow_dataset.
-        target_node_index = mask_to_index(~sim_shadow_train_mask)
-        best_auroc = 0
-        for scale_factor in np.linspace(0.0, 1.0, 50):
-            score = self.score(
-                target_node_index=target_node_index,
-                target_model=sim_target_model,
-                shadow_models=sim_shadow_models,
-                threshold_scale_factor=scale_factor,
-                tuning_scale_factor=True,
-            )
-            auroc = roc_auc_score(y_true=sim_target_train_mask[target_node_index], y_score=score)
-            if auroc > best_auroc:
-                best_auroc = auroc
-                self.threshold_scale_factor = scale_factor
-        print(f'LSET offline threhsold scale factor: {self.threshold_scale_factor:.4f}')
+            self.threshold_scale_factor = 1.0
 
     def log_confidence(self, model, x, edge_index, y):
         with torch.inference_mode():
             log_conf = F.log_softmax(model(x, edge_index), dim=1)[torch.arange(x.shape[0]), y]
         return log_conf
 
-    def score(self, target_node_index, target_model, shadow_models, threshold_scale_factor, tuning_scale_factor=False):
+    def run_attack(self, target_node_index):
         x = self.graph.x[target_node_index]
         y = self.graph.y[target_node_index]
         empty_edge_index = torch.tensor([[],[]], dtype=torch.long).to(self.config.device)
-        log_conf = self.log_confidence(target_model, x, empty_edge_index, y)
+        log_conf = self.log_confidence(self.target_model, x, empty_edge_index, y)
         log_conf_shadow = torch.stack([
             self.log_confidence(shadow_model, x, empty_edge_index, y)
-            for shadow_model, _ in shadow_models
+            for shadow_model, _ in self.shadow_models
         # Subtracting log(num_shadow_models) is not necessary for attack performance,
         # but should be there if we want to get probabilities by applying sigmoid
         ]).t()
-        if self.offline and not tuning_scale_factor:
-            mask = utils.offline_shadow_model_mask(target_node_index, [train_mask for _, train_mask in shadow_models])
-            log_conf_shadow = log_conf_shadow[mask].reshape(-1, len(shadow_models) // 2)
-            assert 2 * log_conf_shadow.shape[1] == self.config.num_shadow_models
+        if self.offline:
+            mask = utils.offline_shadow_model_mask(target_node_index, [train_mask for _, train_mask in self.shadow_models])
+            log_conf_shadow = log_conf_shadow[mask].reshape(-1, len(self.shadow_models) // 2)
         threshold = log_conf_shadow.logsumexp(1) - np.log(log_conf_shadow.shape[1])
-        score = log_conf - threshold_scale_factor * threshold
+        score = log_conf - self.threshold_scale_factor * threshold
         return score.sigmoid()
-
-    def run_attack(self, target_node_index):
-        return self.score(
-            target_node_index=target_node_index,
-            target_model=self.target_model,
-            shadow_models=self.shadow_models,
-            threshold_scale_factor=self.threshold_scale_factor,
-        )
 
 class LaplaceLSET:
 
@@ -982,7 +943,7 @@ class BMIA:
         assert preds.shape == target_node_index.shape
         return preds
 
-class Lira:
+class LiRA:
     
     EPS = 1e-7
 
@@ -992,7 +953,7 @@ class Lira:
         self.loss_fn = loss_fn
         self.config = config
         self.offline = config.offline
-        if shadow_models is None or len(shadow_models) != config.num_shadow_models:
+        if shadow_models is None:
             self.shadow_models = trainer.train_shadow_models(self.graph, self.loss_fn, self.config)
         else:
             self.shadow_models = shadow_models
@@ -1058,7 +1019,7 @@ class Lira:
             score = torch.tensor(p_in - p_out)
         return score
 
-class Rmia:
+class RMIA:
 
     def __init__(self, target_model, graph, loss_fn, config, shadow_models=None):
         self.target_model = target_model
@@ -1076,87 +1037,50 @@ class Rmia:
             try:
                 self.interp_param = config.interp_param
             except AttributeError:
-                print('No offline interpolation parameter specified. Searching for value...')
-                if config.use_optuna:
-                    hypertuner.optuna_offline_hyperparam_tuner(self, 'interp_param')
-                else:
-                    self.find_offline_interp_param()
+                self.interp_param = None
         else:
             self.interp_param = None
 
-    def find_offline_interp_param(self):
-        target_index, shadow_index = np.random.choice(self.config.num_shadow_models, 2, replace=False)
-        sim_target_model, sim_target_train_mask = self.shadow_models[target_index]
-        sim_shadow_model, sim_shadow_train_mask = self.shadow_models[shadow_index]
-        sim_shadow_models = [(sim_shadow_model, sim_shadow_train_mask)]
-        # Assumes the nodes are labeled the same in sim_target_dataset and sim_shadow_dataset.
-        target_node_index = mask_to_index(~sim_shadow_train_mask)
-        best_auroc = 0
-        for interp_param in np.linspace(0, 1, 50):
-            score = self.score(
-                target_node_index=target_node_index,
-                target_model=sim_target_model,
-                shadow_models=sim_shadow_models,
-                interp_param=interp_param,
-            )
-            auroc = roc_auc_score(y_true=sim_target_train_mask[target_node_index], y_score=score)
-            if auroc > best_auroc:
-                best_auroc = auroc
-                self.interp_param = interp_param
-        print(f'RMIA offline interpolation param: {self.interp_param:.4f}')
-
-    def score(self, target_node_index, target_model, shadow_models, interp_param=None):
+    def run_attack(self, target_node_index):
         empty_edge_index = torch.tensor([[],[]], dtype=torch.long).to(self.config.device)
         num_target_nodes = target_node_index.shape[0]
         with torch.inference_mode():
             # Compute ratio_x over target nodes
             p_x = []
-            for shadow_model, _ in shadow_models:
+            for shadow_model, _ in self.shadow_models:
                 preds = F.softmax(
                     shadow_model(self.graph.x[target_node_index], empty_edge_index),
                     dim=1
                 )[torch.arange(target_node_index.shape[0]), self.graph.y[target_node_index]]
                 p_x.append(preds)
             p_x = torch.stack(p_x).t()
-            assert p_x.shape == (num_target_nodes, len(shadow_models))
+            assert p_x.shape == (num_target_nodes, len(self.shadow_models))
             if self.offline:
-                if len(shadow_models) > 1:
-                    mask = utils.offline_shadow_model_mask(target_node_index, [train_mask for _, train_mask in shadow_models])
-                    p_x_out = p_x[mask].reshape(-1, len(shadow_models) // 2)
-                else:
-                    # This is case is used for offline interpolation parameter search
-                    p_x_out = p_x
+                mask = utils.offline_shadow_model_mask(target_node_index, [train_mask for _, train_mask in self.shadow_models])
+                p_x_out = p_x[mask].reshape(-1, len(self.shadow_models) // 2)
                 p_x_out = p_x_out.mean(dim=1)
-                p_x = 0.5 * ((1 + interp_param) * p_x_out + 1 - interp_param)
+                p_x = 0.5 * ((1 + self.interp_param) * p_x_out + 1 - self.interp_param)
             else:
                 p_x = p_x.mean(dim=1)
             p_x_target = F.softmax(
-                target_model(self.graph.x[target_node_index], empty_edge_index),
+                self.target_model(self.graph.x[target_node_index], empty_edge_index),
                 dim=1,
             )[torch.arange(target_node_index.shape[0]), self.graph.y[target_node_index]]
             ratio_x = p_x_target / p_x
             # Compute ratio_z over self.z_set
             p_z = []
-            for shadow_model, _ in shadow_models:
+            for shadow_model, _ in self.shadow_models:
                 preds = F.softmax(
                     shadow_model(self.graph.x[self.z_set], empty_edge_index),
                     dim=1
                 )[torch.arange(self.num_z), self.graph.y[self.z_set]]
                 p_z.append(preds)
             p_z = torch.stack(p_z)
-            assert p_z.shape == (len(shadow_models), self.num_z)
+            assert p_z.shape == (len(self.shadow_models), self.num_z)
             p_z_target = F.softmax(
-                target_model(self.graph.x[self.z_set], empty_edge_index),
+                self.target_model(self.graph.x[self.z_set], empty_edge_index),
                 dim=1,
             )[torch.arange(self.num_z), self.graph.y[self.z_set]]
             ratio_z = p_z_target / p_z
             score = torch.tensor([(x > ratio_z * self.config.rmia_gamma).float().mean().item() for x in ratio_x])
         return score
-
-    def run_attack(self, target_node_index):
-        return self.score(
-            target_node_index=target_node_index,
-            target_model=self.target_model,
-            shadow_models=self.shadow_models,
-            interp_param=self.interp_param,
-        )
