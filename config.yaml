@@ -3,6 +3,7 @@ cora-GCN:
   dataset: "cora"
   model: "GCN"
   epochs: 15
+  batch_size: 8192
   hidden_dim:
   - 32
   lr: 0.01
@@ -10,6 +11,8 @@ cora-GCN:
   dropout: 0.5
   max_num_nodes: null
   frac_target_nodes: 0.5
+  train_frac: 0.5
+  val_frac: 0.0
   num_audits: 10
   target_fpr:
   - 0.01
