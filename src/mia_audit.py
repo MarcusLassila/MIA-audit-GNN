@@ -16,6 +16,7 @@ from torchmetrics import Accuracy
 from tqdm.auto import tqdm
 from collections import defaultdict
 from pathlib import Path
+import copy
 
 class MembershipInferenceAudit:
 
@@ -83,49 +84,58 @@ class MembershipInferenceAudit:
             attack_config = utils.Config(attack_dict)
             mode = 'offline' if attack_config.offline else 'online'
             name = mode + '-' + attack_config.attack
+            simul_target, simul_target_train_mask = self.shadow_models[0]
+            simul_graph = datasetup.remasked_graph(self.dataset, simul_target_train_mask)
+            simul_shadow_models = self.shadow_models[2:]
+            n_trials = 100
             match name:
+                case 'offline-graph-lset':
+                    hyperparam_name = 'threshold_scale_factor'
+                    if hasattr(attack_config, hyperparam_name):
+                        continue
+                    print('Tuning threshold scale factor for offline Graph LSET using optuna')
+                    simul_config = copy.deepcopy(attack_config)
+                    simul_config.num_sampled_graphs = 4 # Use less samples to get faster tuning
+                    simul_attacker = attacks.GraphLSET(
+                        target_model=simul_target,
+                        graph=simul_graph,
+                        loss_fn=self.loss_fn,
+                        config=simul_config,
+                        shadow_models=simul_shadow_models,
+                    )
+                    n_trials = 20 # Reduce n_trails for efficiency
                 case 'offline-lset':
                     hyperparam_name = 'threshold_scale_factor'
                     if hasattr(attack_config, hyperparam_name):
                         continue
                     print('Tuning threshold scale factor for offline LSET using optuna')
-                    simul_target, simul_target_train_mask = self.shadow_models[0]
-                    simul_graph = datasetup.remasked_graph(self.dataset, simul_target_train_mask)
                     simul_attacker = attacks.LSET(
                         target_model=simul_target,
                         graph=simul_graph,
                         loss_fn=self.loss_fn,
                         config=attack_config,
-                        shadow_models=self.shadow_models[2:],
+                        shadow_models=simul_shadow_models,
                     )
-                    hyperparam_value = hypertuner.optuna_offline_hyperparam_tuner(
-                        simul_attacker,
-                        hyperparam_name,
-                        n_trials=100,
-                    )
-                    attack_dict[hyperparam_name] = hyperparam_value
                 case 'offline-rmia':
                     hyperparam_name = 'interp_param'
                     if hasattr(attack_config, hyperparam_name):
                         continue
                     print('Tuning interpolation parameter for offline RMIA using optuna')
-                    simul_target, simul_target_train_mask = self.shadow_models[0]
-                    simul_graph = datasetup.remasked_graph(self.dataset, simul_target_train_mask)
                     simul_attacker = attacks.RMIA(
                         target_model=simul_target,
                         graph=simul_graph,
                         loss_fn=self.loss_fn,
                         config=attack_config,
-                        shadow_models=self.shadow_models[2:],
+                        shadow_models=simul_shadow_models,
                     )
-                    hyperparam_value = hypertuner.optuna_offline_hyperparam_tuner(
-                        simul_attacker,
-                        hyperparam_name,
-                        n_trials=100,
-                    )
-                    attack_dict[hyperparam_name] = hyperparam_value
                 case _:
-                    pass
+                    continue
+            hyperparam_value = hypertuner.optuna_offline_hyperparam_tuner(
+                simul_attacker,
+                hyperparam_name,
+                n_trials=n_trials,
+            )
+            attack_dict[hyperparam_name] = hyperparam_value
 
     def get_attacker(self, attack_dict, target_model):
         '''

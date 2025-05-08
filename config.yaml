@@ -22,26 +22,65 @@ cora-GCN:
       attack: "bmia"
     lset:
       attack: "lset"
+    lset-offline:
+      attack: "lset"
+      offline: True
     rmia:
       attack: "rmia"
+      rmia_gamma: 
+      Z_frac: 0.5
+    rmia-gamma-2:
+      attack: "rmia"
       rmia_gamma: 2
-      Z_frac: 1.0
+      Z_frac: 0.5
+    rmia-offline:
+      attack: "rmia"
+      rmia_gamma: 1
+      Z_frac: 0.5
+      offline: True
     lira:
       attack: "lira"
-    MLP-attack:
+    lira-offline:
+      attack: "lira"
+      offline: True
+    MLP-attack-0hop:
       attack: "mlp-attack"
       mlp_attack_queries:
       - 0
+      edge_dropout: 0.0
       mlp_hidden_dim:
       - 128
+      - 64
+    MLP-attack-comb:
+      attack: "mlp-attack"
+      mlp_attack_queries:
+      - 0
+      - 2
+      edge_dropout: 0.5
+      mlp_hidden_dim:
       - 128
+      - 64
     confidence:
       attack: "confidence"
-    prior-lset-MCMC:
-      attack: "prior-lset"
-      num_sampled_graphs: 10
-      sampling_strategy: "MCMC"
-    prior-lset-MIA:
-      attack: "prior-lset"
-      num_sampled_graphs: 10
+    graph-lset-MI:
+      attack: "graph-lset"
+      num_sampled_graphs: 8
+      sampling_strategy: "model-independent"
+      prior: 0.5
+    graph-lset-MIA:
+      attack: "graph-lset"
+      num_sampled_graphs: 8
       sampling_strategy: "MIA"
+      prior: 0.5
+    graph-lset-MCMC:
+      attack: "graph-lset"
+      num_sampled_graphs: 8
+      sampling_strategy: "MCMC"
+      prior: 0.5
+    graph-lset-MI-offline:
+      attack: "graph-lset"
+      num_sampled_graphs: 8
+      sampling_strategy: "model-independent"
+      offline: True
+      threshold_scale_factor: 0.9
+      prior: 0.5

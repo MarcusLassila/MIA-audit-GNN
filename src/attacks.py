@@ -1,6 +1,5 @@
 import datasetup
 import evaluation
-import hypertuner
 import models
 import trainer
 import utils
@@ -187,6 +186,13 @@ class GraphLSET:
         self.loss_fn = loss_fn
         self.config = config
         self.offline = config.offline
+        if self.offline:
+            assert self.config.sampling_strategy != 'MCMC', "MCMC sampling in offline mode not supported"
+        try:
+            self.prior = config.prior
+        except AttributeError:
+            print('No prior specified. Using default value 0.5')
+            self.prior = 0.5
         if config.sampling_strategy == 'MIA':
             self.zero_hop_attacker = LSET(
                 target_model=target_model,
@@ -203,6 +209,13 @@ class GraphLSET:
             self.shadow_models = trainer.train_shadow_models(self.graph, self.loss_fn, self.config)
         else:
             self.shadow_models = shadow_models
+        if self.offline:
+            try:
+                self.threshold_scale_factor = config.threshold_scale_factor
+            except AttributeError:
+                self.threshold_scale_factor = None
+        else:
+            self.threshold_scale_factor = 1.0
 
     def evaluate_mask(self, mask):
         subgraph = datasetup.masked_subgraph(self.graph, mask)
@@ -238,9 +251,8 @@ class GraphLSET:
             # Use shadow model if online, or if offline and target is not in shadow dataset
             if not self.offline or not train_index[target_idx]
         ])
-        assert shadow_loss_diff.shape[0] * (2 if self.offline else 1) == self.config.num_shadow_models
         threshold = shadow_loss_diff.logsumexp(0) - np.log(shadow_loss_diff.shape[0])
-        score = target_loss_diff - threshold
+        score = target_loss_diff - self.threshold_scale_factor * threshold
         return score
 
     def log_model_posterior(self, subgraph, target_idx):
@@ -252,7 +264,7 @@ class GraphLSET:
             if not self.offline or not train_index[target_idx]
         ])
         log_Z_term = shadow_losses.logsumexp(0) - np.log(shadow_losses.shape[0])
-        return neg_loss_term - log_Z_term
+        return neg_loss_term - self.threshold_scale_factor * log_Z_term
 
     def run_attack(self, target_node_index):
         config = self.config
@@ -270,7 +282,7 @@ class GraphLSET:
         preds = sampling_state.score.mean(dim=0)
         assert preds.shape == target_node_index.shape
         return preds
-    
+
     def update_scores(self, sample_idx, target_node_index, sampling_state):
         match self.config.sampling_strategy:
             case 'model-independent':
@@ -321,7 +333,7 @@ class GraphLSET:
 
 class LSET:
 
-    def __init__(self, target_model, graph, loss_fn, config, shadow_models=None):
+    def __init__(self, target_model, graph, loss_fn, config, shadow_models=None, offline_threshold_scale_factor=0.7):
         self.target_model = target_model
         self.graph = graph
         self.loss_fn = loss_fn
@@ -335,7 +347,7 @@ class LSET:
             try:
                 self.threshold_scale_factor = config.threshold_scale_factor
             except AttributeError:
-                self.threshold_scale_factor = None
+                self.threshold_scale_factor = offline_threshold_scale_factor
         else:
             self.threshold_scale_factor = 1.0
 
