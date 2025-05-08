@@ -30,7 +30,7 @@ cora-GCN:
       offline: True
     rmia:
       attack: "rmia"
-      rmia_gamma: 
+      rmia_gamma: 1
       Z_frac: 0.5
     rmia-gamma-2:
       attack: "rmia"

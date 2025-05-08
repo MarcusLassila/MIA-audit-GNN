@@ -84,9 +84,9 @@ def optuna_offline_hyperparam_tuner(attacker, hyperparam_attr_name, n_trials=100
     def objective(trial):
         hyperparam_value = trial.suggest_float(hyperparam_attr_name, 0.0, 1.0)
         setattr(attacker, hyperparam_attr_name, hyperparam_value)
-        target_node_index = torch.arange(attacker.graph.num_nodes)
-        score = attacker.run_attack(target_node_index)
-        truth = attacker.graph.train_mask.long()
+        target_node_index = torch.arange(attacker.graph.num_nodes).to(attacker.config.device)
+        score = attacker.run_attack(target_node_index).cpu().numpy()
+        truth = attacker.graph.train_mask.long().cpu().numpy()
         auroc = roc_auc_score(y_true=truth, y_score=score)
         return auroc
 

@@ -23,6 +23,7 @@ class MembershipInferenceAudit:
     def __init__(self, config):
         config = utils.Config(config)
         self.dataset = datasetup.parse_dataset(root=config.datadir, name=config.dataset, max_num_nodes=config.max_num_nodes)
+        self.dataset.to(config.device)
         self.criterion = Accuracy(task="multiclass", num_classes=self.dataset.num_classes).to(config.device)
         self.loss_fn = nn.CrossEntropyLoss(reduction='mean')
         self.shadow_models = None
