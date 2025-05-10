@@ -44,7 +44,7 @@ if __name__ == "__main__":
         selected_columns = 'Unnamed: 0,AUC,TPR@0.01FPR,TPR@0.001FPR'.split(',')
         for datasets in dataset_groups:
             res_dict = defaultdict(str)
-            parse_csv_files(letter, root, res_dict)
+            parse_csv_files(letter, root, datasets, selected_columns, res_dict)
             table_entry = ''
             for key, value in res_dict.items():
                 table_entry += '& ' + key + ' ' + value + '\\\\\n'
