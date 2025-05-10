@@ -3,7 +3,7 @@ import utils
 
 import numpy as np
 import torch
-from torch_geometric.utils import degree, k_hop_subgraph, subgraph
+from torch_geometric.utils import degree
 from sklearn.metrics import roc_curve, roc_auc_score
 from itertools import combinations
 
@@ -45,51 +45,6 @@ def evaluate_binary_classification(preds, truth, target_fpr, target_node_index, 
         'threshold@FPR': threshold_fixed_fpr,
         'degree_top_k': degree_top_k,
     }
-
-def k_hop_query(model, dataset, query_nodes, num_hops=0, inductive_split=False, edge_dropout=0.0):
-    '''
-    Queries the model for each node in in query_nodes,
-    using the local subgraph definded by the "num_hops"-hop neigborhood.
-    When inductive_split flag is set, the local k-hop query is restricted to
-    the nodes having the same training membership status as the center node.
-
-    Output: Matrix of size "number of query nodes" times "number of classes",
-            consisting of logits/predictions for each query node.
-    '''
-    assert 0.0 <= edge_dropout <= 1.0
-    model.eval()
-    if not torch.is_tensor(query_nodes):
-        query_nodes = torch.tensor(query_nodes, dtype=torch.int64)
-    if query_nodes.shape == ():
-        query_nodes.unsqueeze(dim=0)
-    if num_hops != 0:
-        edge_mask = torch.ones(dataset.edge_index.shape[1], dtype=torch.bool).to(dataset.edge_index.device)
-        if edge_dropout > 0.0:
-            edge_mask = edge_mask & (torch.rand(edge_mask.shape) > edge_dropout).to(dataset.edge_index.device)
-        if inductive_split:
-            edge_mask = edge_mask & dataset.inductive_mask
-        edge_index = dataset.edge_index[:, edge_mask]
-    with torch.inference_mode():
-        if num_hops == 0:
-            empty_edge_index = torch.tensor([[],[]], dtype=torch.long).to(dataset.edge_index.device)
-            preds = model(dataset.x[query_nodes], empty_edge_index)
-        elif num_hops == model.num_layers:
-            preds = model(dataset.x, edge_index)[query_nodes]
-        else:
-            preds = []
-            for v in query_nodes:
-                node_index, sub_edge_index, v_idx, _ = k_hop_subgraph(
-                    node_idx=v.item(),
-                    num_hops=num_hops,
-                    edge_index=edge_index,
-                    relabel_nodes=True,
-                    num_nodes=dataset.num_nodes,
-                )
-                pred = model(dataset.x[node_index], sub_edge_index)[v_idx].squeeze()
-                preds.append(pred)
-            preds = torch.stack(preds)
-    assert preds.shape == (len(query_nodes), dataset.num_classes)
-    return preds
 
 def evaluate_graph_model(model, dataset, mask, criterion, inductive_inference):
     model.eval()

@@ -61,7 +61,7 @@ class MLPAttack:
             feat = []
             row_idx = torch.arange(shadow_graph.num_nodes)
             for num_hops in self.queries:
-                preds = evaluation.k_hop_query(
+                preds = utils.k_hop_query(
                     model=shadow_model,
                     dataset=shadow_graph,
                     query_nodes=row_idx,
@@ -114,7 +114,7 @@ class MLPAttack:
         with torch.inference_mode():
             features = []
             for num_hops in self.queries:
-                preds = evaluation.k_hop_query(
+                preds = utils.k_hop_query(
                     model=self.target_model,
                     dataset=self.graph,
                     query_nodes=target_node_index,

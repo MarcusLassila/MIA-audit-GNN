@@ -236,6 +236,7 @@ class MembershipInferenceAudit:
                     graph=self.dataset,
                     loss_fn=self.loss_fn,
                     config=attack_config,
+                    shadow_models=pretrained_shadow_models,
                 )
             case _:
                 raise AttributeError(f"No attack named {attack_config.attack}")

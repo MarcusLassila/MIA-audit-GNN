@@ -127,7 +127,7 @@ class LOOD:
         in_match = []
         for _ in tqdm(range(num_shadow_models), desc='Training inclusion models'):
             in_model = self.train_model(dataset)
-            pred = evaluation.k_hop_query(
+            pred = utils.k_hop_query(
                 model=in_model,
                 dataset=dataset,
                 query_nodes=node_index,
@@ -166,7 +166,7 @@ class LOOD:
             assert sub_dataset.num_nodes + sub_node_index.shape[0] == dataset.num_nodes
             for _ in range(num_shadow_models):
                 out_model = self.train_model(sub_dataset)
-                pred = evaluation.k_hop_query(
+                pred = utils.k_hop_query(
                     model=out_model,
                     dataset=dataset,
                     query_nodes=node,
@@ -217,14 +217,14 @@ class LOOD:
             assert sub_dataset.num_nodes + sub_node_index.shape[0] == dataset.num_nodes
             for in_model in in_models:
                 out_model = self.train_model(sub_dataset)
-                in_pred = evaluation.k_hop_query(
+                in_pred = utils.k_hop_query(
                     model=in_model,
                     dataset=dataset,
                     query_nodes=node,
                     num_hops=num_hops,
                     inductive_split=True,
                 ).squeeze()
-                out_pred = evaluation.k_hop_query(
+                out_pred = utils.k_hop_query(
                     model=out_model,
                     dataset=dataset,
                     query_nodes=node,
