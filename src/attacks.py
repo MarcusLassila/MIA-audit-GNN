@@ -26,13 +26,11 @@ from laplace import Laplace
 
 class MLPAttack:
 
-    def __init__(self, target_model, graph, loss_fn, config):
+    def __init__(self, target_model, graph, loss_fn, config, shadow_models=None):
         self.config = config
         self.target_model = target_model
         self.graph = graph
         self.loss_fn = loss_fn
-        self.shadow_models = []
-        self.shadow_graphs = []
         self.queries = config.mlp_attack_queries
         if hasattr(config, 'use_xmlp') and config.use_xmlp:
             self.attack_model = models.XMLP(
@@ -49,45 +47,17 @@ class MLPAttack:
                 out_dim=2,
             )
             self.name = 'MLP attack'
-        self.train_shadow_models()
+        if shadow_models is None:
+            self.shadow_models = trainer.train_shadow_models(graph, loss_fn, config)
+        else:
+            self.shadow_models = shadow_models
         self.train_attack_model()
-
-    def train_shadow_models(self):
-        config = self.config
-        train_config = trainer.TrainConfig(
-            criterion=Accuracy(task="multiclass", num_classes=self.graph.num_classes).to(config.device),
-            device=config.device,
-            epochs=config.epochs,
-            early_stopping=config.early_stopping,
-            loss_fn=self.loss_fn,
-            lr=config.lr,
-            weight_decay=config.weight_decay,
-            optimizer=getattr(torch.optim, config.optimizer),
-        )
-        for _ in tqdm(range(config.num_shadow_models), desc=f'Training {config.num_shadow_models} shadow models for MLP attack'):
-            shadow_graph = datasetup.random_remasked_graph(self.graph, train_frac=0.5, val_frac=0.0)
-            shadow_model = utils.fresh_model(
-                model_type=config.model,
-                num_features=shadow_graph.num_features,
-                hidden_dims=config.hidden_dim,
-                num_classes=shadow_graph.num_classes,
-                dropout=config.dropout,
-            )
-            _ = trainer.train_gnn(
-                model=shadow_model,
-                dataset=shadow_graph,
-                config=train_config,
-                inductive_split=config.inductive_split,
-                disable_tqdm=True,
-            )
-            shadow_model.eval()
-            self.shadow_models.append(shadow_model)
-            self.shadow_graphs.append(shadow_graph)
 
     def make_attack_dataset(self):
         features = []
         labels = []
-        for shadow_model, shadow_graph in zip(self.shadow_models, self.shadow_graphs):
+        for shadow_model, train_mask in self.shadow_models:
+            shadow_graph = datasetup.remasked_graph(self.graph, train_mask, mutate=False)
             feat = []
             row_idx = torch.arange(shadow_graph.num_nodes)
             for num_hops in self.queries:
