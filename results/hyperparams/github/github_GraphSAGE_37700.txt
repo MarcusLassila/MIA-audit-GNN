@@ -1,0 +1,8 @@
+dataset: github
+model: GraphSAGE
+num_nodes: 37700
+lr: 0.001
+weight_decay: 1e-05
+dropout: 0.0
+hidden_dim: [64]
+epochs: 300

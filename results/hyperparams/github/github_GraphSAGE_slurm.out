@@ -1,0 +1,84 @@
+This job can be monitored from: https://job.c3se.chalmers.se/alvis/4268749
+/usr/share/lmod/lmod/init/bash: /usr/share/lmod/lmod/libexec/addto: /usr/bin/lua: bad interpreter: No such file or directory
+no change     /opt/conda/condabin/conda
+no change     /opt/conda/bin/conda
+no change     /opt/conda/bin/conda-env
+no change     /opt/conda/bin/activate
+no change     /opt/conda/bin/deactivate
+no change     /opt/conda/etc/profile.d/conda.sh
+no change     /opt/conda/etc/fish/conf.d/conda.fish
+no change     /opt/conda/shell/condabin/Conda.psm1
+no change     /opt/conda/shell/condabin/conda-hook.ps1
+no change     /opt/conda/lib/python3.12/site-packages/xontrib/conda.xsh
+no change     /opt/conda/etc/profile.d/conda.csh
+no change     /cephyr/users/lassila/Alvis/.bashrc
+No action taken.
+Running hyperparameter search...
+
+attacks: null
+batch_size: 32
+datadir: ./data
+dataset: github
+device: cuda
+dropout: 0.0
+early_stopping: 0
+epochs: 0
+epochs_mlp: 5000
+frac_target_nodes: 0.0
+hidden_dim:
+- 0
+hidden_dim_mlp:
+- 128
+hyperparam_grid:
+  dropout:
+  - 0.0
+  - 0.25
+  - 0.5
+  epochs:
+  - 300
+  - 400
+  - 500
+  - 600
+  hidden_dim:
+  - - 32
+  - - 64
+  lr:
+  - 0.01
+  - 0.001
+  weight_decay:
+  - 0.0001
+  - 1.0e-05
+hyperparam_search: true
+inductive_inference: true
+inductive_split: true
+lr: 0.0
+max_num_nodes: null
+minimum_average_gen_gap: 0.08
+model: GraphSAGE
+name: github-GraphSAGE
+num_audits: 1
+num_processes: 1
+num_shadow_models: 0
+offline: false
+optimizer: Adam
+savedir: ./temp_results
+seed: 0
+target_fpr:
+- 0.01
+train_frac: 0.5
+val_frac: 0.5
+weight_decay: 0.0
+
+Dataset properties
+#Nodes: 37700
+#Edges: 578006
+#Features: 128
+#Classes: 2
+#Class distribution: [0.7417, 0.2583]
+Average degree: 15.3317
+Fraction isolated nodes: 0.0
+
+Running grid search over the following hyperparameters: lr, weight_decay, dropout, hidden_dim, epochs:   0%|          | 0/96 [00:00<?, ?it/s]Running grid search over the following hyperparameters: lr, weight_decay, dropout, hidden_dim, epochs:   1%|          | 1/96 [00:27<43:34, 27.52s/it]Running grid search over the following hyperparameters: lr, weight_decay, dropout, hidden_dim, epochs:   2%|▏         | 2/96 [00:59<47:17, 30.18s/it]Running grid search over the following hyperparameters: lr, weight_decay, dropout, hidden_dim, epochs:   3%|▎         | 3/96 [01:39<53:44, 34.67s/it]Running grid search over the following hyperparameters: lr, weight_decay, dropout, hidden_dim, epochs:   4%|▍         | 4/96 [02:27<1:01:13, 39.93s/it]Running grid search over the following hyperparameters: lr, weight_decay, dropout, hidden_dim, epochs:   5%|▌         | 5/96 [02:56<54:34, 35.98s/it]  Running grid search over the following hyperparameters: lr, weight_decay, dropout, hidden_dim, epochs:   6%|▋         | 6/96 [03:35<55:32, 37.02s/it]Running grid search over the following hyperparameters: lr, weight_decay, dropout, hidden_dim, epochs:   7%|▋         | 7/96 [04:24<1:00:51, 41.03s/it]Running grid search over the following hyperparameters: lr, weight_decay, dropout, hidden_dim, epochs:   8%|▊         | 8/96 [05:24<1:08:39, 46.81s/it]Running grid search over the following hyperparameters: lr, weight_decay, dropout, hidden_dim, epochs:   9%|▉         | 9/96 [05:48<57:46, 39.84s/it]  Running grid search over the following hyperparameters: lr, weight_decay, dropout, hidden_dim, epochs:  10%|█         | 10/96 [06:20<53:40, 37.44s/it]Running grid search over the following hyperparameters: lr, weight_decay, dropout, hidden_dim, epochs:  11%|█▏        | 11/96 [07:00<54:12, 38.26s/it]Running grid search over the following hyperparameters: lr, weight_decay, dropout, hidden_dim, epochs:  12%|█▎        | 12/96 [07:48<57:48, 41.29s/it]Running grid search over the following hyperparameters: lr, weight_decay, dropout, hidden_dim, epochs:  14%|█▎        | 13/96 [08:18<52:02, 37.62s/it]Running grid search over the following hyperparameters: lr, weight_decay, dropout, hidden_dim, epochs:  15%|█▍        | 14/96 [08:57<51:56, 38.00s/it]Running grid search over the following hyperparameters: lr, weight_decay, dropout, hidden_dim, epochs:  16%|█▌        | 15/96 [09:45<55:37, 41.21s/it]Running grid search over the following hyperparameters: lr, weight_decay, dropout, hidden_dim, epochs:  17%|█▋        | 16/96 [10:44<1:01:49, 46.37s/it]Running grid search over the following hyperparameters: lr, weight_decay, dropout, hidden_dim, epochs:  18%|█▊        | 17/96 [11:08<52:12, 39.66s/it]  Running grid search over the following hyperparameters: lr, weight_decay, dropout, hidden_dim, epochs:  19%|█▉        | 18/96 [11:40<48:36, 37.39s/it]Running grid search over the following hyperparameters: lr, weight_decay, dropout, hidden_dim, epochs:  20%|█▉        | 19/96 [12:21<49:22, 38.48s/it]Running grid search over the following hyperparameters: lr, weight_decay, dropout, hidden_dim, epochs:  21%|██        | 20/96 [13:10<53:01, 41.86s/it]Running grid search over the following hyperparameters: lr, weight_decay, dropout, hidden_dim, epochs:  22%|██▏       | 21/96 [13:40<47:46, 38.23s/it]Running grid search over the following hyperparameters: lr, weight_decay, dropout, hidden_dim, epochs:  23%|██▎       | 22/96 [14:20<47:39, 38.64s/it]Running grid search over the following hyperparameters: lr, weight_decay, dropout, hidden_dim, epochs:  24%|██▍       | 23/96 [15:08<50:39, 41.64s/it]Running grid search over the following hyperparameters: lr, weight_decay, dropout, hidden_dim, epochs:  25%|██▌       | 24/96 [16:07<56:01, 46.68s/it]Running grid search over the following hyperparameters: lr, weight_decay, dropout, hidden_dim, epochs:  26%|██▌       | 25/96 [16:31<47:12, 39.89s/it]Running grid search over the following hyperparameters: lr, weight_decay, dropout, hidden_dim, epochs:  27%|██▋       | 26/96 [17:03<43:47, 37.54s/it]Running grid search over the following hyperparameters: lr, weight_decay, dropout, hidden_dim, epochs:  28%|██▊       | 27/96 [17:43<44:02, 38.30s/it]Running grid search over the following hyperparameters: lr, weight_decay, dropout, hidden_dim, epochs:  29%|██▉       | 28/96 [18:31<46:42, 41.22s/it]Running grid search over the following hyperparameters: lr, weight_decay, dropout, hidden_dim, epochs:  30%|███       | 29/96 [19:00<41:56, 37.56s/it]Running grid search over the following hyperparameters: lr, weight_decay, dropout, hidden_dim, epochs:  31%|███▏      | 30/96 [19:39<41:41, 37.90s/it]Running grid search over the following hyperparameters: lr, weight_decay, dropout, hidden_dim, epochs:  32%|███▏      | 31/96 [20:27<44:28, 41.06s/it]Running grid search over the following hyperparameters: lr, weight_decay, dropout, hidden_dim, epochs:  33%|███▎      | 32/96 [21:26<49:33, 46.46s/it]Running grid search over the following hyperparameters: lr, weight_decay, dropout, hidden_dim, epochs:  34%|███▍      | 33/96 [21:51<41:58, 39.97s/it]Running grid search over the following hyperparameters: lr, weight_decay, dropout, hidden_dim, epochs:  35%|███▌      | 34/96 [22:24<39:10, 37.91s/it]Running grid search over the following hyperparameters: lr, weight_decay, dropout, hidden_dim, epochs:  36%|███▋      | 35/96 [23:05<39:30, 38.85s/it]Running grid search over the following hyperparameters: lr, weight_decay, dropout, hidden_dim, epochs:  38%|███▊      | 36/96 [23:53<41:37, 41.63s/it]Running grid search over the following hyperparameters: lr, weight_decay, dropout, hidden_dim, epochs:  39%|███▊      | 37/96 [24:23<37:17, 37.92s/it]Running grid search over the following hyperparameters: lr, weight_decay, dropout, hidden_dim, epochs:  40%|███▉      | 38/96 [25:02<36:58, 38.26s/it]Running grid search over the following hyperparameters: lr, weight_decay, dropout, hidden_dim, epochs:  41%|████      | 39/96 [25:51<39:21, 41.44s/it]Running grid search over the following hyperparameters: lr, weight_decay, dropout, hidden_dim, epochs:  42%|████▏     | 40/96 [26:49<43:28, 46.59s/it]Running grid search over the following hyperparameters: lr, weight_decay, dropout, hidden_dim, epochs:  43%|████▎     | 41/96 [27:13<36:30, 39.82s/it]Running grid search over the following hyperparameters: lr, weight_decay, dropout, hidden_dim, epochs:  44%|████▍     | 42/96 [27:45<33:43, 37.48s/it]Running grid search over the following hyperparameters: lr, weight_decay, dropout, hidden_dim, epochs:  45%|████▍     | 43/96 [28:25<33:46, 38.24s/it]Running grid search over the following hyperparameters: lr, weight_decay, dropout, hidden_dim, epochs:  46%|████▌     | 44/96 [29:14<35:52, 41.40s/it]Running grid search over the following hyperparameters: lr, weight_decay, dropout, hidden_dim, epochs:  47%|████▋     | 45/96 [29:44<32:12, 37.89s/it]Running grid search over the following hyperparameters: lr, weight_decay, dropout, hidden_dim, epochs:  48%|████▊     | 46/96 [30:23<32:01, 38.42s/it]Running grid search over the following hyperparameters: lr, weight_decay, dropout, hidden_dim, epochs:  49%|████▉     | 47/96 [31:13<34:06, 41.76s/it]Running grid search over the following hyperparameters: lr, weight_decay, dropout, hidden_dim, epochs:  50%|█████     | 48/96 [32:12<37:35, 46.99s/it]Running grid search over the following hyperparameters: lr, weight_decay, dropout, hidden_dim, epochs:  51%|█████     | 49/96 [32:36<31:24, 40.10s/it]Running grid search over the following hyperparameters: lr, weight_decay, dropout, hidden_dim, epochs:  52%|█████▏    | 50/96 [33:08<28:53, 37.68s/it]Running grid search over the following hyperparameters: lr, weight_decay, dropout, hidden_dim, epochs:  53%|█████▎    | 51/96 [33:48<28:47, 38.39s/it]Running grid search over the following hyperparameters: lr, weight_decay, dropout, hidden_dim, epochs:  54%|█████▍    | 52/96 [34:36<30:17, 41.32s/it]Running grid search over the following hyperparameters: lr, weight_decay, dropout, hidden_dim, epochs:  55%|█████▌    | 53/96 [35:06<27:03, 37.75s/it]Running grid search over the following hyperparameters: lr, weight_decay, dropout, hidden_dim, epochs:  56%|█████▋    | 54/96 [35:45<26:43, 38.18s/it]Running grid search over the following hyperparameters: lr, weight_decay, dropout, hidden_dim, epochs:  57%|█████▋    | 55/96 [36:34<28:18, 41.43s/it]Running grid search over the following hyperparameters: lr, weight_decay, dropout, hidden_dim, epochs:  58%|█████▊    | 56/96 [37:33<31:05, 46.65s/it]Running grid search over the following hyperparameters: lr, weight_decay, dropout, hidden_dim, epochs:  59%|█████▉    | 57/96 [37:57<25:57, 39.94s/it]Running grid search over the following hyperparameters: lr, weight_decay, dropout, hidden_dim, epochs:  60%|██████    | 58/96 [38:30<24:00, 37.92s/it]Running grid search over the following hyperparameters: lr, weight_decay, dropout, hidden_dim, epochs:  61%|██████▏   | 59/96 [39:12<24:03, 39.03s/it]Running grid search over the following hyperparameters: lr, weight_decay, dropout, hidden_dim, epochs:  62%|██████▎   | 60/96 [40:02<25:22, 42.30s/it]Running grid search over the following hyperparameters: lr, weight_decay, dropout, hidden_dim, epochs:  64%|██████▎   | 61/96 [40:32<22:32, 38.65s/it]Running grid search over the following hyperparameters: lr, weight_decay, dropout, hidden_dim, epochs:  65%|██████▍   | 62/96 [41:12<22:06, 39.03s/it]Running grid search over the following hyperparameters: lr, weight_decay, dropout, hidden_dim, epochs:  66%|██████▌   | 63/96 [42:01<23:09, 42.12s/it]Running grid search over the following hyperparameters: lr, weight_decay, dropout, hidden_dim, epochs:  67%|██████▋   | 64/96 [43:00<25:12, 47.26s/it]Running grid search over the following hyperparameters: lr, weight_decay, dropout, hidden_dim, epochs:  68%|██████▊   | 65/96 [43:25<20:49, 40.31s/it]Running grid search over the following hyperparameters: lr, weight_decay, dropout, hidden_dim, epochs:  69%|██████▉   | 66/96 [43:57<18:55, 37.83s/it]Running grid search over the following hyperparameters: lr, weight_decay, dropout, hidden_dim, epochs:  70%|██████▉   | 67/96 [44:37<18:36, 38.50s/it]Running grid search over the following hyperparameters: lr, weight_decay, dropout, hidden_dim, epochs:  71%|███████   | 68/96 [45:25<19:18, 41.37s/it]Running grid search over the following hyperparameters: lr, weight_decay, dropout, hidden_dim, epochs:  72%|███████▏  | 69/96 [45:54<17:00, 37.78s/it]Running grid search over the following hyperparameters: lr, weight_decay, dropout, hidden_dim, epochs:  73%|███████▎  | 70/96 [46:33<16:33, 38.21s/it]Running grid search over the following hyperparameters: lr, weight_decay, dropout, hidden_dim, epochs:  74%|███████▍  | 71/96 [47:23<17:19, 41.59s/it]Running grid search over the following hyperparameters: lr, weight_decay, dropout, hidden_dim, epochs:  75%|███████▌  | 72/96 [48:22<18:48, 47.02s/it]Running grid search over the following hyperparameters: lr, weight_decay, dropout, hidden_dim, epochs:  76%|███████▌  | 73/96 [48:47<15:26, 40.28s/it]Running grid search over the following hyperparameters: lr, weight_decay, dropout, hidden_dim, epochs:  77%|███████▋  | 74/96 [49:20<13:55, 38.00s/it]Running grid search over the following hyperparameters: lr, weight_decay, dropout, hidden_dim, epochs:  78%|███████▊  | 75/96 [50:00<13:35, 38.83s/it]Running grid search over the following hyperparameters: lr, weight_decay, dropout, hidden_dim, epochs:  79%|███████▉  | 76/96 [50:48<13:51, 41.58s/it]Running grid search over the following hyperparameters: lr, weight_decay, dropout, hidden_dim, epochs:  80%|████████  | 77/96 [51:18<11:59, 37.86s/it]Running grid search over the following hyperparameters: lr, weight_decay, dropout, hidden_dim, epochs:  81%|████████▏ | 78/96 [51:57<11:27, 38.17s/it]Running grid search over the following hyperparameters: lr, weight_decay, dropout, hidden_dim, epochs:  82%|████████▏ | 79/96 [52:45<11:42, 41.30s/it]Running grid search over the following hyperparameters: lr, weight_decay, dropout, hidden_dim, epochs:  83%|████████▎ | 80/96 [53:44<12:22, 46.43s/it]Running grid search over the following hyperparameters: lr, weight_decay, dropout, hidden_dim, epochs:  84%|████████▍ | 81/96 [54:08<09:55, 39.70s/it]Running grid search over the following hyperparameters: lr, weight_decay, dropout, hidden_dim, epochs:  85%|████████▌ | 82/96 [54:40<08:43, 37.38s/it]Running grid search over the following hyperparameters: lr, weight_decay, dropout, hidden_dim, epochs:  86%|████████▋ | 83/96 [55:20<08:16, 38.17s/it]Running grid search over the following hyperparameters: lr, weight_decay, dropout, hidden_dim, epochs:  88%|████████▊ | 84/96 [56:08<08:14, 41.22s/it]Running grid search over the following hyperparameters: lr, weight_decay, dropout, hidden_dim, epochs:  89%|████████▊ | 85/96 [56:38<06:55, 37.81s/it]Running grid search over the following hyperparameters: lr, weight_decay, dropout, hidden_dim, epochs:  90%|████████▉ | 86/96 [57:17<06:24, 38.40s/it]Running grid search over the following hyperparameters: lr, weight_decay, dropout, hidden_dim, epochs:  91%|█████████ | 87/96 [58:07<06:16, 41.80s/it]Running grid search over the following hyperparameters: lr, weight_decay, dropout, hidden_dim, epochs:  92%|█████████▏| 88/96 [59:07<06:17, 47.17s/it]Running grid search over the following hyperparameters: lr, weight_decay, dropout, hidden_dim, epochs:  93%|█████████▎| 89/96 [59:31<04:42, 40.33s/it]Running grid search over the following hyperparameters: lr, weight_decay, dropout, hidden_dim, epochs:  94%|█████████▍| 90/96 [1:00:03<03:46, 37.83s/it]Running grid search over the following hyperparameters: lr, weight_decay, dropout, hidden_dim, epochs:  95%|█████████▍| 91/96 [1:00:43<03:12, 38.47s/it]Running grid search over the following hyperparameters: lr, weight_decay, dropout, hidden_dim, epochs:  96%|█████████▌| 92/96 [1:01:31<02:45, 41.30s/it]Running grid search over the following hyperparameters: lr, weight_decay, dropout, hidden_dim, epochs:  97%|█████████▋| 93/96 [1:02:00<01:53, 37.70s/it]Running grid search over the following hyperparameters: lr, weight_decay, dropout, hidden_dim, epochs:  98%|█████████▊| 94/96 [1:02:39<01:16, 38.10s/it]Running grid search over the following hyperparameters: lr, weight_decay, dropout, hidden_dim, epochs:  99%|█████████▉| 95/96 [1:03:28<00:41, 41.33s/it]Running grid search over the following hyperparameters: lr, weight_decay, dropout, hidden_dim, epochs: 100%|██████████| 96/96 [1:04:27<00:00, 46.55s/it]Running grid search over the following hyperparameters: lr, weight_decay, dropout, hidden_dim, epochs: 100%|██████████| 96/96 [1:04:27<00:00, 40.29s/it]
+Final validation results: {'gen_gap': 0.08920953869819648, 'valid_score': 0.8472042500972747}
+Hyperparameter search results: {'lr': 0.001, 'weight_decay': 1e-05, 'dropout': 0.0, 'hidden_dim': [64], 'epochs': 300}
+Done.
