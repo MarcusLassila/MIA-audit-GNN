@@ -189,7 +189,7 @@ class GraphLSET:
 
     def evaluate_mask(self, mask):
         subgraph = datasetup.masked_subgraph(self.graph, mask)
-        log_p = self.log_model_posterior(subgraph)
+        log_p = self.log_model_posterior(subgraph, target_idx=None)
         return log_p, subgraph
 
     def MCMC_update_step(self, sampling_state, eps=0.01):
@@ -820,7 +820,7 @@ class ConfidenceAttack:
 
 class BMIA:
 
-    def __init__(self, target_model, graph, loss_fn, config, eps=1e-7):
+    def __init__(self, target_model, graph, loss_fn, config, eps=1e-11):
         self.target_model = target_model
         self.graph = graph
         self.loss_fn = loss_fn
@@ -927,7 +927,7 @@ class BMIA:
 
 class LiRA:
     
-    EPS = 1e-7
+    EPS = 1e-11
 
     def __init__(self, target_model, graph, loss_fn, config, shadow_models=None):
         self.target_model = target_model
