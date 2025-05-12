@@ -6,6 +6,28 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 
+ATTACK_DICT = {
+    'MLP-attack-comb': 'MLP (0+2-hop)',
+    'lira': 'LiRA',
+    'lira-offline': 'LiRA (offline)',
+    'rmia': 'RMIA',
+    'rmia-offline': 'RMIA (offline)',
+    'lset': 'LSET',
+    'lset-offline': 'LSET (offline)',
+    'graph-lset-MIA': 'GraphLSET (MIA)',
+    'graph-lset-MI-offline': 'GraphLSET (offline)',
+}
+
+def attack_map(attack):
+    return ATTACK_DICT[attack]
+
+def attack_filter(attack):
+    return attack in set(ATTACK_DICT.keys())
+
+def dataset_model_map(name):
+    dataset, model = name.split('-')
+    return dataset.title() + f' ({model})'
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument("--root", default="./", type=str)
@@ -40,24 +62,28 @@ if __name__ == '__main__':
             table[key].append(stat)
         frames.append(pd.DataFrame(table, index=[name + '_' + attack]))
     stat_df = pd.concat(frames)
-    stat_df.to_csv(f'{path}/recombined_results.csv', sep=',')
+    stat_df.to_csv(f'{path}/results.csv', sep=',')
     if args.make_plots:
         running_index = 0
         for stats in stats_list:
             for i in range(n_audits):
                 legend = []
                 plt.clf()
-                for attack in attacks:
+                plt.figure(figsize=(8, 8))
+                for attack in filter(attack_filter, attacks):
                     fpr = stats[attack]['FPR'][i]
                     tpr = stats[attack]['TPR'][i]
                     plt.loglog(fpr, tpr)
-                    legend.append(attack)
+                    legend.append(attack_map(attack))
+                x, y = [0, 1], [0, 1]
+                plt.loglog(x, y, linestyle='--', color='black')
+                legend.append('Random guess')
                 plt.legend(legend)
                 plt.xlim(1e-4, 1)
                 plt.ylim(1e-4, 1)
                 plt.grid(True)
                 plt.xlabel('FPR')
                 plt.ylabel('TPR')
-                plt.title('roc_curve')
+                plt.title(dataset_model_map(name))
                 plt.savefig(f'{path}/roc_{running_index}.png')
                 running_index += 1

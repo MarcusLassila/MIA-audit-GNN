@@ -1,7 +1,5 @@
-import datasetup
 import utils
 
-import numpy as np
 import torch
 from torch_geometric.utils import degree
 from sklearn.metrics import roc_curve, roc_auc_score

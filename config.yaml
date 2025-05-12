@@ -2,12 +2,12 @@
 cora-GCN:
   dataset: "cora"
   model: "GCN"
-  epochs: 15
+  epochs: 200
   batch_size: 8192
   hidden_dim:
-  - 32
-  lr: 0.01
-  weight_decay: 0.0001
+  - 64
+  lr: 0.001
+  weight_decay: 0.00001
   dropout: 0.5
   max_num_nodes: null
   frac_target_nodes: 0.5
@@ -21,31 +21,6 @@ cora-GCN:
   num_shadow_models: 8
   seed: 0
   attacks:
-    bmia:
-      attack: "bmia"
-    lset:
-      attack: "lset"
-    lset-offline:
-      attack: "lset"
-      offline: True
-    rmia:
-      attack: "rmia"
-      rmia_gamma: 1
-      Z_frac: 0.5
-    rmia-gamma-2:
-      attack: "rmia"
-      rmia_gamma: 2
-      Z_frac: 0.5
-    rmia-offline:
-      attack: "rmia"
-      rmia_gamma: 1
-      Z_frac: 0.5
-      offline: True
-    lira:
-      attack: "lira"
-    lira-offline:
-      attack: "lira"
-      offline: True
     MLP-attack-0hop:
       attack: "mlp-attack"
       mlp_attack_queries:
@@ -63,8 +38,14 @@ cora-GCN:
       mlp_hidden_dim:
       - 128
       - 64
-    confidence:
-      attack: "confidence"
+    lira:
+      attack: "lira"
+    rmia:
+      attack: "rmia"
+      rmia_gamma: 1
+      Z_frac: 0.5
+    lset:
+      attack: "lset"
     graph-lset-MI:
       attack: "graph-lset"
       num_sampled_graphs: 8
@@ -75,15 +56,28 @@ cora-GCN:
       num_sampled_graphs: 8
       sampling_strategy: "MIA"
       prior: 0.5
-    graph-lset-MCMC:
-      attack: "graph-lset"
-      num_sampled_graphs: 8
-      sampling_strategy: "MCMC"
-      prior: 0.5
+    lira-offline:
+      attack: "lira"
+      offline: True
+    rmia-offline:
+      attack: "rmia"
+      rmia_gamma: 1
+      Z_frac: 0.5
+      offline: True
+    lset-offline:
+      attack: "lset"
+      offline: True
     graph-lset-MI-offline:
       attack: "graph-lset"
       num_sampled_graphs: 8
       sampling_strategy: "model-independent"
       offline: True
       threshold_scale_factor: 0.9
+      prior: 0.5
+    graph-lset-MI-offline-no-scale:
+      attack: "graph-lset"
+      num_sampled_graphs: 8
+      sampling_strategy: "model-independent"
+      offline: True
+      threshold_scale_factor: 1.0
       prior: 0.5
