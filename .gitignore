@@ -3,3 +3,4 @@ temp_results/
 src/__pycache__
 test/__pycache__
 test.ipynb
+roc.csv
