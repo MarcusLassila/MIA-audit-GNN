@@ -14,6 +14,7 @@ from sklearn.metrics import roc_curve
 from pathlib import Path
 from time import perf_counter
 from itertools import cycle, islice, product
+from collections import defaultdict
 import io
 from contextlib import redirect_stdout, redirect_stderr
 import yaml
@@ -114,6 +115,11 @@ def stat_repr(arr):
     ''' Return a string representation "mean (std)" of an array-like argument. '''
     arr = np.array(arr)
     return f'{arr.mean():.4f} ({arr.std():.4f})'
+
+def nestled_defaultdict_to_dict(d):
+    if isinstance(d, defaultdict):
+        return {k: nestled_defaultdict_to_dict(v) for k, v in d.items()}
+    return d
 
 def graph_info(dataset):
     num_nodes = dataset.num_nodes

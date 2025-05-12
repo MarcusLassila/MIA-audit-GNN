@@ -36,22 +36,20 @@ def parse_csv_files(base_path, directories, selected_columns, res_dict):
             print(f"Directory not found: {full_path}")
 
 if __name__ == "__main__":
-    if len(sys.argv) != 2:
-        print("Usage: python parse_result.py resdir")
-    else:
-        root = sys.argv[1]
-        dir_groups = [
-            'cora-GCN,citeseer-GAT,pubmed-GraphSAGE'.split(','),
-            'amazon-photo-GAT,flickr-GCN'.split(','),
-        ]
-        selected_columns = 'Unnamed: 0,AUC,TPR@0.01FPR,TPR@0.001FPR'.split(',')
-        with open(f'{root}/latex_table.tex', 'w') as f:
-            f.write('')
-        for directories in dir_groups:
-            res_dict = defaultdict(str)
-            parse_csv_files(root, directories, selected_columns, res_dict)
-            table_entry = ''
-            for key, value in res_dict.items():
-                table_entry += '& ' + key + ' ' + value + '\\\\\n'
-            with open(f'{root}/latex_table.tex', 'a') as f:
-                f.write(table_entry)
+    assert len(sys.argv) == 2, "Usage: python parse_result.py resdir"
+    root = sys.argv[1]
+    dir_groups = [
+        'cora-GCN,citeseer-GAT,pubmed-GraphSAGE'.split(','),
+        'amazon-photo-GAT,flickr-GCN'.split(','),
+    ]
+    selected_columns = 'Unnamed: 0,AUC,TPR@0.01FPR,TPR@0.001FPR'.split(',')
+    with open(f'{root}/latex_table.tex', 'w') as f:
+        f.write('')
+    for directories in dir_groups:
+        res_dict = defaultdict(str)
+        parse_csv_files(root, directories, selected_columns, res_dict)
+        table_entry = ''
+        for key, value in res_dict.items():
+            table_entry += '& ' + key + ' ' + value + '\\\\\n'
+        with open(f'{root}/latex_table.tex', 'a') as f:
+            f.write(table_entry)

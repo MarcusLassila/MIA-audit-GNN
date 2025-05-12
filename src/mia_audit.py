@@ -270,10 +270,21 @@ class MembershipInferenceAudit:
         for attack in config.attacks.keys():
             table = defaultdict(list)
             for key, value in stats[attack].items():
-                if isinstance(value[0], float):
+                if key not in ('TPR', 'FPR'):
                     table[f'{key}'].append(utils.stat_repr(value))
             frames.append(pd.DataFrame(table, index=[config.name + '_' + attack]))
         return pd.concat(frames)
+
+    def parse_roc(self, stats):
+        config = self.config
+        roc_frames = []
+        for attack in config.attacks.keys():
+            for i in range(config.num_audits):
+                roc_frames.append(pd.DataFrame({
+                    f'FPR_{i}_{config.name}_{attack}': stats[attack]['FPR'][i],
+                    f'TPR_{i}_{config.name}_{attack}': stats[attack]['TPR'][i],
+                }))
+        return pd.concat(roc_frames)
 
     def run_audit(self):
         config = self.config
@@ -322,16 +333,9 @@ class MembershipInferenceAudit:
                     stats[attack][f'threshold@{t_fpr}FPR'].append(threshold)
 
         stat_df = self.parse_stats(stats)
-        roc_df = pd.DataFrame({})
-        roc_frames = []
-        for attack in config.attacks.keys():
-            for i in range(config.num_audits):
-                roc_frames.append(pd.DataFrame({
-                    f'FPR_{i}_{config.name}_{attack}': stats[attack]['FPR'][i],
-                    f'TPR_{i}_{config.name}_{attack}': stats[attack]['TPR'][i],
-                }))
-        roc_df = pd.concat(roc_frames)
-        return stat_df, roc_df
+        roc_df = self.parse_roc(stats)
+        stats = utils.nestled_defaultdict_to_dict(stats)
+        return stat_df, roc_df, stats
 
 def add_attack_parameters(params):
     ''' Add target values as default values to attack config parameters. '''
@@ -351,7 +355,7 @@ def set_seed(seed):
     torch.cuda.manual_seed(seed)
     torch.cuda.manual_seed_all(seed)
 
-def main(config):
+def run(config):
     set_seed(config['seed'])
     if config['hyperparam_search']:
         MembershipInferenceAudit(config)
@@ -359,67 +363,3 @@ def main(config):
         add_attack_parameters(config)
         mie = MembershipInferenceAudit(config)
         return mie.run_audit()
-
-if __name__ == '__main__':
-    torch.multiprocessing.set_start_method('spawn')
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--attack", default="confidence", type=str)
-    parser.add_argument("--dataset", default="cora", type=str)
-    parser.add_argument("--inductive-split", action=argparse.BooleanOptionalAction)
-    parser.add_argument("--inductive-inference", action=argparse.BooleanOptionalAction)
-    parser.add_argument("--pretrain_shadow_models", action=argparse.BooleanOptionalAction)
-    parser.add_argument("--model", default="GCN", type=str)
-    parser.add_argument("--batch-size", default=32, type=int)
-    parser.add_argument("--epochs", default=15, type=int)
-    parser.add_argument("--epochs-mlp", default=500, type=int)
-    parser.add_argument("--lr", default=1e-2, type=float)
-    parser.add_argument("--weight-decay", default=1e-4, type=float)
-    parser.add_argument("--dropout", default=0.5, type=float)
-    parser.add_argument("--early-stopping", default=0, type=int)
-    parser.add_argument("--hidden-dim", default=[32], type=lambda x: [*map(int, x.split(','))])
-    parser.add_argument("--hidden-dim-mlp", default=[128], type=lambda x: [*map(int, x.split(','))])
-    parser.add_argument("--num-audits", default=1, type=int)
-    parser.add_argument("--target-fpr", default=[0.01], type=lambda x: [*map(float, x.split(','))])
-    parser.add_argument("--optimizer", default="Adam", type=str)
-    parser.add_argument("--mlp-attack-queries", default=[0], type=lambda x: [*map(int, x.split(','))])
-    parser.add_argument("--bayes-sampling-strategy", default='model-independent', type=str)
-    parser.add_argument("--num-shadow-models", default=10, type=int)
-    parser.add_argument("--num-sampled-graphs", default=10, type=int)
-    parser.add_argument("--num-target-nodes", default=500, type=int)
-    parser.add_argument("--max-num-nodes", default=None, type=int)
-    parser.add_argument("--rmia-gamma", default=2.0, type=float)
-    parser.add_argument("--name", default="unnamed", type=str)
-    parser.add_argument("--datadir", default="./data", type=str)
-    parser.add_argument("--savedir", default="./results", type=str)
-    parser.add_argument("--num-processes", default=1, type=int)
-    parser.add_argument("--train-frac", default=0.5, type=float)
-    parser.add_argument("--val-frac", default=0.0, type=float)
-    parser.add_argument("--seed", default=0, type=int)
-    args = parser.parse_args()
-    config = vars(args)
-    config['name'] = config['dataset'] + '_' + config['model']
-    config['device'] = 'cuda' if torch.cuda.is_available() else 'cpu'
-    config['hyperparam_search'] = False
-    if config['inductive_split'] is None:
-        config['inductive_split'] = True
-    if config['inductive_inference'] is None:
-        config['inductive_inference'] = True
-    # Construct attack config.
-    # Add all default properties even if they are not applicable to the specified attack.
-    config['attacks'] = {
-        config['attack']: {
-            'attack': config['attack'],
-            'num_shadow_models': config['num_shadow_models'],
-            'num_sampled_graphs': config['num_sampled_graphs'],
-            'sampling_strategy': config['sampling_strategy'],
-            'mlp_attack_queries': list(config['mlp_attack_queries']),
-        }
-    }
-    del config['attack']
-    print('Running MIA audit...')
-    print(utils.Config(config))
-    print()
-    stat_df, _ = main(config)
-    pd.set_option('display.max_columns', 500)
-    print('Results:')
-    print(stat_df)

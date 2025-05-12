@@ -1,13 +1,14 @@
 import mia_audit
 
 import yaml
+import pickle
 import numpy as np
 import pandas as pd
 import torch
 from pathlib import Path
 import argparse
 
-def main(savedir):
+def main(savedir, index):
     with open("config.yaml", "r") as file:
         config = yaml.safe_load(file)
     with open("default_parameters.yaml", "r") as file:
@@ -22,18 +23,26 @@ def main(savedir):
         print('Running MIA...')
         print()
         print(yaml.dump(params))
-        stat_df, roc_df = mia_audit.main(params)
+        stat_df, roc_df, stats = mia_audit.run(params)
         print(stat_df)
         Path(f'{savedir}/{audit}').mkdir(parents=True, exist_ok=True)
-        stat_df.to_csv(f'{savedir}/{audit}/results.csv', sep=',')
-        roc_df.to_csv(f'{savedir}/{audit}/roc.csv', sep=',')
+        if index == 0:
+            stat_df.to_csv(f'{savedir}/{audit}/results.csv', sep=',')
+            roc_df.to_csv(f'{savedir}/{audit}/roc.csv', sep=',')
+        else:
+            stat_df.to_csv(f'{savedir}/{audit}/results_{index}.csv', sep=',')
+            roc_df.to_csv(f'{savedir}/{audit}/roc_{index}.csv', sep=',')
+        if index != 0:
+            with open(f'{savedir}/{audit}/stats_{index}.pkl', 'wb') as f:
+                pickle.dump(stats, f)
 
 if __name__ == "__main__":
     torch.multiprocessing.set_start_method("spawn")
     parser = argparse.ArgumentParser()
     parser.add_argument("--savedir", default="./temp_results", type=str)
+    parser.add_argument("--index", default=0, type=int)
     args = parser.parse_args()
     pd.set_option('display.max_columns', None)
     pd.set_option('display.max_rows', None)
-    main(args.savedir)
+    main(args.savedir, args.index)
     print('Done.')

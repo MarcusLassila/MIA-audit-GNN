@@ -22,7 +22,7 @@ def main(savedir):
         print('Running hyperparameter search...')
         print()
         print(yaml.dump(params))
-        mia_audit.main(params)
+        mia_audit.run(params)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
