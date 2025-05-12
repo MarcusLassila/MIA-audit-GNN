@@ -275,17 +275,6 @@ class MembershipInferenceAudit:
             frames.append(pd.DataFrame(table, index=[config.name + '_' + attack]))
         return pd.concat(frames)
 
-    def parse_roc(self, stats):
-        config = self.config
-        roc_frames = []
-        for attack in config.attacks.keys():
-            for i in range(config.num_audits):
-                roc_frames.append(pd.DataFrame({
-                    f'FPR_{i}_{config.name}_{attack}': stats[attack]['FPR'][i],
-                    f'TPR_{i}_{config.name}_{attack}': stats[attack]['TPR'][i],
-                }))
-        return pd.concat(roc_frames)
-
     def run_audit(self):
         config = self.config
         stats = defaultdict(lambda: defaultdict(list))
@@ -333,9 +322,8 @@ class MembershipInferenceAudit:
                     stats[attack][f'threshold@{t_fpr}FPR'].append(threshold)
 
         stat_df = self.parse_stats(stats)
-        roc_df = self.parse_roc(stats)
         stats = utils.nestled_defaultdict_to_dict(stats)
-        return stat_df, roc_df, stats
+        return stat_df, stats
 
 def add_attack_parameters(params):
     ''' Add target values as default values to attack config parameters. '''

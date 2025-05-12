@@ -26,16 +26,15 @@ def main(savedir, index, seed):
         print('Running MIA...')
         print()
         print(yaml.dump(params))
-        stat_df, roc_df, stats = mia_audit.run(params)
+        stat_df, roc_frames, stats = mia_audit.run(params)
         print(stat_df)
         Path(f'{savedir}/{audit}').mkdir(parents=True, exist_ok=True)
         if index == 0:
             stat_df.to_csv(f'{savedir}/{audit}/results.csv', sep=',')
-            roc_df.to_csv(f'{savedir}/{audit}/roc.csv', sep=',')
+            for i, roc_df in enumerate(roc_frames, 1):
+                roc_df.to_csv(f'{savedir}/{audit}/roc_{i}.csv', sep=',')
         else:
             stat_df.to_csv(f'{savedir}/{audit}/results_{index}.csv', sep=',')
-            roc_df.to_csv(f'{savedir}/{audit}/roc_{index}.csv', sep=',')
-        if index != 0:
             with open(f'{savedir}/{audit}/stats_{index}.pkl', 'wb') as f:
                 pickle.dump(stats, f)
 
