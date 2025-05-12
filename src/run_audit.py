@@ -8,7 +8,7 @@ import torch
 from pathlib import Path
 import argparse
 
-def main(savedir, index):
+def main(savedir, index, seed):
     with open("config.yaml", "r") as file:
         config = yaml.safe_load(file)
     with open("default_parameters.yaml", "r") as file:
@@ -20,6 +20,9 @@ def main(savedir, index):
         assert not params['hyperparam_search']
         params['name'] = audit
         params['device'] = 'cuda' if torch.cuda.is_available() else 'cpu'
+        if seed != -1:
+            print(f'Overwriting config seed with seed={seed}')
+            params['seed'] = seed
         print('Running MIA...')
         print()
         print(yaml.dump(params))
@@ -41,8 +44,9 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--savedir", default="./temp_results", type=str)
     parser.add_argument("--index", default=0, type=int)
+    parser.add_argument("--seed", default=-1, type=int)
     args = parser.parse_args()
     pd.set_option('display.max_columns', None)
     pd.set_option('display.max_rows', None)
-    main(args.savedir, args.index)
+    main(args.savedir, args.index, args.seed)
     print('Done.')
