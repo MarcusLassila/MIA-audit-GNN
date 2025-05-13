@@ -8,8 +8,8 @@ import torch
 from pathlib import Path
 import argparse
 
-def main(savedir, index, seed):
-    with open("config.yaml", "r") as file:
+def run_audit(config, savedir, index, seed):
+    with open(config, "r") as file:
         config = yaml.safe_load(file)
     with open("default_parameters.yaml", "r") as file:
         default_params = yaml.safe_load(file)['default-parameters']
@@ -39,11 +39,12 @@ def main(savedir, index, seed):
 if __name__ == "__main__":
     torch.multiprocessing.set_start_method("spawn")
     parser = argparse.ArgumentParser()
+    parser.add_argument("--config", default="config.yaml", type=str)
     parser.add_argument("--savedir", default="./temp_results", type=str)
     parser.add_argument("--index", default=0, type=int)
     parser.add_argument("--seed", default=-1, type=int)
     args = parser.parse_args()
     pd.set_option('display.max_columns', None)
     pd.set_option('display.max_rows', None)
-    main(args.savedir, args.index, args.seed)
+    run_audit(args.config, args.savedir, args.index, args.seed)
     print('Done.')
