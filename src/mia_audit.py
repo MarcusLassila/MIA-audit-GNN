@@ -89,14 +89,14 @@ class MembershipInferenceAudit:
             simul_shadow_models = self.shadow_models[2: 10]
             n_trials = 100
             match name:
-                case 'offline-graph-lset':
+                case 'offline-g-base':
                     hyperparam_name = 'threshold_scale_factor'
                     if hasattr(attack_config, hyperparam_name):
                         continue
-                    print('Tuning threshold scale factor for offline Graph LSET using optuna')
+                    print('Tuning threshold scale factor for offline G-BASE using optuna')
                     simul_config = copy.deepcopy(attack_config)
                     simul_config.num_sampled_graphs = 4 # Use less samples to get faster tuning
-                    simul_attacker = attacks.GraphLSET(
+                    simul_attacker = attacks.G_BASE(
                         target_model=simul_target,
                         graph=simul_graph,
                         loss_fn=self.loss_fn,
@@ -104,12 +104,12 @@ class MembershipInferenceAudit:
                         shadow_models=simul_shadow_models,
                     )
                     n_trials = 20 # Reduce n_trails for efficiency
-                case 'offline-lset':
+                case 'offline-base':
                     hyperparam_name = 'threshold_scale_factor'
                     if hasattr(attack_config, hyperparam_name):
                         continue
-                    print('Tuning threshold scale factor for offline LSET using optuna')
-                    simul_attacker = attacks.LSET(
+                    print('Tuning threshold scale factor for offline BASE using optuna')
+                    simul_attacker = attacks.BASE(
                         target_model=simul_target,
                         graph=simul_graph,
                         loss_fn=self.loss_fn,
@@ -147,54 +147,54 @@ class MembershipInferenceAudit:
         else:
             pretrained_shadow_models = None
         match attack_config.attack:
-            case "graph-lset":
-                attacker = attacks.GraphLSET(
+            case "g-base":
+                attacker = attacks.G_BASE(
                     target_model=target_model,
                     graph=self.dataset,
                     loss_fn=self.loss_fn,
                     config=attack_config,
                     shadow_models=pretrained_shadow_models,
                 )
-            case "lset":
-                attacker = attacks.LSET(
+            case "base":
+                attacker = attacks.BASE(
                     target_model=target_model,
                     graph=self.dataset,
                     loss_fn=self.loss_fn,
                     config=attack_config,
                     shadow_models=pretrained_shadow_models,
                 )
-            case "laplace-lset":
-                attacker = attacks.LaplaceLSET(
+            case "laplace-base":
+                attacker = attacks.LaplaceBASE(
                     target_model=target_model,
                     graph=self.dataset,
                     loss_fn=self.loss_fn,
                     config=attack_config,
                 )
-            case "bootstrapped-lset":
-                attacker = attacks.BootstrappedLSET(
-                    target_model=target_model,
-                    graph=self.dataset,
-                    loss_fn=self.loss_fn,
-                    config=attack_config,
-                    shadow_models=pretrained_shadow_models,
-                )
-            case "bootstrapped-graph-lset":
-                attacker = attacks.BootstrappedGraphLSET(
+            case "b-base":
+                attacker = attacks.B_BASE(
                     target_model=target_model,
                     graph=self.dataset,
                     loss_fn=self.loss_fn,
                     config=attack_config,
                     shadow_models=pretrained_shadow_models,
                 )
-            case "strong-lset":
-                attacker = attacks.StrongLSET(
+            case "bg-base":
+                attacker = attacks.BG_BASE(
+                    target_model=target_model,
+                    graph=self.dataset,
+                    loss_fn=self.loss_fn,
+                    config=attack_config,
+                    shadow_models=pretrained_shadow_models,
+                )
+            case "s-base":
+                attacker = attacks.S_BASE(
                     target_model=target_model,
                     graph=self.dataset,
                     loss_fn=self.loss_fn,
                     config=attack_config,
                 )
-            case "strong-graph-lset":
-                attacker = attacks.StrongGraphLSET(
+            case "sg-base":
+                attacker = attacks.SG_BASE(
                     target_model=target_model,
                     graph=self.dataset,
                     loss_fn=self.loss_fn,

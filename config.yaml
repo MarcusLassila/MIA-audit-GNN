@@ -50,10 +50,15 @@ cora-GCN:
       attack: "rmia"
       rmia_gamma: 1
       Z_frac: 0.5
-    lset:
-      attack: "lset"
-    graph-lset-MIA:
-      attack: "graph-lset"
+    base:
+      attack: "base"
+    g-base-MI:
+      attack: "g-base"
+      num_sampled_graphs: 8
+      sampling_strategy: "model-independent"
+      prior: 0.5
+    g-base-MIA:
+      attack: "g-base"
       num_sampled_graphs: 8
       sampling_strategy: "MIA"
       prior: 0.5
@@ -65,13 +70,20 @@ cora-GCN:
       rmia_gamma: 1
       Z_frac: 0.5
       offline: True
-    lset-offline:
-      attack: "lset"
+    base-offline:
+      attack: "base"
       offline: True
-    graph-lset-MIA-offline:
-      attack: "graph-lset"
+    g-base-MI-offline:
+      attack: "g-base"
       num_sampled_graphs: 8
       sampling_strategy: "MIA"
       offline: True
       threshold_scale_factor: 0.9
+      prior: 0.5
+    g-base-MI-offline-no-scale:
+      attack: "g-base"
+      num_sampled_graphs: 8
+      sampling_strategy: "model-independent"
+      offline: True
+      threshold_scale_factor: 1.0
       prior: 0.5

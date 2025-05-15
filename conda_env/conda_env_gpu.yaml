@@ -1,4 +1,4 @@
-name: conda_env_cpu
+name: mia_gnn_gpu
 channels:
 - conda-forge
 - defaults
