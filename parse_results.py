@@ -8,20 +8,45 @@ ATTACK_DICT = {
     'MLP-attack-0hop': 'MLP (0-hop)',
     'MLP-attack-comb': 'MLP (0+2-hop)',
     'lira': 'LiRA',
-    'lira-offline': 'LiRA (offline)',
+    'lira-offline': 'LiRA (off)',
     'rmia': 'RMIA',
-    'rmia-offline': 'RMIA (offline)',
-    'lset': 'LSET',
-    'lset-offline': 'LSET (offline)',
-    'graph-lset-MI': 'GraphLSET',
-    'graph-lset-MIA': 'GraphLSET (MIA)',
-    'graph-lset-MI-offline': 'GraphLSET (offline)',
-    'graph-lset-MI-offline-0.9': 'GraphLSET (offline)',
-    'graph-lset-MI-offline-no-scale': 'GraphLSET (offline) nohyp',
+    'rmia-offline': 'RMIA (off)',
+    'lset': '\\textbf{BASE}',
+    'lset-offline': '\\textbf{BASE} (off)',
+    'graph-lset-MI': '\\textbf{G-BASE}',
+    'graph-lset-MIA': '\\textbf{G-BASE}',
+    'graph-lset-MI-offline': '\\textbf{G-BASE} (off)',
+    'graph-lset-MIA-offline': '\\textbf{G-BASE} (off)',
+    'graph-lset-MI-offline-0.9': '\\textbf{G-BASE} (off)',
+    'graph-lset-MI-offline-no-scale': '\\textbf{G-BASE} (off) nohyp',
 }
 
 def attack_map(attack):
     return ATTACK_DICT[attack]
+
+def convert_to_latex_format(s: str, make_bold: bool):
+    mean, std = s.replace('(', '').replace(')', '').split()
+    mean = float(mean) * 100
+    std = float(std) * 100
+    if make_bold:
+        return "$\\mathbf{" + f"{mean:.2f} \\pm {std:.2f}" + "}$"
+    else:
+        return f"${mean:.2f} \\pm {std:.2f}$"
+
+def extract_first_number(s):
+    try:
+        return float(s.split()[0])
+    except (AttributeError, IndexError, ValueError):
+        return float('nan')
+
+def max_mean_value_indices(df, columns):
+    res = {}
+    for col in columns:
+        if col == 'Unnamed: 0':
+            continue
+        numeric_series = df[col].map(extract_first_number)
+        res[col] = numeric_series.idxmax()
+    return res
 
 def parse_csv_files(base_path, directories, selected_columns, res_dict):
     for directory in directories:
@@ -33,22 +58,27 @@ def parse_csv_files(base_path, directories, selected_columns, res_dict):
                     file_path = os.path.join(full_path, file)
                     with open(file_path, newline='') as f:
                         df = pd.read_csv(f, usecols=selected_columns)
-                        for _, row in df.iterrows():
-                            attack = row['Unnamed: 0'].split('_')[1]
-                            try:
-                                attack = attack_map(attack)
-                            except KeyError:
-                                continue
-                            metrics = " & "
-                            value_pattern = r"(\d+(?:\.\d+)?)\s*\((\d+(?:\.\d+)?)\)"
-                            repl = r"$\1 \\pm \2$ "
-                            cols = []
-                            for col in selected_columns:
-                                if col == 'Unnamed: 0':
+                        offline_mask = df["Unnamed: 0"].str.contains("offline", case=False, na=False)
+                        df_online = df[~offline_mask].copy()
+                        df_offline = df[offline_mask].copy()
+                        for df_i in df_online, df_offline:
+                            idx_for_bold = max_mean_value_indices(df_i, selected_columns)
+                            for idx, row in df_i.iterrows():
+                                attack = row['Unnamed: 0'].split('_')[1]
+                                try:
+                                    attack = attack_map(attack)
+                                except KeyError:
                                     continue
-                                cols.append(re.sub(value_pattern, repl, row[col]))
-                            metrics += '& '.join(cols)
-                            res_dict[attack] += metrics
+                                metrics = " & "
+                                cols = []
+                                for col in selected_columns:
+                                    if col == 'Unnamed: 0':
+                                        continue
+                                    best = idx_for_bold[col]
+                                    make_bold = best == idx
+                                    cols.append(convert_to_latex_format(row[col], make_bold=make_bold))
+                                metrics += '& '.join(cols)
+                                res_dict[attack] += metrics
         else:
             print(f"Directory not found: {full_path}")
 

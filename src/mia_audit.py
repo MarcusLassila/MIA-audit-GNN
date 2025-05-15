@@ -86,7 +86,7 @@ class MembershipInferenceAudit:
             name = mode + '-' + attack_config.attack
             simul_target, simul_target_train_mask = self.shadow_models[0]
             simul_graph = datasetup.remasked_graph(self.dataset, simul_target_train_mask)
-            simul_shadow_models = self.shadow_models[2:]
+            simul_shadow_models = self.shadow_models[2: 10]
             n_trials = 100
             match name:
                 case 'offline-graph-lset':

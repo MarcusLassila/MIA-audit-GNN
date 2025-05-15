@@ -7,26 +7,27 @@ import pandas as pd
 import matplotlib.pyplot as plt
 
 ATTACK_DICT = {
-    'MLP-attack-comb': 'MLP (0+2-hop)',
+    'MLP-attack-0hop': 'MLP-classifier (0-hop)',
+    'MLP-attack-comb': 'MLP-classifier (0+2-hop)',
     'lira': 'LiRA',
-    'lira-offline': 'LiRA (offline)',
+    # 'lira-offline': 'LiRA (offline)',
     'rmia': 'RMIA',
-    'rmia-offline': 'RMIA (offline)',
-    'lset': 'LSET',
-    'lset-offline': 'LSET (offline)',
-    'graph-lset-MIA': 'GraphLSET (MIA)',
-    'graph-lset-MI-offline': 'GraphLSET (offline)',
+    # 'rmia-offline': 'RMIA (offline)',
+    'lset': 'BASE (ours)',
+    # 'lset-offline': 'BASE (offline)',
+    'graph-lset-MI': 'G-BASE (ours)',
+    'graph-lset-MIA': 'G-BASE (ours)',
+    # 'graph-lset-MI-offline': 'G-BASE (offline)',
+    # 'graph-lset-MIA-offline': 'G-BASE (offline)',
 }
+
+ORDER = ['BASE (ours)', 'G-BASE (ours)', 'LiRA', "RMIA", "MLP-classifier (0-hop)", "MLP-classifier (0+2-hop)", "Random guess"]
 
 def attack_map(attack):
     return ATTACK_DICT[attack]
 
 def attack_filter(attack):
     return attack in set(ATTACK_DICT.keys())
-
-def dataset_model_map(name):
-    dataset, model = name.split('-')
-    return dataset.title() + f' ({model})'
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
@@ -67,23 +68,28 @@ if __name__ == '__main__':
         running_index = 0
         for stats in stats_list:
             for i in range(n_audits):
-                legend = []
+                lines = []
                 plt.clf()
-                plt.figure(figsize=(8, 8))
+                plt.figure(figsize=(5.5, 5.5))
                 for attack in filter(attack_filter, attacks):
                     fpr = stats[attack]['FPR'][i]
                     tpr = stats[attack]['TPR'][i]
-                    plt.loglog(fpr, tpr)
-                    legend.append(attack_map(attack))
+                    label = attack_map(attack)
+                    line, = plt.loglog(fpr, tpr, label=label)
+                    lines.append(line)
                 x, y = [0, 1], [0, 1]
-                plt.loglog(x, y, linestyle='--', color='black')
-                legend.append('Random guess')
-                plt.legend(legend)
+                line, = plt.loglog(x, y, linestyle='--', color='black', label='Random guess')
+                lines.append(line)
+                lines.sort(key=lambda line: ORDER.index(line.get_label()))
+                plt.legend(handles=lines)
                 plt.xlim(1e-4, 1)
                 plt.ylim(1e-4, 1)
                 plt.grid(True)
-                plt.xlabel('FPR')
-                plt.ylabel('TPR')
-                plt.title(dataset_model_map(name))
-                plt.savefig(f'{path}/roc_{running_index}.png')
+                plt.xlabel('False Positive Rate', fontsize=13)
+                plt.ylabel('True Positive Rate', fontsize=13)
+                if args.root == 'large_N_results':
+                    num_shadow_models = '128'
+                else:
+                    num_shadow_models = '8'
+                plt.savefig(f'{path}/{name}_{num_shadow_models}_roc_{running_index}.png')
                 running_index += 1
