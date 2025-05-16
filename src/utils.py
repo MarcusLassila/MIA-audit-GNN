@@ -114,7 +114,7 @@ def execute_silently(callable, *args, **kwargs):
 def stat_repr(arr):
     '''mean and std of an array-like argument'''
     arr = np.array(arr)
-    return arr.mean(), arr.std()
+    return f'{arr.mean():.4f}, {arr.std():.4f}'
 
 def nestled_defaultdict_to_dict(d):
     if isinstance(d, defaultdict):

@@ -56,7 +56,10 @@ def train_gnn(model, dataset, config: TrainConfig, disable_tqdm=False, inductive
     num_val_node = dataset.val_mask.sum().item()
     if config.early_stopping and num_val_node == 0:
         raise Exception('Early stopping not possible without a validation set!')
-    optimizer = config.optimizer(model.parameters(), lr=config.lr, weight_decay=config.weight_decay)
+    if config.optimizer.__name__ == 'SGD':
+        optimizer = config.optimizer(model.parameters(), lr=config.lr, weight_decay=config.weight_decay, momentum=0.9)
+    else:
+        optimizer = config.optimizer(model.parameters(), lr=config.lr, weight_decay=config.weight_decay)
     loss_fn, criterion = config.loss_fn, config.criterion
     res = defaultdict(list)
     early_stopping_counter = 0
@@ -145,20 +148,20 @@ def train_shadow_models(graph, loss_fn, config):
     train_config = TrainConfig(
         criterion=criterion,
         device=config.device,
-        epochs=config.epochs,
+        epochs=config.shadow_epochs,
         early_stopping=config.early_stopping,
         loss_fn=loss_fn,
-        lr=config.lr,
-        weight_decay=config.weight_decay,
+        lr=config.shadow_lr,
+        weight_decay=config.shadow_weight_decay,
         optimizer=getattr(torch.optim, config.optimizer),
     )
     shadow_train_masks = utils.partition_training_sets(num_nodes=graph.num_nodes, num_models=config.num_shadow_models)
     for shadow_train_mask in tqdm(shadow_train_masks, total=shadow_train_masks.shape[0], desc=f"Training {config.num_shadow_models} shadow models"):
         shadow_dataset = datasetup.remasked_graph(graph, shadow_train_mask)
         shadow_model = utils.fresh_model(
-            model_type=config.model,
+            model_type=config.shadow_model,
             num_features=shadow_dataset.num_features,
-            hidden_dims=config.hidden_dim,
+            hidden_dims=config.shadow_hidden_dim,
             num_classes=shadow_dataset.num_classes,
             dropout=config.dropout,
         )

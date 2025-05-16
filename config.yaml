@@ -2,16 +2,22 @@
 cora-GCN:
   dataset: "cora"
   model: "GCN"
-  epochs: 200
+  shadow_model: "GAT"
+  epochs: 500
+  shadow_epochs: 100
   batch_size: 8192
   hidden_dim:
+  - 32
+  shadow_hidden_dim:
   - 64
-  lr: 0.001
+  lr: 0.01
+  shadow_lr: 0.001
   weight_decay: 0.00001
+  shadow_weight_decay: 0.0001
   dropout: 0.5
   max_num_nodes: null
   frac_target_nodes: 0.5
-  train_frac: 0.5
+  train_frac: 0.35
   val_frac: 0.0
   num_audits: 10
   target_fpr:
@@ -46,11 +52,6 @@ cora-GCN:
       Z_frac: 0.5
     lset:
       attack: "lset"
-    graph-lset-MI:
-      attack: "graph-lset"
-      num_sampled_graphs: 8
-      sampling_strategy: "model-independent"
-      prior: 0.5
     graph-lset-MIA:
       attack: "graph-lset"
       num_sampled_graphs: 8
@@ -67,17 +68,10 @@ cora-GCN:
     lset-offline:
       attack: "lset"
       offline: True
-    graph-lset-MI-offline:
+    graph-lset-MIA-offline:
       attack: "graph-lset"
       num_sampled_graphs: 8
-      sampling_strategy: "model-independent"
+      sampling_strategy: "MIA"
       offline: True
       threshold_scale_factor: 0.9
-      prior: 0.5
-    graph-lset-MI-offline-no-scale:
-      attack: "graph-lset"
-      num_sampled_graphs: 8
-      sampling_strategy: "model-independent"
-      offline: True
-      threshold_scale_factor: 1.0
       prior: 0.5

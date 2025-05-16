@@ -62,7 +62,7 @@ class MembershipInferenceAudit:
             loss_fn=self.loss_fn,
             lr=config.lr,
             weight_decay=config.weight_decay,
-            optimizer=getattr(torch.optim, config.optimizer),
+            optimizer=torch.optim.SGD,
         )
         print(f'Training a {config.model} target model on {config.dataset}...')
         _ = trainer.train_gnn(

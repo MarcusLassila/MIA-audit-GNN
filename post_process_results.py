@@ -45,8 +45,17 @@ if __name__ == '__main__':
     frames = []
     attacks = list(stats_list[0].keys())
     n_audits = None
+    Path(args.root + '/' + args.name + '/roc_csv').mkdir(exist_ok=True, parents=True)
     for attack in attacks:
         table = defaultdict(list)
+        for stats in stats_list:
+            for i in range(len(stats[attack]['FPR'])):
+                roc_df = pd.DataFrame({
+                    'FPR': stats[attack]['FPR'][i],
+                    'TPR': stats[attack]['TPR'][i],
+                })
+                filename = f"{path}/roc_csv/roc_{i}_{attack}.csv"
+                roc_df.to_csv(filename, index=False)
         for key in stats_list[0][attack].keys():
             if key in ('TPR', 'FPR'):
                 continue

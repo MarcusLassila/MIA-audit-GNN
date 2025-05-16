@@ -4,7 +4,7 @@ default-parameters:
   model: "GCN"
   batch_size: 32 # Only used for MLP attack
   epochs: 15
-  epochs_mlp: 5000 # Something large, early stopping is used
+  epochs_mlp: 1000 # Something large, early stopping is used
   num_audits: 1
   max_num_nodes: null
   frac_target_nodes: 0.5
