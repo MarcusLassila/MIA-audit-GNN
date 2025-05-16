@@ -1,24 +1,24 @@
 ---
-cora-GCN:
-  dataset: "cora"
-  model: "GCN"
-  epochs: 200
-  batch_size: 8192
+pubmed-GraphSAGE:
+  dataset: "pubmed"
+  model: "GraphSAGE"
+  epochs: 100
+  batch_size: 65536
   hidden_dim:
-  - 64
-  lr: 0.001
-  weight_decay: 0.00001
+  - 128
+  lr: 0.01
+  weight_decay: 0.0001
   dropout: 0.5
   max_num_nodes: null
-  frac_target_nodes: 0.5
+  frac_target_nodes: 0.2
   train_frac: 0.5
   val_frac: 0.0
-  num_audits: 10
+  num_audits: 1
   target_fpr:
   - 0.01
   - 0.001
   pretrain_shadow_models: True
-  num_shadow_models: 8
+  num_shadow_models: 128
   seed: 0
   attacks:
     MLP-attack-0hop:
@@ -46,14 +46,9 @@ cora-GCN:
       Z_frac: 0.5
     lset:
       attack: "lset"
-    graph-lset-MI:
-      attack: "graph-lset"
-      num_sampled_graphs: 8
-      sampling_strategy: "model-independent"
-      prior: 0.5
     graph-lset-MIA:
       attack: "graph-lset"
-      num_sampled_graphs: 8
+      num_sampled_graphs: 32
       sampling_strategy: "MIA"
       prior: 0.5
     lira-offline:
@@ -67,17 +62,10 @@ cora-GCN:
     lset-offline:
       attack: "lset"
       offline: True
-    graph-lset-MI-offline:
+    graph-lset-MIA-offline:
       attack: "graph-lset"
-      num_sampled_graphs: 8
-      sampling_strategy: "model-independent"
+      num_sampled_graphs: 32
+      sampling_strategy: "MIA"
       offline: True
       threshold_scale_factor: 0.9
-      prior: 0.5
-    graph-lset-MI-offline-no-scale:
-      attack: "graph-lset"
-      num_sampled_graphs: 8
-      sampling_strategy: "model-independent"
-      offline: True
-      threshold_scale_factor: 1.0
       prior: 0.5
