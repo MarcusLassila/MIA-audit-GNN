@@ -1,4 +1,4 @@
-name: conda_env_cpu
+name: mia_gnn_cpu
 channels:
 - pytorch
 - conda-forge
