@@ -126,7 +126,7 @@ class MLPAttack:
             logits = self.attack_model(features)[:,1]
         return logits
 
-class GraphLSET:
+class G_BASE:
 
     class SamplingState:
         '''State object when sampling graphs'''
@@ -164,7 +164,7 @@ class GraphLSET:
             print('No prior specified. Using default value 0.5')
             self.prior = 0.5
         if config.sampling_strategy == 'MIA':
-            self.zero_hop_attacker = LSET(
+            self.zero_hop_attacker = BASE(
                 target_model=target_model,
                 graph=graph,
                 loss_fn=loss_fn,
@@ -238,7 +238,7 @@ class GraphLSET:
 
     def run_attack(self, target_node_index):
         config = self.config
-        sampling_state = GraphLSET.SamplingState(
+        sampling_state = G_BASE.SamplingState(
             outer_cls=self,
             score_dim=(config.num_sampled_graphs, target_node_index.shape[0]),
             strategy=config.sampling_strategy,
@@ -301,7 +301,7 @@ class GraphLSET:
             score += np.log(self.config.prior) - np.log(1 - self.config.prior)
             sampling_state.score[sample_idx][i] = score.sigmoid()
 
-class LSET:
+class BASE:
 
     def __init__(self, target_model, graph, loss_fn, config, shadow_models=None, offline_threshold_scale_factor=0.7):
         self.target_model = target_model
@@ -344,7 +344,7 @@ class LSET:
         score = log_conf - self.threshold_scale_factor * threshold
         return score.sigmoid()
 
-class LaplaceLSET:
+class LaplaceBASE:
 
     def __init__(self, target_model, graph, loss_fn, config):
         self.target_model = target_model
@@ -450,14 +450,14 @@ class LaplaceLSET:
         preds = log_conf - threshold
         return preds.sigmoid()
 
-class BootstrappedLSET:
+class B_BASE:
 
     def __init__(self, target_model, graph, loss_fn, config, shadow_models=None):
         self.target_model = target_model
         self.graph = graph
         self.loss_fn = loss_fn
         self.config = config
-        self.zero_hop_attacker = LSET(
+        self.zero_hop_attacker = BASE(
             target_model=target_model,
             graph=graph,
             loss_fn=loss_fn,
@@ -523,7 +523,7 @@ class BootstrappedLSET:
 
     def run_attack(self, target_node_index):
         preds = torch.zeros_like(target_node_index, dtype=torch.float32)
-        for i, target_idx in tqdm(enumerate(target_node_index), total=target_node_index.shape[0], desc="Attacking target nodes using BootstrappedLSET"):
+        for i, target_idx in tqdm(enumerate(target_node_index), total=target_node_index.shape[0], desc="Attacking target nodes using B_BASE"):
             shadow_models_in = []
             shadow_models_out = []
             for shadow_model, train_mask in zip(self.shadow_models, self.train_masks):
@@ -543,14 +543,14 @@ class BootstrappedLSET:
                 preds[i] = self.log_model_posterior(shadow_models, self.graph.x[target_idx].unsqueeze(0), self.graph.y[target_idx].unsqueeze(0)).squeeze()
         return preds
 
-class BootstrappedGraphLSET:
+class BG_BASE:
 
     def __init__(self, target_model, graph, loss_fn, config, shadow_models=None):
         self.target_model = target_model
         self.graph = graph
         self.loss_fn = loss_fn
         self.config = config
-        self.zero_hop_attacker = LSET(
+        self.zero_hop_attacker = BASE(
             target_model=target_model,
             graph=graph,
             loss_fn=loss_fn,
@@ -615,7 +615,7 @@ class BootstrappedGraphLSET:
 
     def run_attack(self, target_node_index):
         preds = torch.zeros_like(target_node_index, dtype=torch.float32)
-        for i, target_idx in tqdm(enumerate(target_node_index), total=target_node_index.shape[0], desc="Attacking target nodes using BootstrappedGraphLSET"):
+        for i, target_idx in tqdm(enumerate(target_node_index), total=target_node_index.shape[0], desc="Attacking target nodes using BG_BASE"):
             shadow_models_in = []
             shadow_models_out = []
             for shadow_model, train_mask in zip(self.shadow_models, self.train_masks):
@@ -644,7 +644,7 @@ class BootstrappedGraphLSET:
         assert preds.shape == target_node_index.shape
         return preds
 
-class StrongLSET:
+class S_BASE:
 
     def __init__(self, target_model, graph, loss_fn, config):
         self.target_model = target_model
@@ -713,7 +713,7 @@ class StrongLSET:
         return preds
 
     def run_attack_mp(self, target_node_index):
-        desc = f"Attacking target nodes using StrongLSET with {self.config.num_processes} processes"
+        desc = f"Attacking target nodes using S_BASE with {self.config.num_processes} processes"
         with mp.Pool(self.config.num_processes) as pool:
             preds = torch.tensor(pool.map(self.compute_pred, tqdm(target_node_index, desc=desc)))
         assert preds.shape == target_node_index.shape
@@ -723,7 +723,7 @@ class StrongLSET:
         shadow_models = self.train_shadow_models(target_idx)
         return self.log_model_posterior(self.graph.x[target_idx].unsqueeze(0), self.graph.y[target_idx].unsqueeze(0), shadow_models).squeeze()
 
-class StrongGraphLSET:
+class SG_BASE:
 
     def __init__(self, target_model, graph, loss_fn, config):
         self.target_model = target_model
@@ -783,14 +783,14 @@ class StrongGraphLSET:
         if self.config.num_processes > 1:
             return self.run_attack_mp(target_node_index)
         preds = torch.zeros_like(target_node_index, dtype=torch.float32)
-        desc = "Attacking target nodes using StrongGraphLSET"
+        desc = "Attacking target nodes using SG_BASE"
         for i, target_idx in tqdm(enumerate(target_node_index), total=target_node_index.shape[0], desc=desc):
             preds[i] = self.compute_pred(target_idx)
         assert preds.shape == target_node_index.shape
         return preds
 
     def run_attack_mp(self, target_node_index):
-        desc = f"Attacking target nodes using StrongGraphLSET with {self.config.num_processes} processes"
+        desc = f"Attacking target nodes using SG_BASE with {self.config.num_processes} processes"
         with mp.Pool(self.config.num_processes) as pool:
             preds = torch.tensor(pool.map(self.compute_pred, tqdm(target_node_index, desc=desc)))
         assert preds.shape == target_node_index.shape
@@ -819,6 +819,7 @@ class ConfidenceAttack:
         return preds
 
 class BMIA:
+    '''Preliminary implementation of BMIA. Does not work well.'''
 
     def __init__(self, target_model, graph, loss_fn, config, eps=1e-11):
         self.target_model = target_model
