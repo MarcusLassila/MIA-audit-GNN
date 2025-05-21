@@ -48,7 +48,7 @@ def max_mean_value_indices(df, columns):
         res[col] = numeric_series.idxmax()
     return res
 
-def parse_csv_files(base_path, directories, selected_columns, res_dict):
+def parse_csv_files(base_path, directories, selected_columns, res_dict, highlight_best=True):
     for directory in directories:
         full_path = os.path.join(base_path, directory)
         if os.path.isdir(full_path):
@@ -75,7 +75,7 @@ def parse_csv_files(base_path, directories, selected_columns, res_dict):
                                     if col == 'Unnamed: 0':
                                         continue
                                     best = idx_for_bold[col]
-                                    make_bold = best == idx
+                                    make_bold = best == idx and highlight_best
                                     cols.append(convert_to_latex_format(row[col], make_bold=make_bold))
                                 metrics += '& '.join(cols)
                                 res_dict[attack] += metrics
@@ -85,16 +85,22 @@ def parse_csv_files(base_path, directories, selected_columns, res_dict):
 if __name__ == "__main__":
     assert len(sys.argv) == 2, "Usage: python parse_result.py resdir"
     root = sys.argv[1]
+    # dir_groups = [
+    #     'cora-GCN,citeseer-GAT,pubmed-GraphSAGE'.split(','),
+    #     'flickr-GCN,amazon-photo-GAT,github-GraphSAGE'.split(','),
+    # ]
     dir_groups = [
-        'cora-GCN,citeseer-GAT,pubmed-GraphSAGE'.split(','),
-        'flickr-GCN,amazon-photo-GAT,github-GraphSAGE'.split(','),
+        'pubmed-GCN,pubmed-GAT,pubmed-GraphSAGE'.split(','),
+        'flickr-GCN,flickr-GAT,flickr-GraphSAGE'.split(','),
+        'amazon-photo-GCN,amazon-photo-GAT,amazon-photo-GraphSAGE'.split(','),
     ]
     selected_columns = 'Unnamed: 0,AUC,TPR@0.01FPR,TPR@0.001FPR'.split(',')
+    #selected_columns = 'Unnamed: 0,threshold@0.01FPR,threshold@0.001FPR'.split(',')
     with open(f'{root}/latex_table.tex', 'w') as f:
         f.write('')
     for directories in dir_groups:
         res_dict = defaultdict(str)
-        parse_csv_files(root, directories, selected_columns, res_dict)
+        parse_csv_files(root, directories, selected_columns, res_dict, highlight_best=True)
         table_entry = ''
         for attack, metrics in res_dict.items():
             table_entry += '& ' + attack + ' ' + metrics + '\\\\\n'
