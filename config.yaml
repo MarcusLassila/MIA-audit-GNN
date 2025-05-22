@@ -1,19 +1,19 @@
 ---
-cora-GCN:
-  dataset: "cora"
-  model: "GCN"
-  shadow_model: "GAT"
-  epochs: 500
-  shadow_epochs: 100
-  batch_size: 8192
+pubmed-GraphSAGE:
+  dataset: "pubmed"
+  model: "GraphSAGE"
+  shadow_model: "GCN"
+  epochs: 2000
+  shadow_epochs: 400
+  batch_size: 500000
   hidden_dim:
-  - 32
+  - 128
   shadow_hidden_dim:
   - 64
-  lr: 0.01
-  shadow_lr: 0.001
+  lr: 0.1
+  shadow_lr: 0.01
   weight_decay: 0.00001
-  shadow_weight_decay: 0.0001
+  shadow_weight_decay: 0.00001
   dropout: 0.5
   max_num_nodes: null
   frac_target_nodes: 0.5
@@ -52,11 +52,6 @@ cora-GCN:
       Z_frac: 0.5
     base:
       attack: "base"
-    g-base-MI:
-      attack: "g-base"
-      num_sampled_graphs: 8
-      sampling_strategy: "model-independent"
-      prior: 0.5
     g-base-MIA:
       attack: "g-base"
       num_sampled_graphs: 8
@@ -73,17 +68,10 @@ cora-GCN:
     base-offline:
       attack: "base"
       offline: True
-    g-base-MI-offline:
+    g-base-MIA-offline:
       attack: "g-base"
       num_sampled_graphs: 8
       sampling_strategy: "MIA"
       offline: True
       threshold_scale_factor: 0.9
-      prior: 0.5
-    g-base-MI-offline-no-scale:
-      attack: "g-base"
-      num_sampled_graphs: 8
-      sampling_strategy: "model-independent"
-      offline: True
-      threshold_scale_factor: 1.0
       prior: 0.5
