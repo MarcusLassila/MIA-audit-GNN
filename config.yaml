@@ -1,56 +1,33 @@
 ---
-cora-GCN:
-  dataset: "cora"
-  model: "GCN"
-  epochs: 200
+citeseer-GAT:
+  dataset: "citeseer"
+  model: "GAT"
+  epochs: 50
   batch_size: 8192
   hidden_dim:
   - 64
   lr: 0.001
-  weight_decay: 0.00001
+  weight_decay: 0.0001
   dropout: 0.5
   max_num_nodes: null
   frac_target_nodes: 0.5
   train_frac: 0.5
   val_frac: 0.0
-  num_audits: 10
+  num_audits: 20
   target_fpr:
   - 0.01
-  - 0.001
   pretrain_shadow_models: True
   num_shadow_models: 8
   seed: 0
   attacks:
-    MLP-attack-0hop:
-      attack: "mlp-attack"
-      mlp_attack_queries:
-      - 0
-      edge_dropout: 0.0
-      mlp_hidden_dim:
-      - 128
-      - 64
-    MLP-attack-comb:
-      attack: "mlp-attack"
-      mlp_attack_queries:
-      - 0
-      - 2
-      edge_dropout: 0.5
-      mlp_hidden_dim:
-      - 128
-      - 64
     lira:
       attack: "lira"
     rmia:
       attack: "rmia"
       rmia_gamma: 1
-      Z_frac: 0.5
+      Z_frac: 1.0
     base:
       attack: "base"
-    g-base-MI:
-      attack: "g-base"
-      num_sampled_graphs: 8
-      sampling_strategy: "model-independent"
-      prior: 0.5
     g-base-MIA:
       attack: "g-base"
       num_sampled_graphs: 8
@@ -67,17 +44,10 @@ cora-GCN:
     base-offline:
       attack: "base"
       offline: True
-    g-base-MI-offline:
+    g-base-MIA-offline:
       attack: "g-base"
       num_sampled_graphs: 8
       sampling_strategy: "model-independent"
       offline: True
       threshold_scale_factor: 0.9
-      prior: 0.5
-    g-base-MI-offline-no-scale:
-      attack: "g-base"
-      num_sampled_graphs: 8
-      sampling_strategy: "model-independent"
-      offline: True
-      threshold_scale_factor: 1.0
       prior: 0.5

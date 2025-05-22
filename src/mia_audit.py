@@ -313,12 +313,22 @@ class MembershipInferenceAudit:
                 preds = attacker.run_attack(target_node_index=target_node_index)
                 metrics = evaluation.evaluate_binary_classification(preds, truth, config.target_fpr, target_node_index, self.dataset)
                 fpr, tpr = metrics['ROC']
-                stats[attack]['FPR'].append(fpr)
-                stats[attack]['TPR'].append(tpr)
-                stats[attack]['AUC'].append(metrics['AUC'])
-                for t_fpr, t_tpr, threshold in zip(config.target_fpr, metrics['TPR@FPR'], metrics['threshold@FPR']):
-                    stats[attack][f'TPR@{t_fpr}FPR'].append(t_tpr)
-                    stats[attack][f'threshold@{t_fpr}FPR'].append(threshold)
+                if 2 * i_audit <= config.num_audits:
+                    try:
+                        config.attacks[attack]['threshold'].append(metrics['threshold@FPR'][0])
+                    except KeyError:
+                        config.attacks[attack]['threshold'] = [metrics['threshold@FPR'][0]]
+                else:
+                    stats[attack]['FPR'].append(fpr)
+                    stats[attack]['TPR'].append(tpr)
+                    stats[attack]['AUC'].append(metrics['AUC'])
+                    for t_fpr, t_tpr, threshold in zip(config.target_fpr, metrics['TPR@FPR'], metrics['threshold@FPR']):
+                        stats[attack][f'TPR@{t_fpr}FPR'].append(t_tpr)
+                        stats[attack][f'threshold@{t_fpr}FPR'].append(threshold)
+                    threshold = np.array(config.attacks[attack]['threshold']).mean()
+                    t_fpr, t_tpr = utils.tpr_and_fpr_at_threshold(preds, truth, threshold)
+                    stats[attack][f'TPR@est_threshold'].append(t_tpr)
+                    stats[attack][f'FPR@est_threshold'].append(t_fpr)
 
         stat_df = self.parse_stats(stats)
         stats = utils.nestled_defaultdict_to_dict(stats)

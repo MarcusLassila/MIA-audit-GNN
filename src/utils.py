@@ -142,6 +142,21 @@ def graph_info(dataset):
         f'Fraction isolated nodes: {fraction_isolated_nodes(dataset)}\n'
     )
 
+def tpr_and_fpr_at_threshold(preds, truth, threshold):
+    if not isinstance(preds, torch.Tensor):
+        preds = torch.as_tensor(preds)
+    if not isinstance(truth, torch.Tensor):
+        truth = torch.as_tensor(truth)
+    y = truth.bool()
+    pp = preds >= threshold
+    pos = y.sum().item()
+    neg = y.shape[0] - pos
+    tp = (pp & y).sum().item()
+    fp = (pp & ~y).sum().item()
+    tpr = tp / pos
+    fpr = fp / neg
+    return fpr, tpr
+
 def tpr_at_fixed_fpr(fpr, tpr, target_fpr, thresholds):
     idx = np.argmax(fpr >= target_fpr)
     if fpr[idx] > target_fpr + 1e-6:
