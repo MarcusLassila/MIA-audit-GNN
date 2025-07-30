@@ -147,11 +147,16 @@ class MembershipInferenceAudit:
             pretrained_shadow_models = self.shadow_models
         else:
             pretrained_shadow_models = None
+        if self.config.edge_noise_lvl > 0.0:
+            graph = self.dataset.clone()
+            graph.edge_index = datasetup.noisy_edge_index(self.dataset.edge_index, self.dataset.num_nodes, noise_lvl=self.config.edge_noise_lvl)
+        else:
+            graph = self.dataset
         match attack_config.attack:
             case "g-base":
                 attacker = attacks.G_BASE(
                     target_model=target_model,
-                    graph=self.dataset,
+                    graph=graph,
                     loss_fn=self.loss_fn,
                     config=attack_config,
                     shadow_models=pretrained_shadow_models,
@@ -159,7 +164,7 @@ class MembershipInferenceAudit:
             case "base":
                 attacker = attacks.BASE(
                     target_model=target_model,
-                    graph=self.dataset,
+                    graph=graph,
                     loss_fn=self.loss_fn,
                     config=attack_config,
                     shadow_models=pretrained_shadow_models,
@@ -167,14 +172,14 @@ class MembershipInferenceAudit:
             case "laplace-base":
                 attacker = attacks.LaplaceBASE(
                     target_model=target_model,
-                    graph=self.dataset,
+                    graph=graph,
                     loss_fn=self.loss_fn,
                     config=attack_config,
                 )
             case "b-base":
                 attacker = attacks.B_BASE(
                     target_model=target_model,
-                    graph=self.dataset,
+                    graph=graph,
                     loss_fn=self.loss_fn,
                     config=attack_config,
                     shadow_models=pretrained_shadow_models,
@@ -182,7 +187,7 @@ class MembershipInferenceAudit:
             case "bg-base":
                 attacker = attacks.BG_BASE(
                     target_model=target_model,
-                    graph=self.dataset,
+                    graph=graph,
                     loss_fn=self.loss_fn,
                     config=attack_config,
                     shadow_models=pretrained_shadow_models,
@@ -190,34 +195,34 @@ class MembershipInferenceAudit:
             case "s-base":
                 attacker = attacks.S_BASE(
                     target_model=target_model,
-                    graph=self.dataset,
+                    graph=graph,
                     loss_fn=self.loss_fn,
                     config=attack_config,
                 )
             case "sg-base":
                 attacker = attacks.SG_BASE(
                     target_model=target_model,
-                    graph=self.dataset,
+                    graph=graph,
                     loss_fn=self.loss_fn,
                     config=attack_config,
                 )
             case "confidence":
                 attacker = attacks.ConfidenceAttack(
                     target_model=target_model,
-                    graph=self.dataset,
+                    graph=graph,
                     config=attack_config,
                 )
             case "bmia":
                 attacker = attacks.BMIA(
                     target_model=target_model,
-                    graph=self.dataset,
+                    graph=graph,
                     loss_fn=self.loss_fn,
                     config=attack_config,
                 )
             case "lira":
                 attacker = attacks.LiRA(
                     target_model=target_model,
-                    graph=self.dataset,
+                    graph=graph,
                     loss_fn=self.loss_fn,
                     config=attack_config,
                     shadow_models=pretrained_shadow_models,
@@ -225,7 +230,7 @@ class MembershipInferenceAudit:
             case "rmia":
                 attacker = attacks.RMIA(
                     target_model=target_model,
-                    graph=self.dataset,
+                    graph=graph,
                     loss_fn=self.loss_fn,
                     config=attack_config,
                     shadow_models=pretrained_shadow_models,
@@ -233,7 +238,7 @@ class MembershipInferenceAudit:
             case "mlp-attack":
                 attacker = attacks.MLPAttack(
                     target_model=target_model,
-                    graph=self.dataset,
+                    graph=graph,
                     loss_fn=self.loss_fn,
                     config=attack_config,
                     shadow_models=pretrained_shadow_models,

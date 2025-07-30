@@ -5,7 +5,7 @@ import torch
 import torch_geometric
 from torch.utils.data import Dataset
 from torch_geometric.data import Data
-from torch_geometric.utils import degree, index_to_mask, mask_to_index, subgraph
+from torch_geometric.utils import degree, dropout_edge, index_to_mask, mask_to_index, negative_sampling, sort_edge_index, subgraph
 from collections import deque
 
 class GraphDatasetWrapper(Dataset):
@@ -38,6 +38,27 @@ class NodeFeatureEdgeIndexContainer:
 
     def squeeze(self, *args, **kwargs):
         return NodeFeatureEdgeIndexContainer(self.x.to(*args, **kwargs), self.edge_index.to(*args, **kwargs))
+
+def noisy_edge_index(edge_index, num_nodes, noise_lvl=0.2):
+    '''
+    Adds noise to the edge index by removing edges that are present, and adding edges that are not.
+    The argument noise_lvl sets the fraction of edges to remove, and these are replaced by an equal amount of new edges.
+    '''
+    retained_edge_index, _ = dropout_edge(edge_index, p=noise_lvl)
+    num_dropped_edges = edge_index.shape[1] - retained_edge_index.shape[1]
+    print(num_dropped_edges, edge_index.shape[1])
+    negative_edge_index = negative_sampling(
+        edge_index=edge_index,
+        num_nodes=num_nodes,
+        num_neg_samples=num_dropped_edges,
+        method='sparse',
+    )
+    print(retained_edge_index.shape, negative_edge_index.shape)
+    res = torch.concat((retained_edge_index, negative_edge_index), dim=1)
+    res = sort_edge_index(res)
+    assert res.shape == edge_index.shape
+    return res
+
 
 def remove_node(graph, node_idx):
     node_mask = torch.ones(graph.num_nodes, dtype=torch.bool).to(graph.x.device)

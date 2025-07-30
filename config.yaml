@@ -13,6 +13,7 @@ cora-GCN:
   frac_target_nodes: 0.5
   train_frac: 0.5
   val_frac: 0.0
+  edge_noise_level: 0.0
   num_audits: 10
   target_fpr:
   - 0.01
