@@ -27,7 +27,7 @@ def run_audit(config, savedir, index, seed):
         print()
         print(yaml.dump(params))
         stat_df, stats = mia_audit.run(params)
-        print(stat_df)
+        print(stat_df.applymap(lambda x: rf'{x[0]:.4f} +- {x[1]:.4f}'))
         Path(f'{savedir}/{audit}').mkdir(parents=True, exist_ok=True)
         if index == 0:
             stat_df.to_csv(f'{savedir}/{audit}/results.csv', sep=',')

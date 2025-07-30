@@ -16,6 +16,7 @@ from tqdm.auto import tqdm
 from collections import defaultdict
 from pathlib import Path
 import copy
+import time
 
 class MembershipInferenceAudit:
 
@@ -278,7 +279,10 @@ class MembershipInferenceAudit:
         config = self.config
         stats = defaultdict(lambda: defaultdict(list))
         if config.pretrain_shadow_models:
+            t0 = time.time()
             self.shadow_models = trainer.train_shadow_models(self.dataset, self.loss_fn, config)
+            t1 = time.time()
+            print(f'{config.num_shadow_models} shadow model trained in {t1 - t0:.2f} seconds')
             self.tune_attack_hyperparams()
         for i_audit in range(1, config.num_audits + 1):
             print(f'Running audit {i_audit}/{config.num_audits}')
@@ -310,7 +314,10 @@ class MembershipInferenceAudit:
                 stats[attack]['train_acc'].append(target_scores['train_acc'])
                 stats[attack]['test_acc'].append(target_scores['test_acc'])
                 truth = self.dataset.train_mask.long()[target_node_index]
+                t0 = time.time()
                 preds = attacker.run_attack(target_node_index=target_node_index)
+                t1 = time.time()
+                stats[attack]['time'].append(t1 - t0)
                 metrics = evaluation.evaluate_binary_classification(preds, truth, config.target_fpr, target_node_index, self.dataset)
                 fpr, tpr = metrics['ROC']
                 stats[attack]['FPR'].append(fpr)

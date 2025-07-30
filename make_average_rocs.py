@@ -5,8 +5,8 @@ import pandas as pd
 from collections import defaultdict
 
 # Set path to your ROC curve files
-data_dir = "/home/johan/project/replicate-MIA-on-GNNs/small_N_results/flickr-GCN/roc_csv"  # <-- change to your folder
-csv_files = glob.glob(os.path.join(data_dir, "roc_*_flickr-GCN_*.csv"))
+data_dir = "results/small_N_results/amazon-photo-GraphSAGE/roc_csv"  # <-- change to your folder
+csv_files = glob.glob(os.path.join(data_dir, "roc_*amazon-photo-GraphSAGE_*.csv"))
 
 # Define a shared FPR grid (log scale)
 mean_fpr = np.logspace(-4, 0, 1000)
@@ -15,7 +15,7 @@ mean_fpr = np.logspace(-4, 0, 1000)
 attack_files = defaultdict(list)
 for file in csv_files:
     # Extract the attack name from the filename
-    attack = file.split("flickr-GCN_")[-1].replace(".csv", "")
+    attack = file.split("amazon-photo-GraphSAGE_")[-1].replace(".csv", "")
     attack_files[attack].append(file)
 
 # Prepare output dictionary
