@@ -147,9 +147,9 @@ class MembershipInferenceAudit:
             pretrained_shadow_models = self.shadow_models
         else:
             pretrained_shadow_models = None
-        if self.config.edge_noise_lvl > 0.0:
+        if self.config.edge_noise_level > 0.0:
             graph = self.dataset.clone()
-            graph.edge_index = datasetup.noisy_edge_index(self.dataset.edge_index, self.dataset.num_nodes, noise_lvl=self.config.edge_noise_lvl)
+            graph.edge_index = datasetup.noisy_edge_index(self.dataset.edge_index, self.dataset.num_nodes, noise_lvl=self.config.edge_noise_level)
         else:
             graph = self.dataset
         match attack_config.attack:

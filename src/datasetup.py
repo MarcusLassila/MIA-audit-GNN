@@ -46,14 +46,12 @@ def noisy_edge_index(edge_index, num_nodes, noise_lvl=0.2):
     '''
     retained_edge_index, _ = dropout_edge(edge_index, p=noise_lvl)
     num_dropped_edges = edge_index.shape[1] - retained_edge_index.shape[1]
-    print(num_dropped_edges, edge_index.shape[1])
     negative_edge_index = negative_sampling(
         edge_index=edge_index,
         num_nodes=num_nodes,
         num_neg_samples=num_dropped_edges,
         method='sparse',
     )
-    print(retained_edge_index.shape, negative_edge_index.shape)
     res = torch.concat((retained_edge_index, negative_edge_index), dim=1)
     res = sort_edge_index(res)
     assert res.shape == edge_index.shape
