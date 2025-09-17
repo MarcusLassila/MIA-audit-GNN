@@ -39,6 +39,7 @@ def fresh_model(model_type, num_features, hidden_dims, num_classes, dropout=0.0)
         raise AttributeError(f'Unsupported model {model_type}. Supported models are MLP, GCN, SGC, GraphSAGE, GAT and GIN.')
     return model
 
+@torch.inference_mode()
 def k_hop_query(model, dataset, query_nodes, num_hops=0, inductive_split=False, edge_dropout=0.0):
     '''
     Queries the model for each node in in query_nodes,
@@ -62,25 +63,24 @@ def k_hop_query(model, dataset, query_nodes, num_hops=0, inductive_split=False, 
         if inductive_split:
             edge_mask = edge_mask & dataset.inductive_mask
         edge_index = dataset.edge_index[:, edge_mask]
-    with torch.inference_mode():
-        if num_hops == 0:
-            empty_edge_index = torch.tensor([[],[]], dtype=torch.long).to(dataset.edge_index.device)
-            preds = model(dataset.x[query_nodes], empty_edge_index)
-        elif num_hops == model.num_layers:
-            preds = model(dataset.x, edge_index)[query_nodes]
-        else:
-            preds = []
-            for v in query_nodes:
-                node_index, sub_edge_index, v_idx, _ = k_hop_subgraph(
-                    node_idx=v.item(),
-                    num_hops=num_hops,
-                    edge_index=edge_index,
-                    relabel_nodes=True,
-                    num_nodes=dataset.num_nodes,
-                )
-                pred = model(dataset.x[node_index], sub_edge_index)[v_idx].squeeze()
-                preds.append(pred)
-            preds = torch.stack(preds)
+    if num_hops == 0:
+        empty_edge_index = torch.tensor([[],[]], dtype=torch.long).to(dataset.edge_index.device)
+        preds = model(dataset.x[query_nodes], empty_edge_index)
+    elif num_hops == model.num_layers:
+        preds = model(dataset.x, edge_index)[query_nodes]
+    else:
+        preds = []
+        for v in query_nodes:
+            node_index, sub_edge_index, v_idx, _ = k_hop_subgraph(
+                node_idx=v.item(),
+                num_hops=num_hops,
+                edge_index=edge_index,
+                relabel_nodes=True,
+                num_nodes=dataset.num_nodes,
+            )
+            pred = model(dataset.x[node_index], sub_edge_index)[v_idx].squeeze()
+            preds.append(pred)
+        preds = torch.stack(preds)
     assert preds.shape == (len(query_nodes), dataset.num_classes)
     return preds
 

@@ -109,21 +109,21 @@ class MLPAttack:
         )
         self.attack_model.eval()
 
+    @torch.inference_mode()
     def run_attack(self, target_node_index):
         # num_hops not used, attack always use both 0-hop and 2-hop queries
-        with torch.inference_mode():
-            features = []
-            for num_hops in self.queries:
-                preds = utils.k_hop_query(
-                    model=self.target_model,
-                    dataset=self.graph,
-                    query_nodes=target_node_index,
-                    num_hops=num_hops,
-                    edge_dropout=self.config.edge_dropout,
-                )
-                features.append(preds)
-            features = torch.cat(features, dim=1)
-            logits = self.attack_model(features)[:,1]
+        features = []
+        for num_hops in self.queries:
+            preds = utils.k_hop_query(
+                model=self.target_model,
+                dataset=self.graph,
+                query_nodes=target_node_index,
+                num_hops=num_hops,
+                edge_dropout=self.config.edge_dropout,
+            )
+            features.append(preds)
+        features = torch.cat(features, dim=1)
+        logits = self.attack_model(features)[:,1]
         return logits
 
 class G_BASE:
@@ -208,10 +208,9 @@ class G_BASE:
         mask = torch.rand(self.graph.num_nodes) < frac_ones
         return mask.to(self.config.device)
 
+    @torch.inference_mode()
     def neg_loss(self, model, graph):
-        with torch.inference_mode():
-            res = -F.cross_entropy(model(graph.x, graph.edge_index), graph.y, reduction='sum')
-        return res
+        return -F.cross_entropy(model(graph.x, graph.edge_index), graph.y, reduction='sum')
 
     def score(self, in_subgraph, out_subgraph, target_idx):
         target_loss_diff = self.neg_loss(self.target_model, in_subgraph) - self.neg_loss(self.target_model, out_subgraph)
@@ -321,10 +320,9 @@ class BASE:
         else:
             self.threshold_scale_factor = 1.0
 
+    @torch.inference_mode()
     def log_confidence(self, model, x, edge_index, y):
-        with torch.inference_mode():
-            log_conf = F.log_softmax(model(x, edge_index), dim=1)[torch.arange(x.shape[0]), y]
-        return log_conf
+        return F.log_softmax(model(x, edge_index), dim=1)[torch.arange(x.shape[0]), y]
 
     def run_attack(self, target_node_index):
         x = self.graph.x[target_node_index]
@@ -507,11 +505,10 @@ class B_BASE:
         random_ref = torch.rand(self.graph.num_nodes).to(self.config.device)
         return self.zero_hop_probs > random_ref
 
+    @torch.inference_mode()
     def log_confidence(self, model, x, y):
-        with torch.inference_mode():
-            empty_edge_index = torch.tensor([[],[]], dtype=torch.long).to(self.config.device)
-            log_conf = F.log_softmax(model(x, empty_edge_index), dim=1)[torch.arange(x.shape[0]), y]
-        return log_conf
+        empty_edge_index = torch.tensor([[],[]], dtype=torch.long).to(self.config.device)
+        return F.log_softmax(model(x, empty_edge_index), dim=1)[torch.arange(x.shape[0]), y]
 
     def log_model_posterior(self, shadow_models, x, y):
         log_conf = self.log_confidence(self.target_model, x, y)
@@ -600,10 +597,9 @@ class BG_BASE:
         random_ref = torch.rand(self.graph.num_nodes).to(self.config.device)
         return self.zero_hop_probs > random_ref
 
+    @torch.inference_mode()
     def neg_loss(self, model, graph):
-        with torch.inference_mode():
-            res = -F.cross_entropy(model(graph.x, graph.edge_index), graph.y, reduction='sum')
-        return res
+        return -F.cross_entropy(model(graph.x, graph.edge_index), graph.y, reduction='sum')
 
     def loss_signal(self, shadow_models, in_subgraph, out_subgraph):
         target_loss_diff = self.neg_loss(self.target_model, in_subgraph) - self.neg_loss(self.target_model, out_subgraph)
@@ -688,11 +684,10 @@ class S_BASE:
             shadow_models.append(shadow_model)
         return shadow_models
 
+    @torch.inference_mode()
     def log_confidence(self, model, x, y):
-        with torch.inference_mode():
-            empty_edge_index = torch.tensor([[],[]], dtype=torch.long).to(self.config.device)
-            log_conf = F.log_softmax(model(x, empty_edge_index), dim=1)[torch.arange(x.shape[0]), y]
-        return log_conf
+        empty_edge_index = torch.tensor([[],[]], dtype=torch.long).to(self.config.device)
+        return F.log_softmax(model(x, empty_edge_index), dim=1)[torch.arange(x.shape[0]), y]
 
     def log_model_posterior(self, x, y, shadow_models):
         log_conf = self.log_confidence(self.target_model, x, y)
@@ -766,10 +761,9 @@ class SG_BASE:
             shadow_models.append(shadow_model)
         return shadow_models
 
+    @torch.inference_mode()
     def neg_loss(self, model, graph):
-        with torch.inference_mode():
-            res = -F.cross_entropy(model(graph.x, graph.edge_index), graph.y, reduction='sum')
-        return res
+        return -F.cross_entropy(model(graph.x, graph.edge_index), graph.y, reduction='sum')
 
     def signal(self, shadow_models, in_subgraph, out_subgraph):
         target_loss_diff = self.neg_loss(self.target_model, in_subgraph) - self.neg_loss(self.target_model, out_subgraph)
@@ -812,11 +806,10 @@ class ConfidenceAttack:
         self.graph = graph
         self.config = config
 
+    @torch.inference_mode()
     def run_attack(self, target_node_index):
         empty_edge_index = torch.tensor([[],[]], dtype=torch.long).to(self.config.device)
-        with torch.inference_mode():
-            preds = F.softmax(self.target_model(self.graph.x, empty_edge_index), dim=1)[target_node_index, self.graph.y[target_node_index]]
-        return preds
+        return F.softmax(self.target_model(self.graph.x, empty_edge_index), dim=1)[target_node_index, self.graph.y[target_node_index]]
 
 class BMIA:
     '''Preliminary implementation of BMIA. Does not work well.'''
@@ -1024,46 +1017,46 @@ class RMIA:
         else:
             self.interp_param = None
 
+    @torch.inference_mode()
     def run_attack(self, target_node_index):
         empty_edge_index = torch.tensor([[],[]], dtype=torch.long).to(self.config.device)
         num_target_nodes = target_node_index.shape[0]
-        with torch.inference_mode():
-            # Compute ratio_x over target nodes
-            p_x = []
-            for shadow_model, _ in self.shadow_models:
-                preds = F.softmax(
-                    shadow_model(self.graph.x[target_node_index], empty_edge_index),
-                    dim=1
-                )[torch.arange(target_node_index.shape[0]), self.graph.y[target_node_index]]
-                p_x.append(preds)
-            p_x = torch.stack(p_x).t()
-            assert p_x.shape == (num_target_nodes, len(self.shadow_models))
-            if self.offline:
-                mask = utils.offline_shadow_model_mask(target_node_index, [train_mask for _, train_mask in self.shadow_models])
-                p_x_out = p_x[mask].reshape(-1, len(self.shadow_models) // 2)
-                p_x_out = p_x_out.mean(dim=1)
-                p_x = 0.5 * ((1 + self.interp_param) * p_x_out + 1 - self.interp_param)
-            else:
-                p_x = p_x.mean(dim=1)
-            p_x_target = F.softmax(
-                self.target_model(self.graph.x[target_node_index], empty_edge_index),
-                dim=1,
+        # Compute ratio_x over target nodes
+        p_x = []
+        for shadow_model, _ in self.shadow_models:
+            preds = F.softmax(
+                shadow_model(self.graph.x[target_node_index], empty_edge_index),
+                dim=1
             )[torch.arange(target_node_index.shape[0]), self.graph.y[target_node_index]]
-            ratio_x = p_x_target / p_x
-            # Compute ratio_z over self.z_set
-            p_z = []
-            for shadow_model, _ in self.shadow_models:
-                preds = F.softmax(
-                    shadow_model(self.graph.x[self.z_set], empty_edge_index),
-                    dim=1
-                )[torch.arange(self.num_z), self.graph.y[self.z_set]]
-                p_z.append(preds)
-            p_z = torch.stack(p_z)
-            assert p_z.shape == (len(self.shadow_models), self.num_z)
-            p_z_target = F.softmax(
-                self.target_model(self.graph.x[self.z_set], empty_edge_index),
-                dim=1,
+            p_x.append(preds)
+        p_x = torch.stack(p_x).t()
+        assert p_x.shape == (num_target_nodes, len(self.shadow_models))
+        if self.offline:
+            mask = utils.offline_shadow_model_mask(target_node_index, [train_mask for _, train_mask in self.shadow_models])
+            p_x_out = p_x[mask].reshape(-1, len(self.shadow_models) // 2)
+            p_x_out = p_x_out.mean(dim=1)
+            p_x = 0.5 * ((1 + self.interp_param) * p_x_out + 1 - self.interp_param)
+        else:
+            p_x = p_x.mean(dim=1)
+        p_x_target = F.softmax(
+            self.target_model(self.graph.x[target_node_index], empty_edge_index),
+            dim=1,
+        )[torch.arange(target_node_index.shape[0]), self.graph.y[target_node_index]]
+        ratio_x = p_x_target / p_x
+        # Compute ratio_z over self.z_set
+        p_z = []
+        for shadow_model, _ in self.shadow_models:
+            preds = F.softmax(
+                shadow_model(self.graph.x[self.z_set], empty_edge_index),
+                dim=1
             )[torch.arange(self.num_z), self.graph.y[self.z_set]]
-            ratio_z = p_z_target / p_z
-            score = torch.tensor([(x > ratio_z * self.config.rmia_gamma).float().mean().item() for x in ratio_x])
+            p_z.append(preds)
+        p_z = torch.stack(p_z)
+        assert p_z.shape == (len(self.shadow_models), self.num_z)
+        p_z_target = F.softmax(
+            self.target_model(self.graph.x[self.z_set], empty_edge_index),
+            dim=1,
+        )[torch.arange(self.num_z), self.graph.y[self.z_set]]
+        ratio_z = p_z_target / p_z
+        score = torch.tensor([(x > ratio_z * self.config.rmia_gamma).float().mean().item() for x in ratio_x])
         return score
