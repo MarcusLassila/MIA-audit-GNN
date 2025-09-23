@@ -27,3 +27,4 @@ default-parameters:
   num_shadow_models: 0
   offline: False
   edge_noise_level: 0.0 # Noisy edges for the adversary
+  save_thresholds: false
