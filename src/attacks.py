@@ -138,7 +138,7 @@ class G_BASE:
                 burn_in_iterations = MCMC_sampling_iterations * 10
                 self.MCMC_sampling_iterations = MCMC_sampling_iterations
                 self.mask = outer_cls.sample_random_node_mask(frac_ones=0.5)
-                self.log_p, self.subgraph = outer_cls.evaluate_mask(self.mask)
+                self.log_p, self.subgraph = outer_cls.MCMC_evaluate_mask(self.mask)
                 print(f'Log model posterior before burn-in: {self.log_p}')
                 for _ in tqdm(range(burn_in_iterations), desc='MCMC burn-in'):
                     outer_cls.MCMC_update_step(self)
@@ -156,6 +156,10 @@ class G_BASE:
         self.loss_fn = loss_fn
         self.config = config
         self.offline = config.offline
+        if hasattr(config, 'specialized_shadow_models'):
+            self.specialized_shadow_models = config.specialized_shadow_models
+        else:
+            self.specialized_shadow_models = False
         if self.offline:
             assert self.config.sampling_strategy != 'MCMC', "MCMC sampling in offline mode not supported"
         try:
@@ -175,6 +179,8 @@ class G_BASE:
             assert torch.all(self.zero_hop_probs >= 0.0)
             assert torch.all(self.zero_hop_probs <= 1.0)
             self.shadow_models = self.zero_hop_attacker.shadow_models
+        elif self.specialized_shadow_models:
+            self.shadow_models = []
         elif shadow_models is None:
             self.shadow_models = trainer.train_shadow_models(self.graph, self.loss_fn, self.config)
         else:
@@ -187,22 +193,70 @@ class G_BASE:
         else:
             self.threshold_scale_factor = 1.0
 
-    def evaluate_mask(self, mask):
+    def train_shadow_models(self, target_idx, train_mask):
+        config = self.config
+        train_mask = train_mask.clone()
+        shadow_models = []
+        criterion = Accuracy(task="multiclass", num_classes=self.graph.num_classes).to(config.device)
+        train_config = trainer.TrainConfig(
+            criterion=criterion,
+            device=config.device,
+            epochs=config.epochs,
+            early_stopping=config.early_stopping,
+            loss_fn=self.loss_fn,
+            lr=config.lr,
+            weight_decay=config.weight_decay,
+            optimizer=getattr(torch.optim, config.optimizer),
+        )
+        for i in range(config.num_shadow_models):
+            train_mask[target_idx] = i % 2 == 0
+            shadow_dataset = datasetup.remasked_graph(self.graph, train_mask)
+            shadow_model = utils.fresh_model(
+                model_type=config.model,
+                num_features=shadow_dataset.num_features,
+                hidden_dims=config.hidden_dim,
+                num_classes=shadow_dataset.num_classes,
+                dropout=config.dropout,
+            )
+            _ = trainer.train_gnn(
+                model=shadow_model,
+                dataset=shadow_dataset,
+                config=train_config,
+                disable_tqdm=True,
+                inductive_split=config.inductive_split,
+            )
+            shadow_model.eval()
+            shadow_models.append((shadow_model, train_mask))
+        return shadow_models
+
+    def MCMC_evaluate_mask(self, mask):
         subgraph = datasetup.masked_subgraph(self.graph, mask)
-        log_p = self.log_model_posterior(subgraph, target_idx=None)
+        log_p = self.MCMC_log_p(subgraph, target_idx=None)
         return log_p, subgraph
+
+    def MCMC_log_p(self, subgraph, target_idx):
+        neg_loss_term = self.neg_loss(self.target_model, subgraph)
+        shadow_losses = torch.tensor([
+            self.neg_loss(shadow_model, subgraph)
+            for shadow_model, train_index in self.shadow_models
+            # Use shadow model if online, or if offline and target is not in shadow dataset
+            if not self.offline or not train_index[target_idx]
+        ])
+        log_Z_term = shadow_losses.logsumexp(0) - np.log(shadow_losses.shape[0])
+        return neg_loss_term - self.threshold_scale_factor * log_Z_term
 
     def MCMC_update_step(self, sampling_state, eps=0.01):
         u = np.random.rand()
         mask = self.sample_random_node_mask(frac_ones=eps) ^ sampling_state.mask
-        log_p, subgraph = self.evaluate_mask(mask)
+        log_p, subgraph = self.MCMC_evaluate_mask(mask)
         crit = torch.exp(log_p - sampling_state.log_p).item()
         if crit > u:
             sampling_state.MCMC_update(mask, log_p, subgraph)
 
-    def sample_node_mask_zero_hop_MIA(self):
+    def sample_node_mask_zero_hop_MIA(self, prob_scaling=1.0):
         random_ref = torch.rand(self.graph.num_nodes).to(self.config.device)
-        return self.zero_hop_probs > random_ref
+        sharp_probs = torch.sigmoid(prob_scaling * self.zero_hop_probs.logit())
+        return sharp_probs > random_ref
 
     def sample_random_node_mask(self, frac_ones=0.5):
         mask = torch.rand(self.graph.num_nodes) < frac_ones
@@ -224,17 +278,6 @@ class G_BASE:
         score = target_loss_diff - self.threshold_scale_factor * threshold
         return score
 
-    def log_model_posterior(self, subgraph, target_idx):
-        neg_loss_term = self.neg_loss(self.target_model, subgraph)
-        shadow_losses = torch.tensor([
-            self.neg_loss(shadow_model, subgraph)
-            for shadow_model, train_index in self.shadow_models
-            # Use shadow model if online, or if offline and target is not in shadow dataset
-            if not self.offline or not train_index[target_idx]
-        ])
-        log_Z_term = shadow_losses.logsumexp(0) - np.log(shadow_losses.shape[0])
-        return neg_loss_term - self.threshold_scale_factor * log_Z_term
-
     def run_attack(self, target_node_index):
         config = self.config
         sampling_state = G_BASE.SamplingState(
@@ -255,19 +298,37 @@ class G_BASE:
     def update_scores(self, sample_idx, target_node_index, sampling_state):
         match self.config.sampling_strategy:
             case 'model-independent':
-                node_mask = self.sample_random_node_mask(frac_ones=0.5)
+                try:
+                    frac_ones = self.config.frac_ones_sampled_node_mask
+                except AttributeError:
+                    frac_ones = 0.5
+                node_mask = self.sample_random_node_mask(frac_ones=frac_ones)
             case 'MIA':
-                node_mask = self.sample_node_mask_zero_hop_MIA()
+                try:
+                    prob_scaling = self.config.mia_prob_scaling
+                except AttributeError:
+                    prob_scaling = 1.0
+                node_mask = self.sample_node_mask_zero_hop_MIA(prob_scaling=prob_scaling)
             case 'MCMC':
                 for _ in range(sampling_state.MCMC_sampling_iterations):
                     self.MCMC_update_step(sampling_state=sampling_state)
                 node_mask = sampling_state.mask
-            case 'strong':
+            case 'ground-truth':
+                # ground-truth + specialized_shadow_models = leave one out attack
                 node_mask = self.graph.train_mask.clone()
             case _:
                 raise ValueError(f'Unsupported sampling strategy: {self.config.sampling_strategy}')
 
-        for i, node_idx in enumerate(target_node_index):
+        num_members = self.graph.train_mask.sum().item()
+        num_nodes = node_mask.sum().item()
+        print(f"Num sampled nodes: {num_nodes}")
+        print(f"Precision of sampled graph: {(node_mask & self.graph.train_mask).sum() / num_nodes}")
+        print(f"Recall of sampled graph: {(node_mask & self.graph.train_mask).sum() / num_members}")
+        print(f"Fraction of false members of sampled graph: {(node_mask & ~self.graph.train_mask).sum() / num_nodes}", flush=True)
+
+        for i, node_idx in tqdm(enumerate(target_node_index), total=len(target_node_index), desc="Inference over target nodes"):
+            if self.specialized_shadow_models:
+               self.shadow_models = self.train_shadow_models(node_idx, node_mask)
             node_mask_copy = node_mask.clone()
             node_mask_copy[node_idx] = True
             edge_index, _ = subgraph(
@@ -291,12 +352,9 @@ class G_BASE:
                 y=self.graph.y[subset],
                 num_classes=self.graph.num_classes,
             )
-            if subgraph_in.num_nodes == 1:
-                score = self.log_model_posterior(subgraph_in, node_idx)
-            else:
-                subgraph_out = datasetup.remove_node(subgraph_in, center_idx.item())
-                assert subgraph_in.num_nodes - subgraph_out.num_nodes == 1
-                score = self.score(in_subgraph=subgraph_in, out_subgraph=subgraph_out, target_idx=node_idx)
+            subgraph_out = datasetup.remove_node(subgraph_in, center_idx.item())
+            assert subgraph_in.num_nodes - subgraph_out.num_nodes == 1
+            score = self.score(in_subgraph=subgraph_in, out_subgraph=subgraph_out, target_idx=node_idx)
             score += np.log(self.config.prior) - np.log(1 - self.config.prior)
             sampling_state.score[sample_idx][i] = score.sigmoid()
 
@@ -728,6 +786,7 @@ class SG_BASE:
 
     def train_shadow_models(self, target_idx, train_mask):
         config = self.config
+        train_mask = train_mask.clone()
         shadow_models = []
         criterion = Accuracy(task="multiclass", num_classes=self.graph.num_classes).to(config.device)
         train_config = trainer.TrainConfig(

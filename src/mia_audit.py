@@ -330,7 +330,8 @@ class MembershipInferenceAudit:
                 stats[attack]['AUC'].append(metrics['AUC'])
                 for t_fpr, t_tpr, threshold in zip(config.target_fpr, metrics['TPR@FPR'], metrics['threshold@FPR']):
                     stats[attack][f'TPR@{t_fpr}FPR'].append(t_tpr)
-                    stats[attack][f'threshold@{t_fpr}FPR'].append(threshold)
+                    if config.save_thresholds:
+                        stats[attack][f'threshold@{t_fpr}FPR'].append(threshold)
 
         stat_df = self.parse_stats(stats)
         stats = utils.nestled_defaultdict_to_dict(stats)
