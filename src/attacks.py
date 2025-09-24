@@ -139,10 +139,12 @@ class G_BASE:
                 self.MCMC_sampling_iterations = MCMC_sampling_iterations
                 self.mask = outer_cls.sample_random_node_mask(frac_ones=0.5)
                 self.log_p, self.subgraph = outer_cls.MCMC_evaluate_mask(self.mask)
+                accepts = 0
                 print(f'Log model posterior before burn-in: {self.log_p}')
                 for _ in tqdm(range(burn_in_iterations), desc='MCMC burn-in'):
-                    outer_cls.MCMC_update_step(self)
+                    accepts += outer_cls.MCMC_update_step(self)
                 print(f'Log model posterior after burn-in: {self.log_p}')
+                print(f'accept rate: {accepts / burn_in_iterations:.5f}')
 
         def MCMC_update(self, mask, log_p, subgraph):
             assert self.strategy == 'MCMC'
@@ -252,6 +254,8 @@ class G_BASE:
         crit = torch.exp(log_p - sampling_state.log_p).item()
         if crit > u:
             sampling_state.MCMC_update(mask, log_p, subgraph)
+            return 1
+        return 0
 
     def sample_node_mask_zero_hop_MIA(self, prob_scaling=1.0):
         random_ref = torch.rand(self.graph.num_nodes).to(self.config.device)
@@ -285,7 +289,7 @@ class G_BASE:
             score_dim=(config.num_sampled_graphs, target_node_index.shape[0]),
             strategy=config.sampling_strategy,
         )
-        for i in tqdm(range(config.num_sampled_graphs), desc="Computing expactation over sampled graphs"):
+        for i in range(config.num_sampled_graphs):
             self.update_scores(
                 sample_idx=i,
                 target_node_index=target_node_index,
@@ -296,28 +300,31 @@ class G_BASE:
         return preds
 
     def update_scores(self, sample_idx, target_node_index, sampling_state):
-        match self.config.sampling_strategy:
+        config = self.config
+        match config.sampling_strategy:
             case 'model-independent':
                 try:
-                    frac_ones = self.config.frac_ones_sampled_node_mask
+                    frac_ones = config.frac_ones_sampled_node_mask
                 except AttributeError:
                     frac_ones = 0.5
                 node_mask = self.sample_random_node_mask(frac_ones=frac_ones)
             case 'MIA':
                 try:
-                    prob_scaling = self.config.mia_prob_scaling
+                    prob_scaling = config.mia_prob_scaling
                 except AttributeError:
                     prob_scaling = 1.0
                 node_mask = self.sample_node_mask_zero_hop_MIA(prob_scaling=prob_scaling)
             case 'MCMC':
+                accepts = 0
                 for _ in range(sampling_state.MCMC_sampling_iterations):
-                    self.MCMC_update_step(sampling_state=sampling_state)
+                    accepts += self.MCMC_update_step(sampling_state=sampling_state)
+                print(f'accept rate during sampling: {accepts / sampling_state.MCMC_sampling_iterations:.5f}')
                 node_mask = sampling_state.mask
             case 'ground-truth':
                 # ground-truth + specialized_shadow_models = leave one out attack
                 node_mask = self.graph.train_mask.clone()
             case _:
-                raise ValueError(f'Unsupported sampling strategy: {self.config.sampling_strategy}')
+                raise ValueError(f'Unsupported sampling strategy: {config.sampling_strategy}')
 
         num_members = self.graph.train_mask.sum().item()
         num_nodes = node_mask.sum().item()
@@ -326,7 +333,8 @@ class G_BASE:
         print(f"Recall of sampled graph: {(node_mask & self.graph.train_mask).sum() / num_members}")
         print(f"Fraction of false members of sampled graph: {(node_mask & ~self.graph.train_mask).sum() / num_nodes}", flush=True)
 
-        for i, node_idx in tqdm(enumerate(target_node_index), total=len(target_node_index), desc="Inference over target nodes"):
+        desc = f'Inference over target nodes for graph sample {sample_idx + 1}/{config.num_sampled_graphs}'
+        for i, node_idx in tqdm(enumerate(target_node_index), total=len(target_node_index), desc=desc):
             if self.specialized_shadow_models:
                self.shadow_models = self.train_shadow_models(node_idx, node_mask)
             node_mask_copy = node_mask.clone()
@@ -355,7 +363,7 @@ class G_BASE:
             subgraph_out = datasetup.remove_node(subgraph_in, center_idx.item())
             assert subgraph_in.num_nodes - subgraph_out.num_nodes == 1
             score = self.score(in_subgraph=subgraph_in, out_subgraph=subgraph_out, target_idx=node_idx)
-            score += np.log(self.config.prior) - np.log(1 - self.config.prior)
+            score += np.log(config.prior) - np.log(1 - config.prior)
             sampling_state.score[sample_idx][i] = score.sigmoid()
 
 class BASE:
