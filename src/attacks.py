@@ -257,12 +257,25 @@ class G_BASE:
             return 1
         return 0
 
+    def gibbs_sampling(self, num_passes=1):
+        mask = self.sample_random_node_mask(frac_ones=self.prior)
+        for _ in range(num_passes):
+            for i in tqdm(range(self.graph.num_nodes), desc='gibbs sampling'):
+                mask[i] = True
+                in_subgraph, mapped_center_index = self.local_subgraph(mask, center_idx=i, num_hops=self.shadow_models[0][0].num_layers**2)
+                out_subgraph = datasetup.remove_node(in_subgraph, mapped_center_index)
+                p = self.score(in_subgraph=in_subgraph, out_subgraph=out_subgraph, target_idx=mapped_center_index)
+                mask[i] = p > np.random.rand()
+        return mask
+
     def sample_node_mask_zero_hop_MIA(self, prob_scaling=1.0):
         random_ref = torch.rand(self.graph.num_nodes).to(self.config.device)
         sharp_probs = torch.sigmoid(prob_scaling * self.zero_hop_probs.logit())
         return sharp_probs > random_ref
 
-    def sample_random_node_mask(self, frac_ones=0.5):
+    def sample_random_node_mask(self, frac_ones=None):
+        if frac_ones is None:
+            frac_ones = self.prior
         mask = torch.rand(self.graph.num_nodes) < frac_ones
         return mask.to(self.config.device)
 
@@ -280,7 +293,8 @@ class G_BASE:
         ])
         threshold = shadow_loss_diff.logsumexp(0) - np.log(shadow_loss_diff.shape[0])
         score = target_loss_diff - self.threshold_scale_factor * threshold
-        return score
+        score += np.log(self.config.prior) - np.log(1 - self.config.prior)
+        return score.sigmoid()
 
     def run_attack(self, target_node_index):
         config = self.config
@@ -320,6 +334,8 @@ class G_BASE:
                     accepts += self.MCMC_update_step(sampling_state=sampling_state)
                 print(f'accept rate during sampling: {accepts / sampling_state.MCMC_sampling_iterations:.5f}')
                 node_mask = sampling_state.mask
+            case 'gibbs':
+                node_mask = self.gibbs_sampling()
             case 'ground-truth':
                 # ground-truth + specialized_shadow_models = leave one out attack
                 node_mask = self.graph.train_mask.clone()
@@ -337,34 +353,43 @@ class G_BASE:
         for i, node_idx in tqdm(enumerate(target_node_index), total=len(target_node_index), desc=desc):
             if self.specialized_shadow_models:
                self.shadow_models = self.train_shadow_models(node_idx, node_mask)
-            node_mask_copy = node_mask.clone()
-            node_mask_copy[node_idx] = True
-            edge_index, _ = subgraph(
-                subset=node_mask_copy,
-                edge_index=self.graph.edge_index,
-                relabel_nodes=False,
+            subgraph_in, center_idx = self.local_subgraph(
+                node_mask=node_mask,
+                center_idx=node_idx,
+                num_hops=self.shadow_models[0][0].num_layers**2,
             )
-            subset, edge_index, center_idx, _ = k_hop_subgraph(
-                node_idx=node_idx.item(),
-                # We need to determine how the precense or absence of the target node affects the embeddings in
-                # the L-hop neighborhood of the target node, and the neighbors are likewise affected by the nodes
-                # in their L-hop neighborhood
-                num_hops=self.shadow_models[0][0].num_layers ** 2,
-                edge_index=edge_index,
-                relabel_nodes=True,
-                num_nodes=self.graph.num_nodes,
-            )
-            subgraph_in = Data(
-                x=self.graph.x[subset],
-                edge_index=edge_index,
-                y=self.graph.y[subset],
-                num_classes=self.graph.num_classes,
-            )
-            subgraph_out = datasetup.remove_node(subgraph_in, center_idx.item())
+            subgraph_out = datasetup.remove_node(subgraph_in, center_idx)
             assert subgraph_in.num_nodes - subgraph_out.num_nodes == 1
             score = self.score(in_subgraph=subgraph_in, out_subgraph=subgraph_out, target_idx=node_idx)
-            score += np.log(config.prior) - np.log(1 - config.prior)
-            sampling_state.score[sample_idx][i] = score.sigmoid()
+            sampling_state.score[sample_idx][i] = score
+
+    def local_subgraph(self, node_mask, center_idx, num_hops):
+        '''
+        Return the k-hop subgraph induced by a node mask centered at a given node (center node is always included).
+        '''
+        if torch.is_tensor(center_idx):
+            center_idx = center_idx.item()
+        node_mask = node_mask.clone() # no mutation
+        node_mask[center_idx] = True
+        edge_index, _ = subgraph(
+            subset=node_mask,
+            edge_index=self.graph.edge_index,
+            relabel_nodes=False,
+        )
+        subset, edge_index, mapped_center_idx, _ = k_hop_subgraph(
+            node_idx=center_idx,
+            num_hops=num_hops,
+            edge_index=edge_index,
+            relabel_nodes=True,
+            num_nodes=self.graph.num_nodes,
+        )
+        local_subgraph = Data(
+            x=self.graph.x[subset],
+            edge_index=edge_index,
+            y=self.graph.y[subset],
+            num_classes=self.graph.num_classes,
+        )
+        return local_subgraph, mapped_center_idx.item()
 
 class BASE:
 
