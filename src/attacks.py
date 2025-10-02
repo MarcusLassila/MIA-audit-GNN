@@ -260,8 +260,9 @@ class G_BASE:
 
     def gibbs_sampling(self, num_passes=1):
         mask = self.sample_random_node_mask(frac_ones=self.prior)
+        _, node_index = degree(self.graph.edge_index[0], num_nodes=self.graph.x.shape[0], dtype=torch.long).sort(descending=False).to(self.device)
         for _ in range(num_passes):
-            for i in tqdm(torch.randperm(self.graph.num_nodes, device=self.config.device), total=self.graph.num_nodes, desc='gibbs sampling'):
+            for i in tqdm(node_index, total=self.graph.num_nodes, desc='gibbs sampling'):
                 mask[i] = True
                 in_subgraph, mapped_center_index = self.local_subgraph(mask, center_idx=i, num_hops=self.shadow_models[0][0].num_layers**2)
                 out_subgraph = datasetup.remove_node(in_subgraph, mapped_center_index)
