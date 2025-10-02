@@ -131,12 +131,12 @@ class G_BASE:
     class SamplingState:
         '''State object when sampling graphs'''
 
-        def __init__(self, outer_cls, score_dim, strategy='model-independent', MCMC_sampling_iterations=500):
+        def __init__(self, outer_cls, score_dim, config, strategy='model-independent'):
             self.score = torch.zeros(size=score_dim)
             self.strategy = strategy
             if strategy == 'MCMC':
-                burn_in_iterations = MCMC_sampling_iterations * 10
-                self.MCMC_sampling_iterations = MCMC_sampling_iterations
+                burn_in_iterations = config.burn_in_iterations
+                self.MCMC_sampling_iterations = config.sampling_iterations
                 self.mask = outer_cls.sample_random_node_mask(frac_ones=0.5)
                 self.log_p, self.subgraph = outer_cls.MCMC_evaluate_mask(self.mask)
                 accepts = 0
@@ -247,9 +247,10 @@ class G_BASE:
         log_Z_term = shadow_losses.logsumexp(0) - np.log(shadow_losses.shape[0])
         return neg_loss_term - self.threshold_scale_factor * log_Z_term
 
-    def MCMC_update_step(self, sampling_state, eps=0.01):
+    def MCMC_update_step(self, sampling_state):
+        flip_frac = self.config.flip_frac
         u = np.random.rand()
-        mask = self.sample_random_node_mask(frac_ones=eps) ^ sampling_state.mask
+        mask = self.sample_random_node_mask(frac_ones=flip_frac) ^ sampling_state.mask
         log_p, subgraph = self.MCMC_evaluate_mask(mask)
         crit = torch.exp(log_p - sampling_state.log_p).item()
         if crit > u:
@@ -260,7 +261,7 @@ class G_BASE:
     def gibbs_sampling(self, num_passes=1):
         mask = self.sample_random_node_mask(frac_ones=self.prior)
         for _ in range(num_passes):
-            for i in tqdm(range(self.graph.num_nodes), desc='gibbs sampling'):
+            for i in tqdm(torch.randperm(self.graph.num_nodes, device=self.config.device), total=self.graph.num_nodes, desc='gibbs sampling'):
                 mask[i] = True
                 in_subgraph, mapped_center_index = self.local_subgraph(mask, center_idx=i, num_hops=self.shadow_models[0][0].num_layers**2)
                 out_subgraph = datasetup.remove_node(in_subgraph, mapped_center_index)
@@ -301,6 +302,7 @@ class G_BASE:
         sampling_state = G_BASE.SamplingState(
             outer_cls=self,
             score_dim=(config.num_sampled_graphs, target_node_index.shape[0]),
+            config=config,
             strategy=config.sampling_strategy,
         )
         for i in range(config.num_sampled_graphs):
