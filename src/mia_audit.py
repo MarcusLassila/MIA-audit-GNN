@@ -22,9 +22,10 @@ class MembershipInferenceAudit:
 
     def __init__(self, config):
         config = utils.Config(config)
+        self.device = torch.device(config.device)
         self.dataset = datasetup.parse_dataset(root=config.datadir, name=config.dataset, max_num_nodes=config.max_num_nodes)
-        self.dataset.to(config.device)
-        self.criterion = Accuracy(task="multiclass", num_classes=self.dataset.num_classes).to(config.device)
+        self.dataset.to(self.device)
+        self.criterion = Accuracy(task="multiclass", num_classes=self.dataset.num_classes).to(self.device)
         self.loss_fn = nn.CrossEntropyLoss(reduction='mean')
         self.shadow_models = None
         print(utils.graph_info(self.dataset))
@@ -57,7 +58,7 @@ class MembershipInferenceAudit:
         )
         train_config = trainer.TrainConfig(
             criterion=self.criterion,
-            device=config.device,
+            device=self.device,
             epochs=config.epochs,
             early_stopping=config.early_stopping,
             loss_fn=self.loss_fn,
@@ -269,6 +270,47 @@ class MembershipInferenceAudit:
         assert target_node_index.shape == (num_target_nodes,)
         return target_node_index
 
+    def load_model(self, path, return_target_node_index=False):
+        '''
+        Assumes a path to a pickle file, storing a dict with:
+        1. model_state_dict
+        2. train_mask
+
+        Return tuple (model, train_mask).
+        '''
+        model_state = torch.load(path, map_location=self.device)
+        assert model_state['num_features'] == self.dataset.num_features
+        assert model_state['num_classes'] == self.dataset.num_classes
+        model = utils.fresh_model(
+            model_type=model_state['model_type'],
+            num_features=model_state['num_features'],
+            hidden_dims=model_state['hidden_dim'],
+            num_classes=model_state['num_classes'],
+            dropout=model_state['dropout'],
+        ).to(self.device)
+        model.load_state_dict(model_state['model_state_dict'])
+        model.eval()
+        if return_target_node_index:
+            return model, model_state['train_mask'], model_state['target_node_index']
+        else:
+            return model, model_state['train_mask']
+
+    def save_model(self, path, model, train_mask, target_node_index=None):
+        config = self.config
+        path = Path(path)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        model_state = {
+            'model_state_dict': model.state_dict(),
+            'train_mask': train_mask,
+            'model_type': config.model,
+            'num_features': self.dataset.num_features,
+            'hidden_dim': config.hidden_dim,
+            'num_classes': self.dataset.num_classes,
+            'dropout': config.dropout,
+            'target_node_index': target_node_index,
+        }
+        torch.save(model_state, path)
+
     def parse_stats(self, stats):
         config = self.config
         frames = []
@@ -283,21 +325,48 @@ class MembershipInferenceAudit:
     def run_audit(self):
         config = self.config
         stats = defaultdict(lambda: defaultdict(list))
-        if config.pretrain_shadow_models:
+        if config.shadow_model_path:
+            # Load pretrained shadow models
+            self.shadow_models = []
+            for i in range(config.num_shadow_models):
+                path = f'{config.shadow_model_path}-{i}.pth'
+                shadow_model, shadow_train_mask = self.load_model(path)
+                self.shadow_models.append((shadow_model, shadow_train_mask))
+            self.tune_attack_hyperparams()
+        elif config.pretrain_shadow_models:
             t0 = time.time()
             self.shadow_models = trainer.train_shadow_models(self.dataset, self.loss_fn, config)
             t1 = time.time()
             print(f'{config.num_shadow_models} shadow model trained in {t1 - t0:.2f} seconds')
+            for i, (shadow_model, shadow_train_mask) in enumerate(self.shadow_models):
+                self.save_model(
+                    path=f'./trained_models/{config.dataset}-{config.model}-shadow-model-{i}.pth',
+                    model=shadow_model,
+                    train_mask=shadow_train_mask,
+                )
             self.tune_attack_hyperparams()
-        for i_audit in range(1, config.num_audits + 1):
-            print(f'Running audit {i_audit}/{config.num_audits}')
-            _ = datasetup.random_remasked_graph(self.dataset, train_frac=config.train_frac, val_frac=config.val_frac, mutate=True)
-            assert not torch.any(self.dataset.val_mask), "Validation mask not fully supported"
-            assert not torch.any(self.dataset.train_mask & self.dataset.test_mask)
-            assert torch.all(self.dataset.train_mask | self.dataset.test_mask)
-            target_node_index = self.get_target_nodes()
-            target_model = self.train_target_model(self.dataset)
-            target_model.eval()
+        for i_audit in range(config.num_audits):
+            print(f'Running audit {i_audit + 1}/{config.num_audits}')
+            if config.target_model_path:
+                path = f'{config.target_model_path}-{i_audit}.pth'
+                target_model, target_train_mask, target_node_index = self.load_model(path, return_target_node_index=True)
+                _ = datasetup.remasked_graph(self.dataset, target_train_mask, mutate=True)
+                ground_truth = target_train_mask.long()[target_node_index]
+            else:
+                _ = datasetup.random_remasked_graph(self.dataset, train_frac=config.train_frac, val_frac=config.val_frac, mutate=True)
+                assert not torch.any(self.dataset.val_mask), "Validation mask not fully supported"
+                assert not torch.any(self.dataset.train_mask & self.dataset.test_mask)
+                assert torch.all(self.dataset.train_mask | self.dataset.test_mask)
+                target_node_index = self.get_target_nodes()
+                target_model = self.train_target_model(self.dataset)
+                target_model.eval()
+                ground_truth = self.dataset.train_mask.long()[target_node_index]
+                self.save_model(
+                    path=f'./trained_models/{config.dataset}-{config.model}-target-model-{i_audit}.pth',
+                    model=target_model,
+                    train_mask=self.dataset.train_mask,
+                    target_node_index=target_node_index,
+                )
             target_scores = {
                 'train_acc': evaluation.evaluate_graph_model(
                     model=target_model,
@@ -318,12 +387,11 @@ class MembershipInferenceAudit:
                 attacker = self.get_attacker(attack_dict, target_model)
                 stats[attack]['train_acc'].append(target_scores['train_acc'])
                 stats[attack]['test_acc'].append(target_scores['test_acc'])
-                truth = self.dataset.train_mask.long()[target_node_index]
                 t0 = time.time()
                 preds = attacker.run_attack(target_node_index=target_node_index)
                 t1 = time.time()
                 stats[attack]['time'].append(t1 - t0)
-                metrics = evaluation.evaluate_binary_classification(preds, truth, config.target_fpr, target_node_index, self.dataset)
+                metrics = evaluation.evaluate_binary_classification(preds, ground_truth, config.target_fpr, target_node_index, self.dataset)
                 fpr, tpr = metrics['ROC']
                 stats[attack]['FPR'].append(fpr)
                 stats[attack]['TPR'].append(tpr)
