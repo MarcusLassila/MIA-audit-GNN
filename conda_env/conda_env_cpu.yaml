@@ -13,7 +13,7 @@ dependencies:
 - scipy
 - pandas
 - pip:
-  - torch_geometric==2.6.0
+  - torch_geometric
   - laplace-torch
   - torchmetrics
   - tqdm

@@ -1,3 +1,4 @@
+from github_dataset import GitHub
 import utils
 
 import numpy as np
@@ -165,42 +166,6 @@ def random_edge_mask(dataset, frac=0.5):
     index = np.random.choice(mask.shape[0], int(frac * mask.shape[0]), replace=False)
     mask[index] = False
     return mask
-
-def stochastic_block_model(root):
-    block_sizes = [2000, 2000]
-    edge_probs = torch.tensor([
-        [1.0, 0.25],
-        [0.25, 1.0],
-    ]) * 0.005
-    num_features = 4
-    dataset = utils.execute_silently(
-        callable=torch_geometric.datasets.StochasticBlockModelDataset, 
-        root=root,
-        block_sizes=block_sizes,
-        edge_probs=edge_probs,
-        num_channels=num_features,
-        force_reload=True,
-        class_sep=0.5,
-    )
-    train_mask, val_mask, test_mask = train_val_test_masks(
-        num_nodes=sum(block_sizes),
-        train_frac=0.4,
-        val_frac=0.2,
-        stratify=dataset.y,
-    )
-    data = Data(
-        x=dataset.x,
-        edge_index=dataset.edge_index,
-        y=dataset.y,
-        train_mask=train_mask,
-        val_mask=val_mask,
-        test_mask=test_mask,
-        num_classes=2,
-    )
-    data.inductive_mask = train_split_interconnection_mask(data)
-    data.name = "SBM"
-    data.root = root
-    return data
 
 def node_index_complement(node_index, num_nodes):
     return mask_to_index(~index_to_mask(node_index, size=num_nodes))
@@ -444,13 +409,11 @@ def parse_dataset(root, name, max_num_nodes=None):
         case "flickr":
             dataset = torch_geometric.datasets.Flickr(root=f'{root}/Flickr')
         case "github":
-            dataset = torch_geometric.datasets.GitHub(root=f'{root}/GitHub')
+            dataset = GitHub(root=f'{root}/GitHub') # Fix to broken url that is not in torch-geometric 2.6.1
         case "pubmed":
             dataset = torch_geometric.datasets.Planetoid(root=root, name="PubMed")
         case "reddit":
             dataset = torch_geometric.datasets.Reddit2(root=f'{root}/Reddit')
-        case "sbm":
-            dataset = stochastic_block_model(root)
         case _:
             raise ValueError("Unsupported dataset!")
     if max_num_nodes is not None and dataset.x.shape[0] > max_num_nodes:
