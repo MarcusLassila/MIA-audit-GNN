@@ -134,20 +134,20 @@ class G_BASE:
         def __init__(self, outer_cls, score_dim, config, strategy='model-independent'):
             self.score = torch.zeros(size=score_dim)
             self.strategy = strategy
-            if strategy == 'MCMC':
+            if strategy == 'metropolis':
                 burn_in_iterations = config.burn_in_iterations
                 self.MCMC_sampling_iterations = config.sampling_iterations
                 self.mask = outer_cls.sample_random_node_mask(frac_ones=0.5)
                 self.log_p, self.subgraph = outer_cls.MCMC_evaluate_mask(self.mask)
                 accepts = 0
                 print(f'Log model posterior before burn-in: {self.log_p}')
-                for _ in tqdm(range(burn_in_iterations), desc='MCMC burn-in'):
+                for _ in tqdm(range(burn_in_iterations), desc='metropolis burn-in'):
                     accepts += outer_cls.MCMC_update_step(self)
                 print(f'Log model posterior after burn-in: {self.log_p}')
                 print(f'accept rate: {accepts / burn_in_iterations:.5f}')
 
         def MCMC_update(self, mask, log_p, subgraph):
-            assert self.strategy == 'MCMC'
+            assert self.strategy == 'metropolis'
             self.mask = mask
             self.log_p = log_p
             self.subgraph = subgraph
@@ -169,7 +169,7 @@ class G_BASE:
         except AttributeError:
             print('No prior specified. Using default value 0.5')
             self.prior = 0.5
-        if config.sampling_strategy == 'MIA':
+        if config.sampling_strategy == 'mia':
             self.zero_hop_attacker = BASE(
                 target_model=target_model,
                 graph=graph,
@@ -260,9 +260,8 @@ class G_BASE:
 
     def gibbs_sampling(self, num_passes=1):
         mask = self.sample_random_node_mask(frac_ones=self.prior)
-        _, node_index = degree(self.graph.edge_index[0], num_nodes=self.graph.x.shape[0], dtype=torch.long).sort(descending=False).to(self.device)
         for _ in range(num_passes):
-            for i in tqdm(node_index, total=self.graph.num_nodes, desc='gibbs sampling'):
+            for i in tqdm(torch.randperm(self.graph.num_nodes, device=self.config.device), total=self.graph.num_nodes, desc='gibbs sampling'):
                 mask[i] = True
                 in_subgraph, mapped_center_index = self.local_subgraph(mask, center_idx=i, num_hops=self.shadow_models[0][0].num_layers**2)
                 out_subgraph = datasetup.remove_node(in_subgraph, mapped_center_index)
@@ -325,20 +324,20 @@ class G_BASE:
                 except AttributeError:
                     frac_ones = 0.5
                 node_mask = self.sample_random_node_mask(frac_ones=frac_ones)
-            case 'MIA':
+            case 'mia':
                 try:
                     prob_scaling = config.mia_prob_scaling
                 except AttributeError:
                     prob_scaling = 1.0
                 node_mask = self.sample_node_mask_zero_hop_MIA(prob_scaling=prob_scaling)
-            case 'MCMC':
+            case 'metropolis':
                 accepts = 0
                 for _ in range(sampling_state.MCMC_sampling_iterations):
                     accepts += self.MCMC_update_step(sampling_state=sampling_state)
                 print(f'accept rate during sampling: {accepts / sampling_state.MCMC_sampling_iterations:.5f}')
                 node_mask = sampling_state.mask
             case 'gibbs':
-                node_mask = self.gibbs_sampling()
+                node_mask = self.gibbs_sampling(num_passes=config.num_passes)
             case 'ground-truth':
                 # ground-truth + specialized_shadow_models = leave one out attack
                 node_mask = self.graph.train_mask.clone()
