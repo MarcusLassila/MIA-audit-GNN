@@ -133,6 +133,8 @@ class G_BASE:
 
         def __init__(self, outer_cls, score_dim, config, strategy='model-independent'):
             self.score = torch.zeros(size=score_dim)
+            self.precisions = []
+            self.recalls = []
             self.strategy = strategy
             if strategy == 'metropolis':
                 burn_in_iterations = config.burn_in_iterations
@@ -145,6 +147,7 @@ class G_BASE:
                     accepts += outer_cls.MCMC_update_step(self)
                 print(f'Log model posterior after burn-in: {self.log_p}')
                 print(f'accept rate: {accepts / burn_in_iterations:.5f}')
+                self.accept_rates = []
 
         def MCMC_update(self, mask, log_p, subgraph):
             assert self.strategy == 'metropolis'
@@ -311,6 +314,17 @@ class G_BASE:
                 target_node_index=target_node_index,
                 sampling_state=sampling_state,
             )
+        precision = torch.tensor(sampling_state.precisions)
+        recall = torch.tensor(sampling_state.recalls)
+        if config.num_sampled_graphs > 1:
+            print(f'Precision of sampled graphs: {precision.mean():.5f} ({precision.std():.5f})')
+            print(f'Recall of sampled graphs: {recall.mean():.5f} ({recall.std():.5f})')
+        else:
+            print(f'Precision of sampled graphs: {precision.mean():.5f}')
+            print(f'Recall of sampled graphs: {recall.mean():.5f}')
+        if sampling_state.strategy == 'metropolis':
+            accept_rate = torch.tensor(sampling_state.accept_rates)
+            print(f'Accept rate: {accept_rate.mean():.5f} ({accept_rate.std() if accept_rate.shape[0] > 1 else 0.0:.5f})')
         preds = sampling_state.score.mean(dim=0)
         assert preds.shape == target_node_index.shape
         return preds
@@ -334,7 +348,8 @@ class G_BASE:
                 accepts = 0
                 for _ in range(sampling_state.MCMC_sampling_iterations):
                     accepts += self.MCMC_update_step(sampling_state=sampling_state)
-                print(f'accept rate during sampling: {accepts / sampling_state.MCMC_sampling_iterations:.5f}')
+                accept_rate = accepts / sampling_state.MCMC_sampling_iterations
+                sampling_state.accept_rates.append(accept_rate)
                 node_mask = sampling_state.mask
             case 'gibbs':
                 node_mask = self.gibbs_sampling(num_passes=config.num_passes)
@@ -346,10 +361,10 @@ class G_BASE:
 
         num_members = self.graph.train_mask.sum().item()
         num_nodes = node_mask.sum().item()
-        print(f"Num sampled nodes: {num_nodes}")
-        print(f"Precision of sampled graph: {(node_mask & self.graph.train_mask).sum() / num_nodes}")
-        print(f"Recall of sampled graph: {(node_mask & self.graph.train_mask).sum() / num_members}")
-        print(f"Fraction of false members of sampled graph: {(node_mask & ~self.graph.train_mask).sum() / num_nodes}", flush=True)
+        precision = (node_mask & self.graph.train_mask).sum() / num_nodes
+        recall = (node_mask & self.graph.train_mask).sum() / num_members
+        sampling_state.precisions.append(precision)
+        sampling_state.recalls.append(recall)
 
         desc = f'Inference over target nodes for graph sample {sample_idx + 1}/{config.num_sampled_graphs}'
         for i, node_idx in tqdm(enumerate(target_node_index), total=len(target_node_index), desc=desc):

@@ -340,15 +340,16 @@ class MembershipInferenceAudit:
             print(f'{config.num_shadow_models} shadow model trained in {t1 - t0:.2f} seconds')
             for i, (shadow_model, shadow_train_mask) in enumerate(self.shadow_models):
                 self.save_model(
-                    path=f'./trained_models/{config.dataset}-{config.model}-shadow-model-{i}.pth',
+                    path=f'./trained_models/{config.dataset}-{config.model}/shadow-model-{i}.pth',
                     model=shadow_model,
                     train_mask=shadow_train_mask,
                 )
             self.tune_attack_hyperparams()
-        for i_audit in range(config.num_audits):
-            print(f'Running audit {i_audit + 1}/{config.num_audits}')
+        for i_audit in range(config.target_index_start, config.target_index_start + config.num_audits):
+            print(f'Running audit {i_audit - config.target_index_start + 1}/{config.num_audits}')
             if config.target_model_path:
                 path = f'{config.target_model_path}-{i_audit}.pth'
+                print(f'Loading target model: {path}')
                 target_model, target_train_mask, target_node_index = self.load_model(path, return_target_node_index=True)
                 _ = datasetup.remasked_graph(self.dataset, target_train_mask, mutate=True)
                 ground_truth = target_train_mask.long()[target_node_index]
@@ -362,7 +363,7 @@ class MembershipInferenceAudit:
                 target_model.eval()
                 ground_truth = self.dataset.train_mask.long()[target_node_index]
                 self.save_model(
-                    path=f'./trained_models/{config.dataset}-{config.model}-target-model-{i_audit}.pth',
+                        path=f'./trained_models/{config.dataset}-{config.model}/target-model-{str(config.frac_target_nodes).replace(".", "")}-{i_audit}.pth',
                     model=target_model,
                     train_mask=self.dataset.train_mask,
                     target_node_index=target_node_index,

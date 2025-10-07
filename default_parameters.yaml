@@ -30,3 +30,4 @@ default-parameters:
   save_thresholds: false
   target_model_path: ""
   shadow_model_path: ""
+  target_index_start: 0
