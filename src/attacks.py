@@ -137,19 +137,19 @@ class G_BASE:
             self.recalls = []
             self.strategy = strategy
             if strategy == 'metropolis':
-                burn_in_iterations = config.burn_in_iterations
-                self.MCMC_sampling_iterations = config.sampling_iterations
+                self.burn_in_iterations = config.burn_in_iterations
+                self.sampling_iterations = config.sampling_iterations
                 self.mask = outer_cls.sample_random_node_mask(frac_ones=0.5)
-                self.log_p, self.subgraph = outer_cls.MCMC_evaluate_mask(self.mask)
+                self.mask, self.log_p, self.subgraph = outer_cls.metropolis_propose(self, flip_frac=0.0)
                 accepts = 0
                 print(f'Log model posterior before burn-in: {self.log_p}')
-                for _ in tqdm(range(burn_in_iterations), desc='metropolis burn-in'):
-                    accepts += outer_cls.MCMC_update_step(self)
+                for _ in tqdm(range(self.burn_in_iterations), desc='metropolis burn-in'):
+                    accepts += outer_cls.metropolis_update_step(self)
                 print(f'Log model posterior after burn-in: {self.log_p}')
-                print(f'accept rate: {accepts / burn_in_iterations:.5f}')
+                print(f'accept rate: {accepts / self.burn_in_iterations:.5f}')
                 self.accept_rates = []
 
-        def MCMC_update(self, mask, log_p, subgraph):
+        def metropolis_update_state(self, mask, log_p, subgraph):
             assert self.strategy == 'metropolis'
             self.mask = mask
             self.log_p = log_p
@@ -165,8 +165,6 @@ class G_BASE:
             self.specialized_shadow_models = config.specialized_shadow_models
         else:
             self.specialized_shadow_models = False
-        if self.offline:
-            assert self.config.sampling_strategy != 'MCMC', "MCMC sampling in offline mode not supported"
         try:
             self.prior = config.prior
         except AttributeError:
@@ -234,42 +232,40 @@ class G_BASE:
             shadow_models.append((shadow_model, train_mask))
         return shadow_models
 
-    def MCMC_evaluate_mask(self, mask):
+    def metropolis_propose(self, sampling_state, flip_frac):
+        mask = self.sample_random_node_mask(frac_ones=flip_frac) ^ sampling_state.mask
         subgraph = datasetup.masked_subgraph(self.graph, mask)
-        log_p = self.MCMC_log_p(subgraph, target_idx=None)
-        return log_p, subgraph
-
-    def MCMC_log_p(self, subgraph, target_idx):
         neg_loss_term = self.neg_loss(self.target_model, subgraph)
         shadow_losses = torch.tensor([
             self.neg_loss(shadow_model, subgraph)
-            for shadow_model, train_index in self.shadow_models
-            # Use shadow model if online, or if offline and target is not in shadow dataset
-            if not self.offline or not train_index[target_idx]
+            for shadow_model, _ in self.shadow_models
         ])
         log_Z_term = shadow_losses.logsumexp(0) - np.log(shadow_losses.shape[0])
-        return neg_loss_term - self.threshold_scale_factor * log_Z_term
+        log_p = neg_loss_term - self.threshold_scale_factor * log_Z_term
+        return mask, log_p, subgraph
 
-    def MCMC_update_step(self, sampling_state):
-        flip_frac = self.config.flip_frac
+    def metropolis_update_step(self, sampling_state):
         u = np.random.rand()
-        mask = self.sample_random_node_mask(frac_ones=flip_frac) ^ sampling_state.mask
-        log_p, subgraph = self.MCMC_evaluate_mask(mask)
+        mask, log_p, subgraph = self.metropolis_propose(sampling_state, self.config.flip_frac)
         crit = torch.exp(log_p - sampling_state.log_p).item()
         if crit > u:
-            sampling_state.MCMC_update(mask, log_p, subgraph)
+            sampling_state.metropolis_update_state(mask, log_p, subgraph)
             return 1
         return 0
 
     def gibbs_sampling(self, num_passes=1):
         mask = self.sample_random_node_mask(frac_ones=self.prior)
         for _ in range(num_passes):
-            for i in tqdm(torch.randperm(self.graph.num_nodes, device=self.config.device), total=self.graph.num_nodes, desc='gibbs sampling'):
-                mask[i] = True
-                in_subgraph, mapped_center_index = self.local_subgraph(mask, center_idx=i, num_hops=self.shadow_models[0][0].num_layers**2)
+            for node_idx in tqdm(torch.randperm(self.graph.num_nodes, device=self.config.device), total=self.graph.num_nodes, desc='gibbs sampling'):
+                mask[node_idx] = True
+                in_subgraph, mapped_center_index = self.local_subgraph(
+                    node_mask=mask,
+                    center_idx=node_idx,
+                    num_hops=self.shadow_models[0][0].num_layers**2,
+                )
                 out_subgraph = datasetup.remove_node(in_subgraph, mapped_center_index)
-                p = self.score(in_subgraph=in_subgraph, out_subgraph=out_subgraph, target_idx=mapped_center_index)
-                mask[i] = p > np.random.rand()
+                p = self.score(in_subgraph=in_subgraph, out_subgraph=out_subgraph, target_idx=node_idx)
+                mask[node_idx] = p > np.random.rand()
         return mask
 
     def sample_node_mask_zero_hop_MIA(self, prob_scaling=1.0):
@@ -346,9 +342,9 @@ class G_BASE:
                 node_mask = self.sample_node_mask_zero_hop_MIA(prob_scaling=prob_scaling)
             case 'metropolis':
                 accepts = 0
-                for _ in range(sampling_state.MCMC_sampling_iterations):
-                    accepts += self.MCMC_update_step(sampling_state=sampling_state)
-                accept_rate = accepts / sampling_state.MCMC_sampling_iterations
+                for _ in range(sampling_state.sampling_iterations):
+                    accepts += self.metropolis_update_step(sampling_state)
+                accept_rate = accepts / sampling_state.sampling_iterations
                 sampling_state.accept_rates.append(accept_rate)
                 node_mask = sampling_state.mask
             case 'gibbs':
@@ -444,7 +440,10 @@ class BASE:
         # but should be there if we want to get probabilities by applying sigmoid
         ]).t()
         if self.offline:
-            mask = utils.offline_shadow_model_mask(target_node_index, [train_mask for _, train_mask in self.shadow_models])
+            mask = utils.offline_shadow_model_mask(
+                target_node_index,
+                [train_mask for _, train_mask in self.shadow_models],
+            )
             log_conf_shadow = log_conf_shadow[mask].reshape(-1, len(self.shadow_models) // 2)
         threshold = log_conf_shadow.logsumexp(1) - np.log(log_conf_shadow.shape[1])
         score = log_conf - self.threshold_scale_factor * threshold
