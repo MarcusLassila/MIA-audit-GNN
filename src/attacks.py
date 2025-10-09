@@ -188,12 +188,10 @@ class G_BASE:
             self.shadow_models = trainer.train_shadow_models(self.graph, self.loss_fn, self.config)
         else:
             self.shadow_models = shadow_models
-        if self.offline:
-            try:
-                self.threshold_scale_factor = config.threshold_scale_factor
-            except AttributeError:
-                self.threshold_scale_factor = None
-        else:
+        try:
+            self.threshold_scale_factor = config.threshold_scale_factor
+        except AttributeError:
+            print(f'Using default value 1.0 for the threshold scale factor.')
             self.threshold_scale_factor = 1.0
 
     def train_shadow_models(self, target_idx, train_mask):
@@ -416,13 +414,11 @@ class BASE:
             self.shadow_models = trainer.train_shadow_models(self.graph, self.loss_fn, self.config)
         else:
             self.shadow_models = shadow_models
-        if self.offline:
-            try:
-                self.threshold_scale_factor = config.threshold_scale_factor
-            except AttributeError:
-                self.threshold_scale_factor = offline_threshold_scale_factor
-        else:
-            self.threshold_scale_factor = 1.0
+        try:
+            self.threshold_scale_factor = config.threshold_scale_factor
+        except AttributeError:
+            self.threshold_scale_factor = offline_threshold_scale_factor if self.offline else 1.0
+        print(f'Setting threshold scale factor to {self.threshold_scale_factor}')
 
     @torch.inference_mode()
     def log_confidence(self, model, x, edge_index, y):
