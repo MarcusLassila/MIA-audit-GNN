@@ -177,6 +177,10 @@ class G_BASE:
                 loss_fn=loss_fn,
                 config=config,
                 shadow_models=shadow_models,
+                # BASE is only used here to sample neighborhoods for the target nodes.
+                # When using online BASE we implicitly assume the shadow models are only
+                # offline with respect to the target node, and not any of its neighbors.
+                offline=False,
             )
             self.zero_hop_probs = self.zero_hop_attacker.run_attack(torch.arange(self.graph.num_nodes))
             assert torch.all(self.zero_hop_probs >= 0.0)
@@ -262,7 +266,7 @@ class G_BASE:
                     num_hops=self.shadow_models[0][0].num_layers**2,
                 )
                 out_subgraph = datasetup.remove_node(in_subgraph, mapped_center_index)
-                p = self.score(in_subgraph=in_subgraph, out_subgraph=out_subgraph, target_idx=node_idx)
+                p = self.score(in_subgraph=in_subgraph, out_subgraph=out_subgraph, target_idx=None)
                 mask[node_idx] = p > np.random.rand()
         return mask
 
@@ -281,13 +285,13 @@ class G_BASE:
     def neg_loss(self, model, graph):
         return -F.cross_entropy(model(graph.x, graph.edge_index), graph.y, reduction='sum')
 
-    def score(self, in_subgraph, out_subgraph, target_idx):
+    def score(self, in_subgraph, out_subgraph, target_idx=None):
         target_loss_diff = self.neg_loss(self.target_model, in_subgraph) - self.neg_loss(self.target_model, out_subgraph)
         shadow_loss_diff = torch.tensor([
             self.neg_loss(shadow_model, in_subgraph) - self.neg_loss(shadow_model, out_subgraph)
             for shadow_model, train_index in self.shadow_models
             # Use shadow model if online, or if offline and target is not in shadow dataset
-            if not self.offline or not train_index[target_idx]
+            if not self.offline or target_idx is None or not train_index[target_idx]
         ])
         threshold = shadow_loss_diff.logsumexp(0) - np.log(shadow_loss_diff.shape[0])
         score = target_loss_diff - self.threshold_scale_factor * threshold
@@ -404,12 +408,12 @@ class G_BASE:
 
 class BASE:
 
-    def __init__(self, target_model, graph, loss_fn, config, shadow_models=None, offline_threshold_scale_factor=0.7):
+    def __init__(self, target_model, graph, loss_fn, config, shadow_models=None, offline=None, offline_threshold_scale_factor=0.7):
         self.target_model = target_model
         self.graph = graph
         self.loss_fn = loss_fn
         self.config = config
-        self.offline = config.offline
+        self.offline = config.offline if offline is None else offline
         if shadow_models is None:
             self.shadow_models = trainer.train_shadow_models(self.graph, self.loss_fn, self.config)
         else:
