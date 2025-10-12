@@ -195,8 +195,8 @@ class G_BASE:
         try:
             self.threshold_scale_factor = config.threshold_scale_factor
         except AttributeError:
-            print(f'Using default value 1.0 for the threshold scale factor.')
             self.threshold_scale_factor = 1.0
+        print(f'G-BASE threshold scale facot: {self.threshold_scale_factor}')
 
     def train_shadow_models(self, target_idx, train_mask):
         config = self.config
@@ -422,7 +422,7 @@ class BASE:
             self.threshold_scale_factor = config.threshold_scale_factor
         except AttributeError:
             self.threshold_scale_factor = offline_threshold_scale_factor if self.offline else 1.0
-        print(f'Setting threshold scale factor to {self.threshold_scale_factor}')
+        print(f'BASE threshold scale factor: {self.threshold_scale_factor}')
 
     @torch.inference_mode()
     def log_confidence(self, model, x, edge_index, y):

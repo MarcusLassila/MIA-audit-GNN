@@ -2,32 +2,31 @@
 default-parameters:
   dataset: "cora"
   model: "GCN"
-  batch_size: 32 # Only used for MLP attack
   epochs: 15
-  epochs_mlp: 5000 # Something large, early stopping is used
   num_audits: 1
   max_num_nodes: null
   frac_target_nodes: 0.5
-  hidden_dim: [32]
-  hidden_dim_mlp: [128]
+  hidden_dim: 
+  - 32
   target_fpr: 0.01
   lr: 0.01
   weight_decay: 0.0001
   dropout: 0.5
   early_stopping: 0
-  datadir: "./data"
+  datadir: "/mimer/NOBACKUP/groups/e2e_comms/lassila/data"
   hyperparam_search: False
   optimizer: "Adam"
   inductive_split: True
   inductive_inference: True
   train_frac: 0.5
   val_frac: 0.0
-  seed: 0
+  seed: 11
   num_processes: 1
   num_shadow_models: 0
-  offline: False
+  offline: false
   edge_noise_level: 0.0 # Noisy edges for the adversary
   save_thresholds: false
   target_model_path: ""
   shadow_model_path: ""
   target_index_start: 0
+  fixed_shadow_models: false # If true, the same set of shadow models are used for all audits

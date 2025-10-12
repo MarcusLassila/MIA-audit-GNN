@@ -5,6 +5,7 @@ import evaluation
 import trainer
 import utils
 
+import os
 import pandas as pd
 import numpy as np
 import torch
@@ -129,10 +130,7 @@ class MembershipInferenceAudit:
         Return an instance of the attack class specified by config.attack
         '''
         attack_config = utils.Config(attack_dict)
-        if self.config.pretrain_shadow_models:
-            pretrained_shadow_models = self.shadow_models
-        else:
-            pretrained_shadow_models = None
+        pretrained_shadow_models = self.shadow_models
         if self.config.edge_noise_level > 0.0:
             graph = self.dataset.clone()
             graph.edge_index = datasetup.noisy_edge_index(self.dataset.edge_index, self.dataset.num_nodes, noise_lvl=self.config.edge_noise_level)
@@ -281,6 +279,8 @@ class MembershipInferenceAudit:
             return model, model_state['train_mask']
 
     def save_model(self, path, model, train_mask, target_node_index=None):
+        if os.path.exists(path):
+            raise FileExistsError(f'File {path} already exists.')
         config = self.config
         path = Path(path)
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -310,15 +310,7 @@ class MembershipInferenceAudit:
     def run_audit(self):
         config = self.config
         stats = defaultdict(lambda: defaultdict(list))
-        if config.shadow_model_path:
-            # Load pretrained shadow models
-            self.shadow_models = []
-            for i in range(config.num_shadow_models):
-                path = f'{config.shadow_model_path}-{i}.pth'
-                shadow_model, shadow_train_mask = self.load_model(path)
-                self.shadow_models.append((shadow_model, shadow_train_mask))
-            self.tune_attack_hyperparams()
-        elif config.pretrain_shadow_models:
+        if config.pretrain_shadow_models:
             t0 = time.time()
             self.shadow_models = trainer.train_shadow_models(self.dataset, self.loss_fn, config)
             t1 = time.time()
@@ -329,9 +321,32 @@ class MembershipInferenceAudit:
                     model=shadow_model,
                     train_mask=shadow_train_mask,
                 )
-            self.tune_attack_hyperparams()
+
         for i_audit in range(config.target_index_start, config.target_index_start + config.num_audits):
-            print(f'Running audit {i_audit - config.target_index_start + 1}/{config.num_audits}')
+            i_audit_centered = i_audit - config.target_index_start
+            print(f'Running audit {i_audit_centered + 1}/{config.num_audits}')
+
+            # Load shadow models
+            self.shadow_models = []
+            if config.shadow_model_path:
+                shadow_model_path = config.shadow_model_path
+            else:
+                shadow_model_path = f'./trained_models/{config.dataset}-{config.model}/shadow-model'
+            if config.fixed_shadow_models:
+                shadow_model_index_range = range(config.num_shadow_models)
+            else:
+                shadow_model_index_range = range(i_audit_centered * config.num_shadow_models, (i_audit_centered + 1) * config.num_shadow_models)
+            for shadow_model_index in shadow_model_index_range:
+                path = f'{shadow_model_path}-{shadow_model_index}.pth'
+                print(f'Loading {path}')
+                shadow_model, shadow_train_mask = self.load_model(path)
+                self.shadow_models.append((shadow_model, shadow_train_mask))
+
+            # Tune attack specific hyperparameters with optuna
+            if i_audit == config.target_index_start:
+                self.tune_attack_hyperparams()
+
+            # Load target model
             if config.target_model_path:
                 path = f'{config.target_model_path}-{i_audit}.pth'
                 print(f'Loading target model: {path}')
@@ -395,8 +410,8 @@ def add_attack_parameters(params):
     ''' Add target values as default values to attack config parameters. '''
     properties = [
         'model', 'epochs', 'hidden_dim', 'lr', 'weight_decay', 'optimizer', 'dropout',
-        'inductive_split', 'device', 'early_stopping', 'train_frac', 'val_frac', 'batch_size',
-        'hidden_dim_mlp', 'epochs_mlp', 'num_processes', 'num_shadow_models', 'offline',
+        'inductive_split', 'device', 'early_stopping', 'train_frac', 'val_frac',
+        'num_processes', 'num_shadow_models', 'offline',
     ]
     for attack_params in params['attacks'].values():
         for prop in properties:

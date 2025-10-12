@@ -1,4 +1,3 @@
-from github_dataset import GitHub
 import utils
 
 import numpy as np
