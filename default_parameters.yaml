@@ -13,7 +13,7 @@ default-parameters:
   weight_decay: 0.0001
   dropout: 0.5
   early_stopping: 0
-  datadir: "/mimer/NOBACKUP/groups/e2e_comms/lassila/data"
+  datadir: "./data"
   hyperparam_search: False
   optimizer: "Adam"
   inductive_split: True

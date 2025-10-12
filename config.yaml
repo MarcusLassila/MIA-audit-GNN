@@ -3,7 +3,6 @@ cora-GCN:
   dataset: "cora"
   model: "GCN"
   epochs: 200
-  batch_size: 8192
   hidden_dim:
   - 64
   lr: 0.001
@@ -13,32 +12,14 @@ cora-GCN:
   frac_target_nodes: 0.5
   train_frac: 0.5
   val_frac: 0.0
-  edge_noise_level: 0.0
   num_audits: 10
   target_fpr:
   - 0.01
   - 0.001
-  pretrain_shadow_models: True
+  pretrain_shadow_models: true
   num_shadow_models: 8
   seed: 0
   attacks:
-    MLP-attack-0hop:
-      attack: "mlp-attack"
-      mlp_attack_queries:
-      - 0
-      edge_dropout: 0.0
-      mlp_hidden_dim:
-      - 128
-      - 64
-    MLP-attack-comb:
-      attack: "mlp-attack"
-      mlp_attack_queries:
-      - 0
-      - 2
-      edge_dropout: 0.5
-      mlp_hidden_dim:
-      - 128
-      - 64
     lira:
       attack: "lira"
     rmia:
@@ -47,38 +28,3 @@ cora-GCN:
       Z_frac: 0.5
     base:
       attack: "base"
-    g-base-MI:
-      attack: "g-base"
-      num_sampled_graphs: 8
-      sampling_strategy: "model-independent"
-      prior: 0.5
-    g-base-MIA:
-      attack: "g-base"
-      num_sampled_graphs: 8
-      sampling_strategy: "MIA"
-      prior: 0.5
-    lira-offline:
-      attack: "lira"
-      offline: True
-    rmia-offline:
-      attack: "rmia"
-      rmia_gamma: 1
-      Z_frac: 0.5
-      offline: True
-    base-offline:
-      attack: "base"
-      offline: True
-    g-base-MI-offline:
-      attack: "g-base"
-      num_sampled_graphs: 8
-      sampling_strategy: "model-independent"
-      offline: True
-      threshold_scale_factor: 0.9
-      prior: 0.5
-    g-base-MI-offline-no-scale:
-      attack: "g-base"
-      num_sampled_graphs: 8
-      sampling_strategy: "model-independent"
-      offline: True
-      threshold_scale_factor: 1.0
-      prior: 0.5

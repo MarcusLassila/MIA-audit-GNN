@@ -306,7 +306,7 @@ class G_BASE:
             config=config,
             strategy=config.sampling_strategy,
         )
-        for i in range(config.num_sampled_graphs):
+        for i in tqdm(range(config.num_sampled_graphs), desc='Computing expectation over sampled graphs'):
             self.update_scores(
                 sample_idx=i,
                 target_node_index=target_node_index,
@@ -364,8 +364,7 @@ class G_BASE:
         sampling_state.precisions.append(precision)
         sampling_state.recalls.append(recall)
 
-        desc = f'Inference over target nodes for graph sample {sample_idx + 1}/{config.num_sampled_graphs}'
-        for i, node_idx in tqdm(enumerate(target_node_index), total=len(target_node_index), desc=desc):
+        for i, node_idx in enumerate(target_node_index):
             if self.specialized_shadow_models:
                self.shadow_models = self.train_shadow_models(node_idx, node_mask)
             subgraph_in, center_idx = self.local_subgraph(
