@@ -409,7 +409,7 @@ def parse_dataset(root, name, max_num_nodes=None):
         case "flickr":
             dataset = torch_geometric.datasets.Flickr(root=f'{root}/Flickr')
         case "github":
-            dataset = GitHub(root=f'{root}/GitHub') # Fix to broken url that is not in torch-geometric 2.6.1
+            dataset = torch_geometric.datasets.GitHub(root=f'{root}/GitHub')
         case "pubmed":
             dataset = torch_geometric.datasets.Planetoid(root=root, name="PubMed")
         case "reddit":
