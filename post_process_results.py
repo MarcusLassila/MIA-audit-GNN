@@ -6,93 +6,82 @@ import argparse
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+import shutil
 
-ATTACK_DICT = {
-    'MLP-attack-0hop': 'MLP-classifier (0-hop)',
-    'MLP-attack-comb': 'MLP-classifier (0+2-hop)',
-    'lira': 'LiRA',
-    # 'lira-offline': 'LiRA (offline)',
-    'rmia': 'RMIA',
-    # 'rmia-offline': 'RMIA (offline)',
-    'lset': 'BASE (ours)',
-    # 'lset-offline': 'BASE (offline)',
-    'graph-lset-MI': 'G-BASE (ours)',
-    'graph-lset-MIA': 'G-BASE (ours)',
-    # 'graph-lset-MI-offline': 'G-BASE (offline)',
-    # 'graph-lset-MIA-offline': 'G-BASE (offline)',
-}
+def parse_stat_pickle_files(prefix, suffices):
+    '''
+    prefix: result directory + dataset + model, e.g. "8_shadow_models/pubmed-GraphSAGE"
+    suffices: list of suffices, e.g. online, offline, classifier etc.
+    '''
+    fpr_space = np.logspace(-4, 0, 1000)
+    for suffix in suffices:
+        path = Path(prefix + '-' + suffix)
+        res_path = path / Path('parsed_results')
+        roc_path = res_path / Path('roc_curves')
+        Path(roc_path).mkdir(parents=True, exist_ok=True)
+        interpolated_tprs = defaultdict(list)
+        table = defaultdict(lambda: defaultdict(list))
 
-ORDER = ['BASE (ours)', 'G-BASE (ours)', 'LiRA', "RMIA", "MLP-classifier (0-hop)", "MLP-classifier (0+2-hop)", "Random guess"]
+        # Parse each stats.pkl file and store values for different audits in a list
+        for pickle_file in path.glob('stats_*.pkl'):
+            with open(pickle_file, 'rb') as f:
+                stat_dict = pickle.load(f)
+            for attack_name, stats in stat_dict.items():
+                for fpr, tpr in zip(stats['FPR'], stats['TPR']):
+                    interp_tpr = np.interp(fpr_space, fpr, tpr)
+                    interp_tpr[0] = 0.0
+                    interpolated_tprs[attack_name].append(interp_tpr)
+                for quantity, values in stats.items():
+                    if quantity in ('TPR', 'FPR'):
+                        continue
+                    table[attack_name][quantity].extend(values)
 
-def attack_map(attack):
-    return ATTACK_DICT[attack]
+        # Save averaged roc curve data and pyplot
+        for attack_name, interp_tprs in interpolated_tprs.items():
+            interp_tprs = np.stack(interp_tprs, axis=0)
+            tpr_mean = np.mean(interp_tprs, axis=0)
+            tpr_std = np.std(interp_tprs, axis=0)
+            roc_df = pd.DataFrame({
+                'fpr': fpr_space,
+                'tpr_mean': tpr_mean,
+                'tpr_std': tpr_std,
+            })
+            roc_df.to_csv(f'{roc_path}/roc_{attack_name}_mean.csv', index=False)
+            print(f'Saved: {roc_path}/roc_{attack_name}_mean.csv')
+            plt.loglog(fpr_space, tpr_mean, label=attack_name)
+        plt.loglog(fpr_space, fpr_space, 'k--', label='')
+        plt.xlim(1e-4, 1)
+        plt.ylim(1e-4, 1)
+        plt.grid(True)
+        plt.xlabel('FPR')
+        plt.ylabel('TPR')
+        plt.legend()
+        plt.savefig(f'{roc_path}/average_roc_curves.png')
 
-def attack_filter(attack):
-    return attack in set(ATTACK_DICT.keys())
+        # Save mean+std of other quantities in csv
+        stat_df = {}
+        for attack_name, quantities in table.items():
+            row = {}
+            for quantity, values in quantities.items():
+                values = np.stack(values, axis=0)
+                row[f'{quantity}_mean'] = values.mean(0)
+                row[f'{quantity}_std'] = values.std(0)
+            stat_df[attack_name] = row
+        stat_df = pd.DataFrame.from_dict(stat_df, orient='index')
+        stat_df.to_csv(f'{res_path}/results.csv')
+
+def del_parsed_results(prefix, suffices):
+    for suffix in suffices:
+        path = Path(prefix + '-' + suffix)
+        res_path = path / Path('parsed_results')
+        shutil.rmtree(res_path, ignore_errors=True)
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument("--root", default="./", type=str)
-    parser.add_argument("--make-plots", action=argparse.BooleanOptionalAction)
+    parser.add_argument('--resdir', default='./results/8_shadow_models/pubmed-GraphSAGE', type=str)
+    parser.add_argument('--suffices', default='online,offline,classifier', type=str)
     args = parser.parse_args()
-    for dirpath, dirnames, _ in os.walk(args.root):
-        for name in dirnames:
-            path = Path(os.path.join(dirpath, name))
-            stats_list = []
-            for pickle_file in path.glob('stats_*.pkl'):
-                with open(pickle_file, 'rb') as f:
-                    stats = pickle.load(f)
-                    stats_list.append(stats)
-            if not stats_list:
-                continue
-            frames = []
-            attacks = list(stats_list[0].keys())
-            n_audits = None
-            for attack in attacks:
-                table = defaultdict(list)
-                for key in stats_list[0][attack].keys():
-                    if key in ('TPR', 'FPR'):
-                        continue
-                    concat_value = []
-                    for stats in stats_list:
-                        value = stats[attack][key]
-                        if n_audits is None:
-                            n_audits = len(value)
-                        else:
-                            assert n_audits == len(value), "All index must contain same number of audits"
-                        concat_value.append(value)
-                    concat_value = np.concatenate(concat_value)
-                    stat = f'{concat_value.mean():.4f} ({concat_value.std():.4f})'
-                    table[key].append(stat)
-                frames.append(pd.DataFrame(table, index=[name + '_' + attack]))
-            stat_df = pd.concat(frames)
-            stat_df.to_csv(f'{path}/results.csv', sep=',')
-            if args.make_plots:
-                running_index = 0
-                for stats in stats_list:
-                    for i in range(n_audits):
-                        lines = []
-                        plt.clf()
-                        plt.figure(figsize=(5.5, 5.5))
-                        for attack in filter(attack_filter, attacks):
-                            fpr = stats[attack]['FPR'][i]
-                            tpr = stats[attack]['TPR'][i]
-                            label = attack_map(attack)
-                            line, = plt.loglog(fpr, tpr, label=label)
-                            lines.append(line)
-                        x, y = [0, 1], [0, 1]
-                        line, = plt.loglog(x, y, linestyle='--', color='black', label='Random guess')
-                        lines.append(line)
-                        lines.sort(key=lambda line: ORDER.index(line.get_label()))
-                        plt.legend(handles=lines)
-                        plt.xlim(1e-4, 1)
-                        plt.ylim(1e-4, 1)
-                        plt.grid(True)
-                        plt.xlabel('False Positive Rate', fontsize=13)
-                        plt.ylabel('True Positive Rate', fontsize=13)
-                        if args.root == 'large_N_results':
-                            num_shadow_models = '128'
-                        else:
-                            num_shadow_models = '8'
-                        plt.savefig(f'{path}/{name}_{num_shadow_models}_roc_{running_index}.png')
-                        running_index += 1
+    res_dir = args.resdir
+    suffices = args.suffices.split(',')
+    del_parsed_results(res_dir, suffices)
+    parse_stat_pickle_files(res_dir, suffices)
