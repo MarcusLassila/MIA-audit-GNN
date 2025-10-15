@@ -56,10 +56,11 @@ class MLPAttack:
     def make_attack_dataset(self):
         features = []
         labels = []
+        row_idx = torch.arange(self.graph.num_nodes)
         for shadow_model, train_mask in self.shadow_models:
             shadow_graph = datasetup.remasked_graph(self.graph, train_mask, mutate=False)
             feat = []
-            row_idx = torch.arange(shadow_graph.num_nodes)
+            assert self.graph.num_nodes == shadow_graph.num_nodes
             for num_hops in self.queries:
                 preds = utils.k_hop_query(
                     model=shadow_model,
@@ -196,7 +197,7 @@ class G_BASE:
             self.threshold_scale_factor = config.threshold_scale_factor
         except AttributeError:
             self.threshold_scale_factor = 1.0
-        print(f'G-BASE threshold scale facot: {self.threshold_scale_factor}')
+        print(f'G-BASE threshold scale factor: {self.threshold_scale_factor}')
 
     def train_shadow_models(self, target_idx, train_mask):
         config = self.config

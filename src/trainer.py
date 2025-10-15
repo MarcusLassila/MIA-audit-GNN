@@ -119,13 +119,17 @@ def train_mlp(model, train_loader, valid_loader, config: TrainConfig):
     early_stopping_counter = 0
     min_loss = float('inf')
     best_model = None
-    for _ in tqdm(range(config.epochs), desc=f"Training {model.__class__.__name__} on {config.device}"):
+    desc = f'Training {model.__class__.__name__} on {config.device}'
+    print(desc)
+    for _ in tqdm(range(config.epochs), disable=True, desc=desc):
         train_loss, train_score = train_step(model, train_loader, optimizer, loss_fn, criterion, config.device)
         valid_loss, valid_score = valid_step(model, valid_loader, loss_fn, criterion, config.device)
         res['train_loss'].append(train_loss)
         res['train_score'].append(train_score)
         res['valid_loss'].append(valid_loss)
         res['valid_score'].append(valid_score)
+        log_msg = f'train loss: {train_loss:.5f} | valid loss: {valid_loss:.5f} | train score: {train_score:.4f} | valid score: {valid_score:.4f}'
+        print(log_msg, flush=True)
         if valid_loss < min_loss:
             min_loss = valid_loss
             best_model = deepcopy(model)

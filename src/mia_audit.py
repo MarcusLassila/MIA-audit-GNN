@@ -335,7 +335,7 @@ class MembershipInferenceAudit:
             if config.fixed_shadow_models:
                 shadow_model_index_range = range(config.num_shadow_models)
             else:
-                shadow_model_index_range = range(i_audit_centered * config.num_shadow_models, (i_audit_centered + 1) * config.num_shadow_models)
+                shadow_model_index_range = range(i_audit * config.num_shadow_models, (i_audit + 1) * config.num_shadow_models)
             for shadow_model_index in shadow_model_index_range:
                 path = f'{shadow_model_path}-{shadow_model_index}.pth'
                 print(f'Loading {path}')

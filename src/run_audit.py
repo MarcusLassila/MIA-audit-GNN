@@ -8,10 +8,10 @@ import torch
 from pathlib import Path
 import argparse
 
-def run_audit(config, savedir, index, seed):
-    with open(config, "r") as file:
+def run_audit(config, savedir, index, seed, target_index_start):
+    with open(config, 'r') as file:
         config = yaml.safe_load(file)
-    with open("default_parameters.yaml", "r") as file:
+    with open('default_parameters.yaml', 'r') as file:
         default_params = yaml.safe_load(file)['default-parameters']
     Path(savedir).mkdir(parents=True, exist_ok=True)
     default_params['savedir'] = savedir
@@ -23,6 +23,9 @@ def run_audit(config, savedir, index, seed):
         if seed != -1:
             print(f'Overwriting config seed with seed={seed}')
             params['seed'] = seed
+        if target_index_start != -1:
+            print(f'Overwriting config with target_index_start={target_index_start}')
+            params['target_index_start'] = target_index_start
         print('Running MIA...')
         print()
         print(yaml.dump(params))
@@ -37,14 +40,15 @@ def run_audit(config, savedir, index, seed):
             pickle.dump(stats, f)
 
 if __name__ == "__main__":
-    torch.multiprocessing.set_start_method("spawn")
+    torch.multiprocessing.set_start_method('spawn')
     parser = argparse.ArgumentParser()
-    parser.add_argument("--config", default="config.yaml", type=str)
-    parser.add_argument("--savedir", default="./temp_results", type=str)
-    parser.add_argument("--index", default=0, type=int)
-    parser.add_argument("--seed", default=-1, type=int)
+    parser.add_argument('--config', default='config.yaml', type=str)
+    parser.add_argument('--savedir', default='./temp_results', type=str)
+    parser.add_argument('--index', default=0, type=int)
+    parser.add_argument('--seed', default=-1, type=int)
+    parser.add_argument('--target-index-start', default=-1, type=int)
     args = parser.parse_args()
     pd.set_option('display.max_columns', None)
     pd.set_option('display.max_rows', None)
-    run_audit(args.config, args.savedir, args.index, args.seed)
+    run_audit(args.config, args.savedir, args.index, args.seed, args.target_index_start)
     print('Done.')
