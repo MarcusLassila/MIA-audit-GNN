@@ -36,6 +36,9 @@ def parse_stat_pickle_files(prefix, suffices):
                         continue
                     table[attack_name][quantity].extend(values)
 
+        assert table
+        assert interpolated_tprs
+
         # Save averaged roc curve data and pyplot
         for attack_name, interp_tprs in interpolated_tprs.items():
             interp_tprs = np.stack(interp_tprs, axis=0)
@@ -69,6 +72,7 @@ def parse_stat_pickle_files(prefix, suffices):
             stat_df[attack_name] = row
         stat_df = pd.DataFrame.from_dict(stat_df, orient='index')
         stat_df.to_csv(f'{res_path}/results.csv')
+        print(stat_df)
 
 def del_parsed_results(prefix, suffices):
     for suffix in suffices:
@@ -77,6 +81,8 @@ def del_parsed_results(prefix, suffices):
         shutil.rmtree(res_path, ignore_errors=True)
 
 if __name__ == '__main__':
+    pd.set_option('display.max_columns', None)
+    pd.set_option('display.max_rows', None)
     parser = argparse.ArgumentParser()
     parser.add_argument('--resdir', default='./results/8_shadow_models/pubmed-GraphSAGE', type=str)
     parser.add_argument('--suffices', default='online,offline,classifier', type=str)

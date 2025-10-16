@@ -271,10 +271,9 @@ class G_BASE:
                 mask[node_idx] = p > np.random.rand()
         return mask
 
-    def sample_node_mask_zero_hop_MIA(self, prob_scaling=1.0):
+    def sample_node_mask_zero_hop_MIA(self):
         random_ref = torch.rand(self.graph.num_nodes).to(self.config.device)
-        sharp_probs = torch.sigmoid(prob_scaling * self.zero_hop_probs.logit())
-        return sharp_probs > random_ref
+        return self.zero_hop_probs > random_ref
 
     def sample_random_node_mask(self, frac_ones=None):
         if frac_ones is None:
@@ -338,11 +337,7 @@ class G_BASE:
                     frac_ones = 0.5
                 node_mask = self.sample_random_node_mask(frac_ones=frac_ones)
             case 'mia':
-                try:
-                    prob_scaling = config.mia_prob_scaling
-                except AttributeError:
-                    prob_scaling = 1.0
-                node_mask = self.sample_node_mask_zero_hop_MIA(prob_scaling=prob_scaling)
+                node_mask = self.sample_node_mask_zero_hop_MIA()
             case 'metropolis':
                 accepts = 0
                 for _ in range(sampling_state.sampling_iterations):
@@ -1042,33 +1037,36 @@ class LiRA:
         else:
             self.shadow_models = shadow_models
 
+    @torch.inference_mode()
     def query_shadow_models(self, target_node_index, edge_index):
-        hinges_in = defaultdict(list)
-        hinges_out = defaultdict(list)
-        num_target_nodes = target_node_index.shape[0]
-        with torch.inference_mode():
-            for shadow_model, train_mask in self.shadow_models:
-                preds = shadow_model(self.graph.x[target_node_index], edge_index)
-                # Approximate logits of confidence values using the hinge loss.
-                hinges = utils.hinge_loss(preds, self.graph.y[target_node_index])
-                for idx, node_idx in enumerate(target_node_index):
-                    if train_mask[node_idx]:
-                        hinges_in[idx].append(hinges[idx])
-                    else:
-                        hinges_out[idx].append(hinges[idx])
-        mean_in = torch.zeros(num_target_nodes)
-        std_in = torch.zeros(num_target_nodes)
-        mean_out = torch.zeros(num_target_nodes)
-        std_out = torch.zeros(num_target_nodes)
-        for idx, hinge_list in hinges_in.items():
-            hinges = torch.tensor(hinge_list)
-            mean_in[idx] = hinges.mean()
-            std_in[idx] = hinges.std()
-        for idx, hinge_list in hinges_out.items():
-            hinges = torch.tensor(hinge_list)
-            mean_out[idx] = hinges.mean()
-            std_out[idx] = hinges.std()
-        assert mean_in.shape == std_in.shape == mean_out.shape == std_out.shape == (num_target_nodes,)
+        x = self.graph.x[target_node_index]
+        y = self.graph.y[target_node_index]
+        # Collect per-model hinges and train masks as tensors
+        hinges = []
+        in_masks = []
+        for shadow_model, train_mask in self.shadow_models:
+            preds = shadow_model(x, edge_index)
+            hinge_loss = utils.hinge_loss(preds, y)
+            hinges.append(hinge_loss)
+            in_masks.append(train_mask[target_node_index])
+        hinges = torch.stack(hinges, dim=0)
+        in_masks = torch.stack(in_masks, dim=0)
+        out_masks = ~in_masks
+
+        def mean_and_std(hinges, masks):
+            n = masks.sum(dim=0)
+            assert torch.all(n > 0)
+            masked_hinges = hinges * masks
+            mean = masked_hinges.sum(dim=0) / n
+            var = (masked_hinges ** 2).sum(dim=0) / n - mean ** 2  # var(x) = E[x^2] - E[x]^2
+            return mean, var.clamp_min(0.0).sqrt()
+
+        if self.offline:
+            mean_in, std_in = None, None
+        else:
+            mean_in, std_in = mean_and_std(hinges, in_masks)
+        mean_out, std_out = mean_and_std(hinges, out_masks)
+        assert mean_out.shape == std_out.shape == (target_node_index.shape[0],)
         return mean_in, std_in, mean_out, std_out
 
     def run_attack(self, target_node_index):

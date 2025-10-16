@@ -332,13 +332,13 @@ class MembershipInferenceAudit:
                 shadow_model_path = config.shadow_model_path
             else:
                 shadow_model_path = f'./trained_models/{config.dataset}-{config.model}/shadow-model'
-            if config.fixed_shadow_models:
-                shadow_model_index_range = range(config.num_shadow_models)
+            if config.fixed_shadow_models or config.pretrain_shadow_models:
+                shadow_model_index_range = [*range(config.num_shadow_models)]
             else:
-                shadow_model_index_range = range(i_audit * config.num_shadow_models, (i_audit + 1) * config.num_shadow_models)
+                shadow_model_index_range = [*range(i_audit * config.num_shadow_models, (i_audit + 1) * config.num_shadow_models)]
+            print(f'Loading shadow models {shadow_model_path}-k.pth for {shadow_model_index_range[0]} <= k <= {shadow_model_index_range[-1]}')
             for shadow_model_index in shadow_model_index_range:
                 path = f'{shadow_model_path}-{shadow_model_index}.pth'
-                print(f'Loading {path}')
                 shadow_model, shadow_train_mask = self.load_model(path)
                 self.shadow_models.append((shadow_model, shadow_train_mask))
 
