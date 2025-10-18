@@ -82,48 +82,67 @@ class MembershipInferenceAudit:
         )
         return target_model
 
-    def tune_attack_hyperparams(self):
+    def tune_attack_hyperparams(self, n_cross_val=8):
+        assert n_cross_val <= self.config.num_shadow_models
         for attack_dict in self.config.attacks.values():
             attack_config = utils.Config(attack_dict)
             mode = 'offline' if attack_config.offline else 'online'
             name = mode + '-' + attack_config.attack
-            simul_target, simul_target_train_mask = self.shadow_models[0]
-            simul_graph = datasetup.remasked_graph(self.dataset, simul_target_train_mask)
-            simul_shadow_models = self.shadow_models[2: 10]
-            n_trials = 100
-            match name:
-                case 'offline-base':
-                    hyperparam_name = 'threshold_scale_factor'
-                    if hasattr(attack_config, hyperparam_name):
+            if name not in ('offline-base', 'offline-rmia'):
+                continue
+            for cv_i in range(n_cross_val):
+                if cv_i % 2 == 0:
+                    i_a, i_b = cv_i, cv_i + 2
+                else:
+                    i_a, i_b = cv_i - 1, cv_i + 1
+                simul_target, simul_target_train_mask = self.shadow_models[cv_i]
+                simul_graph = datasetup.remasked_graph(self.dataset, simul_target_train_mask)
+                # Do not include the shadow model that is trained on the node complement of the simulated target
+                # Otherwise each node is not included in the training set of half the models
+                simul_shadow_models = self.shadow_models[:i_a] + self.shadow_models[i_b:]
+                n_trials = 100
+                match name:
+                    case 'offline-base':
+                        hyperparam_name = 'threshold_scale_factor'
+                        if hasattr(attack_config, hyperparam_name):
+                            continue
+                        print('Tuning threshold scale factor for offline BASE using optuna')
+                        simul_attacker = attacks.BASE(
+                            target_model=simul_target,
+                            graph=simul_graph,
+                            loss_fn=self.loss_fn,
+                            config=attack_config,
+                            shadow_models=simul_shadow_models,
+                        )
+                    case 'offline-rmia':
+                        hyperparam_name = 'interp_param'
+                        if hasattr(attack_config, hyperparam_name):
+                            continue
+                        print('Tuning interpolation parameter for offline RMIA using optuna')
+                        simul_attacker = attacks.RMIA(
+                            target_model=simul_target,
+                            graph=simul_graph,
+                            loss_fn=self.loss_fn,
+                            config=attack_config,
+                            shadow_models=simul_shadow_models,
+                        )
+                    case _:
                         continue
-                    print('Tuning threshold scale factor for offline BASE using optuna')
-                    simul_attacker = attacks.BASE(
-                        target_model=simul_target,
-                        graph=simul_graph,
-                        loss_fn=self.loss_fn,
-                        config=attack_config,
-                        shadow_models=simul_shadow_models,
-                    )
-                case 'offline-rmia':
-                    hyperparam_name = 'interp_param'
-                    if hasattr(attack_config, hyperparam_name):
-                        continue
-                    print('Tuning interpolation parameter for offline RMIA using optuna')
-                    simul_attacker = attacks.RMIA(
-                        target_model=simul_target,
-                        graph=simul_graph,
-                        loss_fn=self.loss_fn,
-                        config=attack_config,
-                        shadow_models=simul_shadow_models,
-                    )
-                case _:
-                    continue
-            hyperparam_value = hypertuner.optuna_offline_hyperparam_tuner(
-                simul_attacker,
-                hyperparam_name,
-                n_trials=n_trials,
-            )
-            attack_dict[hyperparam_name] = hyperparam_value
+                hyperparam_value = hypertuner.optuna_offline_hyperparam_tuner(
+                    simul_attacker,
+                    hyperparam_name,
+                    n_trials=n_trials,
+                    execute_silently=True,
+                )
+                if hyperparam_name in attack_dict:
+                    attack_dict[hyperparam_name].append(hyperparam_value)
+                else:
+                    attack_dict[hyperparam_name] = [hyperparam_value]
+            values = np.array(attack_dict[hyperparam_name])
+            assert values.shape[0] == n_cross_val, "Should have exactly one value per cross validation"
+            attack_dict[hyperparam_name] = values.mean()
+            std = values.std() if n_cross_val > 1 else 0.0
+            print(f'{hyperparam_name}: {attack_dict[hyperparam_name]} +- {std}')
 
     def get_attacker(self, attack_dict, target_model):
         '''
@@ -344,7 +363,7 @@ class MembershipInferenceAudit:
 
             # Tune attack specific hyperparameters with optuna
             if i_audit == config.target_index_start:
-                self.tune_attack_hyperparams()
+                self.tune_attack_hyperparams(n_cross_val=config.offline_param_cross_vals)
 
             # Load target model
             if config.target_model_path:

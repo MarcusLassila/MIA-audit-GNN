@@ -67,7 +67,7 @@ class MLPAttack:
                     dataset=shadow_graph,
                     query_nodes=row_idx,
                     num_hops=num_hops,
-                    inductive_split=True,
+                    inductive_split=False,
                     edge_dropout=self.config.edge_dropout,
                 )
                 feat.append(preds)
@@ -93,7 +93,7 @@ class MLPAttack:
             epochs=config.epochs_mlp,
             early_stopping=50,
             loss_fn=nn.CrossEntropyLoss(),
-            lr=1e-3,
+            lr=0.001,
             weight_decay=1e-4,
             optimizer=torch.optim.Adam,
         )
@@ -112,7 +112,6 @@ class MLPAttack:
 
     @torch.inference_mode()
     def run_attack(self, target_node_index):
-        # num_hops not used, attack always use both 0-hop and 2-hop queries
         features = []
         for num_hops in self.queries:
             preds = utils.k_hop_query(
@@ -120,6 +119,7 @@ class MLPAttack:
                 dataset=self.graph,
                 query_nodes=target_node_index,
                 num_hops=num_hops,
+                inductive_split=False,
                 edge_dropout=self.config.edge_dropout,
             )
             features.append(preds)
@@ -403,7 +403,7 @@ class G_BASE:
 
 class BASE:
 
-    def __init__(self, target_model, graph, loss_fn, config, shadow_models=None, offline=None, offline_threshold_scale_factor=0.7):
+    def __init__(self, target_model, graph, loss_fn, config, shadow_models=None, offline=None, offline_threshold_scale_factor=1.0):
         self.target_model = target_model
         self.graph = graph
         self.loss_fn = loss_fn

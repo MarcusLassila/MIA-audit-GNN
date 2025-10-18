@@ -59,10 +59,11 @@ def k_hop_query(model, dataset, query_nodes, num_hops=0, inductive_split=False, 
     if num_hops != 0:
         edge_mask = torch.ones(dataset.edge_index.shape[1], dtype=torch.bool).to(dataset.edge_index.device)
         if edge_dropout > 0.0:
-            edge_mask = edge_mask & (torch.rand(edge_mask.shape) > edge_dropout).to(dataset.edge_index.device)
+            edge_mask &= (torch.rand(edge_mask.shape) > edge_dropout).to(dataset.edge_index.device)
         if inductive_split:
-            edge_mask = edge_mask & dataset.inductive_mask
+            edge_mask &= dataset.inductive_mask
         edge_index = dataset.edge_index[:, edge_mask]
+        print(edge_index.shape[1])
     if num_hops == 0:
         empty_edge_index = torch.tensor([[],[]], dtype=torch.long).to(dataset.edge_index.device)
         preds = model(dataset.x[query_nodes], empty_edge_index)
@@ -192,12 +193,7 @@ def partition_training_sets(num_nodes, num_models):
 
 def offline_shadow_model_mask(target_node_index, shadow_train_masks):
     ''' Mask to filter out shadow models trained on the target index. '''
-    num_shadow_models = len(shadow_train_masks)
-    mask = torch.zeros(size=(target_node_index.shape[0], num_shadow_models), dtype=torch.bool)
-    for i in range(num_shadow_models):
-        for j, target_idx in enumerate(target_node_index):
-            mask[j][i] = not shadow_train_masks[i][target_idx]
-    return mask
+    return torch.stack([~mask[target_node_index] for mask in shadow_train_masks]).t()
 
 def write_flat_params_to_layer(flat_params, layer):
     state_dict = {}

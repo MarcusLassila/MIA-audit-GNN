@@ -30,3 +30,4 @@ default-parameters:
   shadow_model_path: ""
   target_index_start: 0
   fixed_shadow_models: false # If true, the same set of shadow models are used for all audits
+  offline_param_cross_vals: 8 # Do cross validation over a number of shadow models when tuning offline hyperparameters for BASE and RMIA
