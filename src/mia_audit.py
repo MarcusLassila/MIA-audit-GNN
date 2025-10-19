@@ -83,6 +83,8 @@ class MembershipInferenceAudit:
         return target_model
 
     def tune_attack_hyperparams(self, n_cross_val=8):
+        if n_cross_val == 0:
+            return
         assert n_cross_val <= self.config.num_shadow_models
         for attack_dict in self.config.attacks.values():
             attack_config = utils.Config(attack_dict)
