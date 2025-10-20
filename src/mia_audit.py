@@ -86,12 +86,9 @@ class MembershipInferenceAudit:
         if n_cross_val == 0:
             return
         assert n_cross_val <= self.config.num_shadow_models
-        for attack_dict in self.config.attacks.values():
+
+        def run_optuna(attack, attack_dict, n_cross_val):
             attack_config = utils.Config(attack_dict)
-            mode = 'offline' if attack_config.offline else 'online'
-            name = mode + '-' + attack_config.attack
-            if name not in ('offline-base', 'offline-rmia'):
-                continue
             for cv_i in range(n_cross_val):
                 if cv_i % 2 == 0:
                     i_a, i_b = cv_i, cv_i + 2
@@ -103,12 +100,12 @@ class MembershipInferenceAudit:
                 # Otherwise each node is not included in the training set of half the models
                 simul_shadow_models = self.shadow_models[:i_a] + self.shadow_models[i_b:]
                 n_trials = 100
-                match name:
-                    case 'offline-base':
+                match attack:
+                    case 'online-base' | 'offline-base':
                         hyperparam_name = 'threshold_scale_factor'
                         if hasattr(attack_config, hyperparam_name):
-                            continue
-                        print('Tuning threshold scale factor for offline BASE using optuna')
+                            return ''
+                        print(f'Tuning threshold scale factor for {attack.replace('-', ' ')} using optuna')
                         simul_attacker = attacks.BASE(
                             target_model=simul_target,
                             graph=simul_graph,
@@ -119,8 +116,8 @@ class MembershipInferenceAudit:
                     case 'offline-rmia':
                         hyperparam_name = 'interp_param'
                         if hasattr(attack_config, hyperparam_name):
-                            continue
-                        print('Tuning interpolation parameter for offline RMIA using optuna')
+                            return ''
+                        print('Tuning interpolation parameter for offline rmia using optuna')
                         simul_attacker = attacks.RMIA(
                             target_model=simul_target,
                             graph=simul_graph,
@@ -130,7 +127,7 @@ class MembershipInferenceAudit:
                         )
                     case _:
                         continue
-                hyperparam_value = hypertuner.optuna_offline_hyperparam_tuner(
+                hyperparam_value = hypertuner.optuna_hyperparam_tuner(
                     simul_attacker,
                     hyperparam_name,
                     n_trials=n_trials,
@@ -140,11 +137,20 @@ class MembershipInferenceAudit:
                     attack_dict[hyperparam_name].append(hyperparam_value)
                 else:
                     attack_dict[hyperparam_name] = [hyperparam_value]
-            values = np.array(attack_dict[hyperparam_name])
-            assert values.shape[0] == n_cross_val, "Should have exactly one value per cross validation"
-            attack_dict[hyperparam_name] = values.mean()
-            std = values.std() if n_cross_val > 1 else 0.0
-            print(f'{hyperparam_name}: {attack_dict[hyperparam_name]} +- {std}')
+            return hyperparam_name
+
+        for attack_dict in self.config.attacks.values():
+            mode = 'offline' if attack_dict['offline'] else 'online'
+            attack = mode + '-' + attack_dict['attack']
+            if attack not in ('online-base', 'offline-base', 'offline-rmia'):
+                continue
+            tuned_hyperparam = run_optuna(attack, attack_dict, n_cross_val)
+            if tuned_hyperparam:
+                values = np.array(attack_dict[tuned_hyperparam])
+                assert values.shape[0] == n_cross_val, "Should have exactly one value per cross validation"
+                attack_dict[tuned_hyperparam] = values.mean()
+                std = values.std() if n_cross_val > 1 else 0.0
+                print(f'{tuned_hyperparam}: {attack_dict[tuned_hyperparam]} +- {std}')
 
     def get_attacker(self, attack_dict, target_model):
         '''
@@ -365,7 +371,7 @@ class MembershipInferenceAudit:
 
             # Tune attack specific hyperparameters with optuna
             if i_audit == config.target_index_start:
-                self.tune_attack_hyperparams(n_cross_val=config.offline_param_cross_vals)
+                self.tune_attack_hyperparams(n_cross_val=config.hyperparam_cross_vals)
 
             # Load target model
             if config.target_model_path:

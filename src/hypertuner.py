@@ -80,7 +80,7 @@ def grid_search(
     print('Final validation results:', final_performance)
     return opt_hyperparams
 
-def optuna_offline_hyperparam_tuner(attacker, hyperparam_attr_name, n_trials=100, execute_silently=False):
+def optuna_hyperparam_tuner(attacker, hyperparam_attr_name, n_trials=100, execute_silently=False):
     def objective(trial):
         hyperparam_value = trial.suggest_float(hyperparam_attr_name, 0.0, 1.0)
         setattr(attacker, hyperparam_attr_name, hyperparam_value)
