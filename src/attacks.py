@@ -211,7 +211,10 @@ class G_BASE:
             optimizer=getattr(torch.optim, config.optimizer),
         )
         for i in range(config.num_shadow_models):
-            train_mask[target_idx] = i % 2 == 0
+            if self.offline:
+                train_mask[target_idx] = False
+            else:
+                train_mask[target_idx] = i % 2 == 0
             shadow_dataset = datasetup.remasked_graph(self.graph, train_mask)
             shadow_model = utils.fresh_model(
                 model_type=config.model,

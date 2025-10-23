@@ -63,7 +63,6 @@ def k_hop_query(model, dataset, query_nodes, num_hops=0, inductive_split=False, 
         if inductive_split:
             edge_mask &= dataset.inductive_mask
         edge_index = dataset.edge_index[:, edge_mask]
-        print(edge_index.shape[1])
     if num_hops == 0:
         empty_edge_index = torch.tensor([[],[]], dtype=torch.long).to(dataset.edge_index.device)
         preds = model(dataset.x[query_nodes], empty_edge_index)
